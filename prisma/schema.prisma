@@ -140,6 +140,7 @@ model Subject {
   teacherSubjects TeacherSubject[]
   lessons         Lesson[]
   materials       Material[]
+  lessonRequests  LessonRequest[]
 
   @@map("subjects")
 }
@@ -209,6 +210,7 @@ model LessonRequest {
   requestedAt DateTime      @default(now())
   preferredAt DateTime
   subjectId   String?
+  subject     Subject?      @relation(fields: [subjectId], references: [id])
   status      RequestStatus @default(PENDING)
   approvedBy  String?
   reason      String?
