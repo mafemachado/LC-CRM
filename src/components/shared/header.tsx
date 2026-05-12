@@ -1,8 +1,7 @@
-import { Bell }          from "lucide-react"
-import { Button }         from "@/components/ui/button"
-import { MobileSidebar }  from "./mobile-sidebar"
-import { LogoutButton }   from "./logout-button"
-import type { Role }      from "@prisma/client"
+import { MobileSidebar }       from "./mobile-sidebar"
+import { LogoutButton }        from "./logout-button"
+import { NotificationBell }    from "./notification-bell"
+import type { Role }           from "@prisma/client"
 
 const PAGE_TITLES: Record<string, string> = {
   "/admin/dashboard":          "Dashboard",
@@ -45,9 +44,7 @@ export function Header({ pathname, name, email, role, image }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" aria-label="Notificações">
-          <Bell className="w-5 h-5" />
-        </Button>
+        <NotificationBell />
         <LogoutButton />
       </div>
     </header>
