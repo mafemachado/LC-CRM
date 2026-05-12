@@ -2,88 +2,196 @@ import { auth }   from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }  from "@/components/ui/badge"
+import { LinkButton } from "@/components/shared/link-button"
+import { SimpleAreaChart } from "@/components/charts/area-chart"
+import { SimpleBarChart }  from "@/components/charts/bar-chart"
+import { DonutChart }      from "@/components/charts/donut-chart"
 import {
   Users, GraduationCap, CalendarCheck, DollarSign,
-  TrendingUp, Clock, CheckCircle2, AlertCircle,
+  TrendingUp, Clock, CheckCircle2, AlertCircle, ArrowRight,
 } from "lucide-react"
+import { format, subMonths, startOfMonth, endOfMonth } from "date-fns"
+import { ptBR } from "date-fns/locale"
 
-async function getStats() {
-  const [totalAlunos, totalProfessores, aulasHoje, pendentes] = await Promise.all([
+function brl(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
+
+async function getDashboardData() {
+  const now  = new Date()
+
+  // Últimos 6 meses para gráficos
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const d = subMonths(now, 5 - i)
+    return { start: startOfMonth(d), end: endOfMonth(d), label: format(d, "MMM", { locale: ptBR }) }
+  })
+
+  const [
+    totalAlunos, totalProfessores, totalColaboradores,
+    aulasHoje, pendentes,
+    allLessons, payments,
+  ] = await Promise.all([
     prisma.student.count(),
     prisma.teacher.count(),
+    prisma.user.count({ where: { role: "COLLABORATOR" } }),
     prisma.lesson.count({
-      where: {
-        scheduledAt: {
-          gte: new Date(new Date().setHours(0, 0, 0, 0)),
-          lte: new Date(new Date().setHours(23, 59, 59, 999)),
-        },
-      },
+      where: { scheduledAt: { gte: startOfMonth(now), lte: endOfMonth(now) } },
     }),
     prisma.lessonRequest.count({ where: { status: "PENDING" } }),
+    prisma.lesson.findMany({ select: { status: true, scheduledAt: true }, take: 500 }),
+    prisma.payment.findMany({ select: { amount: true, status: true, paidAt: true } }),
   ])
-  return { totalAlunos, totalProfessores, aulasHoje, pendentes }
+
+  // Receita por mês
+  const receitaMes = months.map(({ start, end, label }) => ({
+    label,
+    value: payments
+      .filter((p) => p.status === "PAID" && p.paidAt && p.paidAt >= start && p.paidAt <= end)
+      .reduce((s, p) => s + Number(p.amount), 0),
+  }))
+
+  // Aulas por mês
+  const aulasMes = months.map(({ start, end, label }) => ({
+    label,
+    value: allLessons.filter((l) => l.scheduledAt >= start && l.scheduledAt <= end).length,
+  }))
+
+  // Status das aulas (mês atual)
+  const mesLessons = allLessons.filter((l) =>
+    l.scheduledAt >= startOfMonth(now) && l.scheduledAt <= endOfMonth(now)
+  )
+  const lessonStatus = [
+    { label: "Confirmada", value: mesLessons.filter((l) => l.status === "CONFIRMED").length,  color: "#FB8500" },
+    { label: "Realizada",  value: mesLessons.filter((l) => l.status === "COMPLETED").length,  color: "#219EBC" },
+    { label: "Cancelada",  value: mesLessons.filter((l) => l.status === "CANCELLED").length,  color: "#ef4444" },
+    { label: "Faltou",     value: mesLessons.filter((l) => l.status === "MISSED").length,     color: "#f97316" },
+    { label: "Agendada",   value: mesLessons.filter((l) => l.status === "SCHEDULED").length,  color: "#8b5cf6" },
+  ].filter((d) => d.value > 0)
+
+  const receitaTotal = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + Number(p.amount), 0)
+  const aReceber     = payments.filter((p) => p.status === "PENDING").reduce((s, p) => s + Number(p.amount), 0)
+
+  return {
+    totalAlunos, totalProfessores, totalColaboradores,
+    aulasHoje, pendentes, receitaMes, aulasMes, lessonStatus,
+    receitaTotal, aReceber,
+  }
 }
 
 export default async function AdminDashboard() {
   const session = await auth()
-  const stats   = await getStats()
+  const d       = await getDashboardData()
   const hora    = new Date().getHours()
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite"
 
+  const kpis = [
+    { title: "Alunos",         value: d.totalAlunos,      icon: GraduationCap, color: "text-primary",     bg: "bg-primary/10"   },
+    { title: "Professores",    value: d.totalProfessores, icon: Users,         color: "text-secondary",   bg: "bg-secondary/10" },
+    { title: "Aulas este mês", value: d.aulasHoje,        icon: CalendarCheck, color: "text-green-600",   bg: "bg-green-50"     },
+    { title: "Ag. Pendentes",  value: d.pendentes,        icon: Clock,         color: "text-orange-500",  bg: "bg-orange-50",   alert: d.pendentes > 0 },
+    { title: "Receita Total",  value: brl(d.receitaTotal),icon: TrendingUp,    color: "text-green-600",   bg: "bg-green-50"     },
+    { title: "A Receber",      value: brl(d.aReceber),    icon: DollarSign,    color: "text-primary",     bg: "bg-primary/10"   },
+  ]
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-3xl text-foreground">
-          {saudacao}, {session?.user?.name?.split(" ")[0]}!
-        </h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Aqui está um resumo do que está acontecendo hoje.
-        </p>
+      {/* Cabeçalho */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="font-heading text-3xl text-foreground">
+            {saudacao}, {session?.user?.name?.split(" ")[0]}!
+          </h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            {format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+          </p>
+        </div>
+        {d.pendentes > 0 && (
+          <LinkButton href="/admin/agenda" variant="outline" size="sm">
+            <AlertCircle className="w-4 h-4 mr-2 text-orange-500" />
+            {d.pendentes} pendente{d.pendentes > 1 ? "s" : ""}
+            <ArrowRight className="w-3 h-3 ml-1" />
+          </LinkButton>
+        )}
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard title="Total de Alunos"    value={stats.totalAlunos}      icon={GraduationCap} color="text-primary"    bg="bg-primary/10"   />
-        <MetricCard title="Professores"        value={stats.totalProfessores} icon={Users}         color="text-secondary"  bg="bg-secondary/10" />
-        <MetricCard title="Aulas Hoje"         value={stats.aulasHoje}        icon={CalendarCheck} color="text-green-600"  bg="bg-green-50"     />
-        <MetricCard title="Ag. Confirmação"    value={stats.pendentes}        icon={Clock}         color="text-orange-500" bg="bg-orange-50"    alert={stats.pendentes > 0} />
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        {kpis.map(({ title, value, icon: Icon, color, bg, alert }) => (
+          <Card key={title}>
+            <CardContent className="p-5 flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{title}</p>
+                <p className="text-xl font-bold font-sub mt-1">{value}</p>
+              </div>
+              <div className={`${bg} p-2.5 rounded-xl shrink-0`}>
+                <Icon className={`w-5 h-5 ${color}`} />
+              </div>
+            </CardContent>
+            {alert && <div className="px-5 pb-3"><Badge variant="destructive" className="text-xs">Requer atenção</Badge></div>}
+          </Card>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Gráficos principais */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="font-sub text-base flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-primary" /> Status do Mês
+          <CardHeader className="pb-2">
+            <CardTitle className="font-sub text-sm flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-primary" /> Receita — Últimos 6 Meses
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { label: "Aulas realizadas", value: "0",        icon: CheckCircle2, color: "text-green-600"   },
-              { label: "Aulas canceladas", value: "0",        icon: AlertCircle,  color: "text-destructive" },
-              { label: "Receita do mês",   value: "R$ 0,00",  icon: DollarSign,   color: "text-primary"     },
-            ].map(({ label, value, icon: Icon, color }) => (
-              <div key={label} className="flex items-center justify-between py-1">
-                <div className="flex items-center gap-2">
-                  <Icon className={`w-4 h-4 ${color}`} />
-                  <span className="text-sm text-muted-foreground">{label}</span>
-                </div>
-                <span className="text-sm font-semibold">{value}</span>
-              </div>
-            ))}
+          <CardContent>
+            {d.receitaMes.some((r) => r.value > 0)
+              ? <SimpleAreaChart data={d.receitaMes} valuePrefix="R$ " height={200} />
+              : <EmptyChart label="Nenhum pagamento registrado ainda" />
+            }
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="font-sub text-base flex items-center gap-2">
-              <Clock className="w-4 h-4 text-primary" /> Próximas Aulas
+          <CardHeader className="pb-2">
+            <CardTitle className="font-sub text-sm flex items-center gap-2">
+              <CalendarCheck className="w-4 h-4 text-primary" /> Aulas — Últimos 6 Meses
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="flex flex-col items-center justify-center py-6 text-center">
-              <CalendarCheck className="w-10 h-10 text-muted-foreground/40 mb-2" />
-              <p className="text-sm text-muted-foreground">Nenhuma aula agendada</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">As próximas aulas aparecerão aqui</p>
-            </div>
+            {d.aulasMes.some((r) => r.value > 0)
+              ? <SimpleBarChart data={d.aulasMes} color="#219EBC" height={200} />
+              : <EmptyChart label="Nenhuma aula registrada ainda" />
+            }
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Status das aulas + distribuição de usuários */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-sub text-sm flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-primary" /> Status das Aulas (Mês Atual)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {d.lessonStatus.length > 0
+              ? <DonutChart data={d.lessonStatus} height={220} />
+              : <EmptyChart label="Nenhuma aula agendada este mês" />
+            }
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="font-sub text-sm flex items-center gap-2">
+              <Users className="w-4 h-4 text-primary" /> Distribuição de Usuários
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DonutChart
+              height={220}
+              data={[
+                { label: "Alunos",       value: d.totalAlunos,        color: "#FB8500" },
+                { label: "Professores",  value: d.totalProfessores,   color: "#219EBC" },
+                { label: "Colaboradores",value: d.totalColaboradores, color: "#8b5cf6" },
+              ].filter((d) => d.value > 0)}
+            />
           </CardContent>
         </Card>
       </div>
@@ -91,24 +199,11 @@ export default async function AdminDashboard() {
   )
 }
 
-function MetricCard({ title, value, icon: Icon, color, bg, alert = false }: {
-  title: string; value: number | string; icon: React.ElementType
-  color: string; bg: string; alert?: boolean
-}) {
+function EmptyChart({ label }: { label: string }) {
   return (
-    <Card>
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
-            <p className="text-2xl font-bold font-sub mt-1">{value}</p>
-          </div>
-          <div className={`${bg} p-2.5 rounded-xl shrink-0`}>
-            <Icon className={`w-5 h-5 ${color}`} />
-          </div>
-        </div>
-        {alert && <Badge variant="destructive" className="mt-2 text-xs">Requer atenção</Badge>}
-      </CardContent>
-    </Card>
+    <div className="h-[200px] flex flex-col items-center justify-center text-center gap-2">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="text-xs text-muted-foreground/60">Os gráficos aparecerão conforme os dados forem cadastrados</p>
+    </div>
   )
 }
