@@ -14,4 +14,13 @@ export const authConfig: NextAuthConfig = {
   session:   { strategy: "jwt" },
   pages:     { signIn: "/login" },
   providers: [],
+  callbacks: {
+    session({ session, token }) {
+      if (session.user) {
+        session.user.id   = token.id   as string
+        session.user.role = token.role as string
+      }
+      return session
+    },
+  },
 }
