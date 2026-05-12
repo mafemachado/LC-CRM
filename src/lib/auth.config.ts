@@ -1,4 +1,5 @@
 import type { NextAuthConfig } from "next-auth"
+import type { Role }           from "@prisma/client"
 
 // Mapeamento role → home (sem Prisma — seguro para Edge runtime)
 export const ROLE_HOME: Record<string, string> = {
@@ -18,7 +19,7 @@ export const authConfig: NextAuthConfig = {
     session({ session, token }) {
       if (session.user) {
         session.user.id   = token.id   as string
-        session.user.role = token.role as string
+        session.user.role = token.role as Role
       }
       return session
     },
