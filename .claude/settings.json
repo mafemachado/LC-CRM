@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -ExecutionPolicy Bypass -File \"c:\\Users\\licaodecasa_nprata\\Documents\\LC(CRM)\\.claude\\auto-push.ps1\"",
+            "timeout": 60,
+            "statusMessage": "Enviando alteracoes para o GitHub..."
+          }
+        ]
+      }
+    ]
+  }
+}
