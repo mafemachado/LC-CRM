@@ -100,3 +100,58 @@ export async function notifyPaymentDue(opts: {
     data:    { "Valor": opts.amount, "Vencimento": opts.dueDate },
   })
 }
+
+export async function notifyLessonReminder(opts: {
+  userId: string; email: string; phone?: string | null
+  role: "student" | "teacher"
+  type: "LESSON_REMINDER_24H" | "LESSON_REMINDER_1H"
+  teacherName: string; studentName: string; subject: string; scheduledAt: string
+}) {
+  const timeLabel = opts.type === "LESSON_REMINDER_24H" ? "em 24 horas" : "em 1 hora"
+  const message = opts.role === "student"
+    ? `Sua aula de ${opts.subject} com ${opts.teacherName} começa ${timeLabel}.`
+    : `Sua aula de ${opts.subject} com ${opts.studentName} começa ${timeLabel}.`
+  await notify({
+    userId:  opts.userId,
+    type:    opts.type,
+    title:   `Lembrete: aula ${timeLabel}`,
+    message,
+    email:   opts.email,
+    phone:   opts.phone ?? undefined,
+    data:    {
+      "Matéria":   opts.subject,
+      ...(opts.role === "student" ? { "Professor": opts.teacherName } : { "Aluno": opts.studentName }),
+      "Data/Hora": opts.scheduledAt,
+    },
+  })
+}
+
+export async function notifyPaymentOverdue(opts: {
+  studentUserId: string; studentEmail: string; studentPhone?: string | null
+  amount: string; dueDate: string
+}) {
+  await notify({
+    userId:  opts.studentUserId,
+    type:    "PAYMENT_OVERDUE",
+    title:   "Pagamento em atraso",
+    message: `Você tem uma cobrança de ${opts.amount} em atraso (venceu em ${opts.dueDate}). Regularize para continuar com suas aulas.`,
+    email:   opts.studentEmail,
+    phone:   opts.studentPhone ?? undefined,
+    data:    { "Valor": opts.amount, "Vencido em": opts.dueDate },
+  })
+}
+
+export async function notifyPayoutGenerated(opts: {
+  teacherUserId: string; teacherEmail: string; teacherPhone?: string | null
+  amount: string; month: string; totalLessons: number
+}) {
+  await notify({
+    userId:  opts.teacherUserId,
+    type:    "PAYOUT_GENERATED",
+    title:   "Repasse calculado",
+    message: `Seu repasse de ${opts.amount} referente a ${opts.month} está disponível (${opts.totalLessons} aulas realizadas).`,
+    email:   opts.teacherEmail,
+    phone:   opts.teacherPhone ?? undefined,
+    data:    { "Valor": opts.amount, "Referência": opts.month, "Aulas realizadas": String(opts.totalLessons) },
+  })
+}
