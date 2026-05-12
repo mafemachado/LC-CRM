@@ -20,7 +20,10 @@ export default auth((req) => {
     return NextResponse.redirect(new URL(home, req.url))
   }
 
-  return NextResponse.next()
+  // Injeta pathname como header para Server Components lerem
+  const response = NextResponse.next()
+  response.headers.set("x-pathname", pathname)
+  return response
 })
 
 export const config = {
