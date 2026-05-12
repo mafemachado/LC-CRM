@@ -8,6 +8,8 @@ import { LinkButton }  from "@/components/shared/link-button"
 import { Clock, CalendarCheck, CheckCircle2 } from "lucide-react"
 import { format }      from "date-fns"
 import { ptBR }        from "date-fns/locale"
+import { hasConflict, isWithinAvailability } from "@/lib/availability"
+import type { Availability } from "@/lib/availability"
 
 const STATUS_CFG = {
   SCHEDULED:  { label: "Agendada",   variant: "secondary"   as const },
@@ -42,6 +44,11 @@ export default async function ProfessorAgendaPage() {
     }) : [],
   ])
 
+  const availability   = (teacher?.availability ?? {}) as unknown as Availability
+  const confirmedTimes = lessons
+    .filter((l) => ["SCHEDULED", "CONFIRMED"].includes(l.status))
+    .map((l) => l.scheduledAt)
+
   const upcoming = lessons.filter((l) => ["SCHEDULED", "CONFIRMED"].includes(l.status))
   const past     = lessons.filter((l) => ["COMPLETED", "CANCELLED", "MISSED"].includes(l.status))
 
@@ -60,17 +67,24 @@ export default async function ProfessorAgendaPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            {requests.map((r) => (
-              <RequestCard
-                key={r.id}
-                id={r.id}
-                studentName={r.student.user.name}
-                teacherName={r.teacher.user.name}
-                subjectName={r.subject?.name ?? "–"}
-                preferredAt={r.preferredAt}
-                notes={r.reason}
-              />
-            ))}
+            {requests.map((r) => {
+              const conflict      = hasConflict(r.preferredAt, confirmedTimes)
+              const outOfSchedule = Object.keys(availability).length > 0 &&
+                                    !isWithinAvailability(r.preferredAt, availability)
+              return (
+                <RequestCard
+                  key={r.id}
+                  id={r.id}
+                  studentName={r.student.user.name}
+                  teacherName={r.teacher.user.name}
+                  subjectName={r.subject?.name ?? "–"}
+                  preferredAt={r.preferredAt}
+                  notes={r.reason}
+                  hasConflict={conflict}
+                  outOfSchedule={outOfSchedule}
+                />
+              )
+            })}
           </CardContent>
         </Card>
       )}
@@ -105,9 +119,7 @@ export default async function ProfessorAgendaPage() {
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Badge variant={STATUS_CFG[lesson.status].variant}>{STATUS_CFG[lesson.status].label}</Badge>
-                    <LinkButton href={`/professor/agenda/${lesson.id}`} variant="outline" size="sm">
-                      Ver
-                    </LinkButton>
+                    <LinkButton href={`/professor/agenda/${lesson.id}`} variant="outline" size="sm">Ver</LinkButton>
                   </div>
                 </div>
               ))}
@@ -116,7 +128,6 @@ export default async function ProfessorAgendaPage() {
         </CardContent>
       </Card>
 
-      {/* Histórico */}
       {past.length > 0 && (
         <Card>
           <CardHeader className="pb-3">

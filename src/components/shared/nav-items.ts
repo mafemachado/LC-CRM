@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, CalendarDays, DollarSign,
   BarChart3, Settings, BookOpen, ClipboardList,
-  GraduationCap, Wallet, FolderOpen, PenLine,
+  GraduationCap, Wallet, FolderOpen, PenLine, Clock,
 } from "lucide-react"
 import type { Role } from "@prisma/client"
 
@@ -27,11 +27,12 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Agendamentos",   href: "/colaborador/agendamentos",  icon: ClipboardList   },
   ],
   TEACHER: [
-    { label: "Dashboard",   href: "/professor/dashboard",  icon: LayoutDashboard },
-    { label: "Minha Agenda",href: "/professor/agenda",     icon: CalendarDays    },
-    { label: "Meus Alunos", href: "/professor/alunos",     icon: GraduationCap   },
-    { label: "Pagamentos",  href: "/professor/pagamentos", icon: Wallet          },
-    { label: "Materiais",   href: "/professor/materiais",  icon: FolderOpen      },
+    { label: "Dashboard",      href: "/professor/dashboard",      icon: LayoutDashboard },
+    { label: "Minha Agenda",   href: "/professor/agenda",         icon: CalendarDays    },
+    { label: "Disponibilidade",href: "/professor/disponibilidade",icon: Clock           },
+    { label: "Meus Alunos",    href: "/professor/alunos",         icon: GraduationCap   },
+    { label: "Pagamentos",     href: "/professor/pagamentos",     icon: Wallet          },
+    { label: "Materiais",      href: "/professor/materiais",      icon: FolderOpen      },
   ],
   STUDENT: [
     { label: "Dashboard",    href: "/aluno/dashboard",  icon: LayoutDashboard },
