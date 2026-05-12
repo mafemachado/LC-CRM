@@ -1,21 +1,14 @@
-import NextAuth from "next-auth"
-import Credentials from "next-auth/providers/credentials"
-import bcrypt from "bcryptjs"
-import { prisma } from "@/lib/prisma"
+import NextAuth      from "next-auth"
+import Credentials   from "next-auth/providers/credentials"
+import bcrypt        from "bcryptjs"
+import { prisma }    from "@/lib/prisma"
 import { loginSchema } from "@/lib/validations/auth"
-import type { Role } from "@prisma/client"
+import { authConfig, ROLE_HOME } from "@/lib/auth.config"
 
-export const ROLE_HOME: Record<Role, string> = {
-  ADMIN:        "/admin/dashboard",
-  COLLABORATOR: "/colaborador/dashboard",
-  TEACHER:      "/professor/dashboard",
-  STUDENT:      "/aluno/dashboard",
-  GUARDIAN:     "/aluno/dashboard",
-}
+export { ROLE_HOME }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages:   { signIn: "/login" },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -34,30 +27,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const valid = await bcrypt.compare(parsed.data.password, user.password)
         if (!valid) return null
 
-        return {
-          id:     user.id,
-          name:   user.name,
-          email:  user.email,
-          image:  user.avatar,
-          role:   user.role,
-        }
+        return { id: user.id, name: user.name, email: user.email, image: user.avatar, role: user.role }
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        token.id   = user.id
-        token.role = (user as { role: Role }).role
-      }
-      return token
-    },
-    session({ session, token }) {
-      if (session.user) {
-        session.user.id   = token.id   as string
-        session.user.role = token.role as Role
-      }
-      return session
-    },
-  },
 })
