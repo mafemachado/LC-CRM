@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <!-- Background orange -->
+  <rect width="512" height="512" rx="96" fill="#FB8500"/>
+
+  <!-- Open book: left page group -->
+  <path d="M56 400 L256 310 L256 345 L56 435 Z" fill="#219EBC"/>
+  <path d="M72 348 Q164 306 256 302" stroke="white" stroke-width="13" stroke-linecap="round"/>
+  <path d="M72 373 Q164 331 256 327" stroke="white" stroke-width="9" stroke-linecap="round" opacity="0.55"/>
+  <path d="M72 396 Q164 354 256 350" stroke="#FB8500" stroke-width="7" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Open book: right page group -->
+  <path d="M456 400 L256 310 L256 345 L456 435 Z" fill="#219EBC"/>
+  <path d="M440 348 Q348 306 256 302" stroke="white" stroke-width="13" stroke-linecap="round"/>
+  <path d="M440 373 Q348 331 256 327" stroke="white" stroke-width="9" stroke-linecap="round" opacity="0.55"/>
+  <path d="M440 396 Q348 354 256 350" stroke="#FB8500" stroke-width="7" stroke-linecap="round" opacity="0.65"/>
+
+  <!-- Book spine bottom chevron -->
+  <path d="M56 435 L256 468 L456 435" stroke="white" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Lightbulb halo / glow -->
+  <circle cx="256" cy="178" r="82" fill="white" opacity="0.15"/>
+  <!-- Lightbulb main body -->
+  <circle cx="256" cy="178" r="66" fill="white"/>
+  <!-- Lightbulb base steps -->
+  <rect x="228" y="234" width="56" height="15" rx="5" fill="white"/>
+  <rect x="232" y="248" width="48" height="12" rx="4" fill="white"/>
+  <rect x="238" y="259" width="36" height="11" rx="4" fill="white"/>
+  <!-- Filament -->
+  <path d="M234 184 Q256 158 278 184" fill="none" stroke="#FB8500" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- Lightbulb rays -->
+  <line x1="256" y1="90" x2="256" y2="68" stroke="white" stroke-width="13" stroke-linecap="round"/>
+  <line x1="304" y1="103" x2="318" y2="87" stroke="white" stroke-width="13" stroke-linecap="round"/>
+  <line x1="208" y1="103" x2="194" y2="87" stroke="white" stroke-width="13" stroke-linecap="round"/>
+  <line x1="332" y1="140" x2="352" y2="128" stroke="white" stroke-width="11" stroke-linecap="round"/>
+  <line x1="180" y1="140" x2="160" y2="128" stroke="white" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- Pencil body (right, angled 38deg) -->
+  <g transform="translate(400,235) rotate(38)">
+    <rect x="-17" y="-80" width="34" height="18" rx="5" fill="#ffe066"/>
+    <rect x="-17" y="-63" width="34" height="95" rx="4" fill="#219EBC"/>
+    <rect x="-13" y="-61" width="26" height="5" fill="white" opacity="0.3"/>
+    <polygon points="-17,32 17,32 0,60" fill="white"/>
+    <polygon points="-10,44 10,44 0,60" fill="#FF7043"/>
+  </g>
+</svg>

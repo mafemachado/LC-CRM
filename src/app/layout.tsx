@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Anton, Montserrat, Caveat, Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
+import { Providers }    from "@/components/providers";
+import { PwaRegister }  from "@/components/shared/pwa-register";
 import "./globals.css";
 
 /* ─── Fontes da Marca ─────────────────────────────────────────────────────
@@ -50,7 +52,10 @@ export const metadata: Metadata = {
     "Sistema de gestão de aulas particulares — reforço escolar e preparação para vestibulares.",
   manifest: "/manifest.json",
   icons: {
-    icon: "/favicon.ico",
+    icon:  [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192x192.png", sizes: "192x192", type: "image/png" },
+    ],
     apple: "/apple-touch-icon.png",
   },
 };
@@ -78,7 +83,10 @@ export default function RootLayout({
           font-body antialiased
         `}
       >
-        {children}
+        <Providers>
+          <PwaRegister />
+          {children}
+        </Providers>
       </body>
     </html>
   );

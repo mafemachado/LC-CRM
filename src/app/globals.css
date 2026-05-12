@@ -241,9 +241,18 @@
 
   /* ── Hover lift em cards ── */
   .card-lift {
-    @apply transition-all duration-200 ease-out;
+    transition: box-shadow 200ms ease-out, transform 200ms ease-out;
   }
   .card-lift:hover {
-    @apply shadow-md -translate-y-px;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.10), 0 2px 4px -2px rgb(0 0 0 / 0.08);
+    transform: translateY(-2px);
+  }
+
+  /* ── Transição suave de tema ── */
+  .theme-transition,
+  .theme-transition *,
+  .theme-transition *::before,
+  .theme-transition *::after {
+    transition: background-color 300ms ease, border-color 300ms ease, color 200ms ease !important;
   }
 }

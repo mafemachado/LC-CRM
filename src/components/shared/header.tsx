@@ -1,6 +1,7 @@
 import { MobileSidebar }       from "./mobile-sidebar"
 import { LogoutButton }        from "./logout-button"
 import { NotificationBell }    from "./notification-bell"
+import { ThemeToggle }         from "./theme-toggle"
 import type { Role }           from "@prisma/client"
 
 const PAGE_TITLES: Record<string, string> = {
@@ -44,6 +45,7 @@ export function Header({ pathname, name, email, role, image }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-1">
+        <ThemeToggle />
         <NotificationBell />
         <LogoutButton />
       </div>
