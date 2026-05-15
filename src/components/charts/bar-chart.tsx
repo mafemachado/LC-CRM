@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell,
 } from "recharts"
+import { useChartTheme } from "@/hooks/use-dark-mode"
 
 interface BarChartProps {
   data:         { label: string; value: number; color?: string }[]
@@ -20,6 +21,8 @@ export function SimpleBarChart({
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
+  const t = useChartTheme()
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <BarChart
@@ -30,7 +33,7 @@ export function SimpleBarChart({
       >
         <CartesianGrid
           strokeDasharray="3 3"
-          stroke="hsl(var(--border))"
+          stroke={t.gridColor}
           horizontal={!horizontal}
           vertical={horizontal}
         />
@@ -38,13 +41,13 @@ export function SimpleBarChart({
           <>
             <XAxis
               type="number"
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: t.tickColor }}
               axisLine={false} tickLine={false}
               tickFormatter={(v) => `${valuePrefix}${v}`}
             />
             <YAxis
               type="category" dataKey="label" width={56}
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: t.tickColor }}
               axisLine={false} tickLine={false}
             />
           </>
@@ -52,11 +55,11 @@ export function SimpleBarChart({
           <>
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: t.tickColor }}
               axisLine={false} tickLine={false}
             />
             <YAxis
-              tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }}
+              tick={{ fontSize: 11, fill: t.tickColor }}
               axisLine={false} tickLine={false}
               tickFormatter={(v) => `${valuePrefix}${v}`}
             />
@@ -64,17 +67,17 @@ export function SimpleBarChart({
         )}
         <Tooltip
           contentStyle={{
-            background: "#ffffff",
-            border: "1px solid #e5e7eb",
+            background:   t.bg,
+            border:       t.border,
             borderRadius: 10,
-            fontSize: 12,
-            color: "#111827",
-            boxShadow: "0 4px 16px rgba(0,0,0,0.10)",
+            fontSize:     12,
+            color:        t.labelColor,
+            boxShadow:    t.shadow,
           }}
-          labelStyle={{ color: "#111827", fontWeight: 600, marginBottom: 2 }}
-          itemStyle={{ color: "#374151" }}
+          labelStyle={{ color: t.labelColor, fontWeight: 600, marginBottom: 2 }}
+          itemStyle={{ color: t.itemColor }}
           formatter={(v) => [`${valuePrefix}${Number(v ?? 0).toLocaleString("pt-BR")}`, ""]}
-          cursor={{ fill: "rgba(0,0,0,0.05)", radius: 4 }}
+          cursor={{ fill: t.cursor, radius: 4 }}
           animationDuration={150}
         />
         <Bar

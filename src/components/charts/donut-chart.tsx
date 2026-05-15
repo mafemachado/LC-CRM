@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts"
+import { useChartTheme } from "@/hooks/use-dark-mode"
 
 interface DonutChartProps {
   data:    { label: string; value: number; color: string }[]
@@ -14,6 +15,7 @@ export function DonutChart({ data, height = 200, inner = 58, outer = 85 }: Donut
   const [mounted, setMounted] = useState(false)
   useEffect(() => { setMounted(true) }, [])
 
+  const t = useChartTheme()
   const total = data.reduce((s, d) => s + d.value, 0)
 
   return (
@@ -39,12 +41,15 @@ export function DonutChart({ data, height = 200, inner = 58, outer = 85 }: Donut
         </Pie>
         <Tooltip
           contentStyle={{
-            background: "hsl(var(--card))",
-            border: "1px solid hsl(var(--border))",
+            background:   t.bg,
+            border:       t.border,
             borderRadius: 10,
-            fontSize: 12,
-            boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+            fontSize:     12,
+            color:        t.labelColor,
+            boxShadow:    t.shadow,
           }}
+          labelStyle={{ color: t.labelColor, fontWeight: 600, marginBottom: 2 }}
+          itemStyle={{ color: t.itemColor }}
           formatter={(v) => {
             const n = Number(v ?? 0)
             return [`${n} (${total ? Math.round(n / total * 100) : 0}%)`, ""]
@@ -56,7 +61,7 @@ export function DonutChart({ data, height = 200, inner = 58, outer = 85 }: Donut
           iconSize={8}
           wrapperStyle={{ paddingTop: 8, fontSize: 11 }}
           formatter={(value) => (
-            <span style={{ color: "hsl(var(--muted-foreground))" }}>{value}</span>
+            <span style={{ color: t.tickColor }}>{value}</span>
           )}
         />
       </PieChart>
