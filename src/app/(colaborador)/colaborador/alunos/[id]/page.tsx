@@ -4,7 +4,6 @@ import { PageHeader }    from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }         from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
-import Link              from "next/link"
 import {
   GraduationCap, UserRound, Phone, Mail, CalendarDays,
   BookOpen, MessageCircle, AlertCircle, School, FileText,

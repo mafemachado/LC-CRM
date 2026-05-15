@@ -59,7 +59,7 @@ export async function requestLessonAction(formData: FormData) {
   if (!teacher) redirect("/aluno/agendar?error=Professor+não+encontrado")
 
   // Valida disponibilidade e conflito de horário no backend
-  const availability = (teacher.availability ?? {}) as Availability
+  const availability = (teacher.availability ?? {}) as unknown as Availability
   if (!isWithinAvailability(requestDate, availability)) {
     redirect("/aluno/agendar?error=Horário+fora+da+disponibilidade+do+professor")
   }
