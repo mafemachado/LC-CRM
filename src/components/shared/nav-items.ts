@@ -25,6 +25,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Agenda",         href: "/colaborador/agenda",        icon: CalendarDays    },
     { label: "Alunos",         href: "/colaborador/alunos",        icon: GraduationCap   },
     { label: "Agendamentos",   href: "/colaborador/agendamentos",  icon: ClipboardList   },
+    { label: "Financeiro",     href: "/colaborador/financeiro",    icon: DollarSign      },
   ],
   TEACHER: [
     { label: "Dashboard",      href: "/professor/dashboard",      icon: LayoutDashboard },

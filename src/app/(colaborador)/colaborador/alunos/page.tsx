@@ -1,0 +1,163 @@
+import { prisma }     from "@/lib/prisma"
+import { PageHeader } from "@/components/shared/page-header"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge }      from "@/components/ui/badge"
+import { Button }     from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
+import { GraduationCap, BookOpen, MessageCircle, CalendarDays, AlertCircle } from "lucide-react"
+import { format }     from "date-fns"
+import { ptBR }       from "date-fns/locale"
+
+function brl(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
+
+function BalanceBadge({ remaining }: { remaining: number }) {
+  if (remaining > 4) return (
+    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
+      <BookOpen className="w-3 h-3 mr-1" />{remaining} aulas
+    </Badge>
+  )
+  if (remaining > 1) return (
+    <Badge className="bg-yellow-100 text-yellow-700 border-yellow-200 hover:bg-yellow-100">
+      <BookOpen className="w-3 h-3 mr-1" />{remaining} aulas
+    </Badge>
+  )
+  return (
+    <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">
+      <AlertCircle className="w-3 h-3 mr-1" />{remaining} aula{remaining !== 1 ? "s" : ""}
+    </Badge>
+  )
+}
+
+const PAYMENT_CFG = {
+  PENDING: { label: "Pendente", variant: "secondary"   as const },
+  PAID:    { label: "Pago",     variant: "default"     as const },
+  OVERDUE: { label: "Vencido",  variant: "destructive" as const },
+}
+
+export default async function ColaboradorAlunosPage() {
+  const students = await prisma.student.findMany({
+    where:   { user: { active: true } },
+    include: {
+      user: true,
+      packages: {
+        where:   { status: { in: ["ACTIVE", "EXHAUSTED"] } },
+        orderBy: { purchaseDate: "desc" },
+        take:    1,
+      },
+      lessons: {
+        where:   { scheduledAt: { gte: new Date() }, status: { in: ["SCHEDULED", "CONFIRMED"] } },
+        orderBy: { scheduledAt: "asc" },
+        take:    1,
+        include: { subject: true },
+      },
+      payments: {
+        orderBy: { dueDate: "desc" },
+        take:    1,
+      },
+    },
+    orderBy: { user: { name: "asc" } },
+  })
+
+  const low    = students.filter((s) => (s.packages[0]?.remainingLessons ?? 0) <= 2)
+  const normal = students.filter((s) => (s.packages[0]?.remainingLessons ?? 0) > 2)
+
+  function StudentCard({ student }: { student: typeof students[number] }) {
+    const pkg        = student.packages[0]
+    const remaining  = pkg?.remainingLessons ?? 0
+    const nextLesson = student.lessons[0]
+    const lastPayment = student.payments[0]
+    const phone      = student.user.phone?.replace(/\D/g, "")
+
+    return (
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 rounded-xl border border-border bg-card">
+        {/* Avatar + info */}
+        <div className="flex gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
+            <GraduationCap className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-0.5">
+              <p className="font-medium text-sm">{student.user.name}</p>
+              <BalanceBadge remaining={remaining} />
+            </div>
+            {pkg ? (
+              <p className="text-xs text-muted-foreground">
+                Pacote: {pkg.totalLessons} aulas · {brl(Number(pkg.pricePerLesson))}/aula
+                {pkg.expiresAt && ` · vence ${format(pkg.expiresAt, "dd/MM/yyyy", { locale: ptBR })}`}
+              </p>
+            ) : (
+              <p className="text-xs text-destructive">Sem pacote ativo</p>
+            )}
+            {nextLesson && (
+              <div className="flex items-center gap-1 mt-1">
+                <CalendarDays className="w-3 h-3 text-muted-foreground" />
+                <p className="text-xs text-muted-foreground">
+                  Próx: {format(nextLesson.scheduledAt, "dd/MM HH:mm", { locale: ptBR })} · {nextLesson.subject.name}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Ações */}
+        <div className="flex items-center gap-2 shrink-0">
+          {lastPayment && (
+            <Badge variant={PAYMENT_CFG[lastPayment.status].variant} className="text-xs">
+              {PAYMENT_CFG[lastPayment.status].label}
+            </Badge>
+          )}
+          {phone && (
+            <a
+              href={`https://wa.me/55${phone}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 h-8 text-xs px-2"}
+            >
+              <MessageCircle className="w-3 h-3 mr-1" />
+              WhatsApp
+            </a>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="ALUNOS"
+        description={`${students.length} aluno${students.length !== 1 ? "s" : ""} cadastrado${students.length !== 1 ? "s" : ""}`}
+      />
+
+      {low.length > 0 && (
+        <Card className="border-red-200">
+          <CardHeader className="pb-3">
+            <CardTitle className="font-sub text-base flex items-center gap-2 text-red-700">
+              <AlertCircle className="w-4 h-4" />
+              Saldo Baixo ou Esgotado
+              <Badge variant="destructive">{low.length}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {low.map((s) => <StudentCard key={s.id} student={s} />)}
+          </CardContent>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="font-sub text-base flex items-center gap-2">
+            <GraduationCap className="w-4 h-4 text-primary" />
+            Todos os Alunos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {normal.length === 0 && low.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum aluno cadastrado</p>
+          )}
+          {normal.map((s) => <StudentCard key={s.id} student={s} />)}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
