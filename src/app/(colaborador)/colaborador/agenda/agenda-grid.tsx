@@ -42,9 +42,12 @@ const STATUS_LABEL: Record<LessonStatus, string> = {
   MISSED:    "Faltou",
 }
 
+export interface AvailSlot { start: number; end: number } // minutos desde meia-noite
+
 export interface TeacherCol {
-  id:   string
-  name: string
+  id:    string
+  name:  string
+  slots: AvailSlot[]  // intervalos de disponibilidade no dia selecionado
 }
 
 export interface LessonSlot {
@@ -264,20 +267,51 @@ export function AgendaGrid({ date, teachers, lessons, roomCount = 3 }: AgendaGri
             {/* Canto (sticky left + top) */}
             <div
               style={{ width: TIME_W, minWidth: TIME_W }}
-              className="sticky left-0 z-30 bg-background/95 border-r border-border shrink-0"
-            />
-            {teachers.map(t => (
-              <div
-                key={t.id}
-                style={{ width: COL_W, minWidth: COL_W }}
-                className="px-2 py-2.5 text-center border-l border-border"
-              >
-                <p className="text-xs font-semibold truncate">{t.name}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {byTeacher(t.id).length} aula{byTeacher(t.id).length !== 1 ? "s" : ""}
-                </p>
-              </div>
-            ))}
+              className="sticky left-0 z-30 bg-background/95 border-r border-border shrink-0 flex flex-col items-center justify-end pb-1.5">
+              <span className="text-[9px] text-muted-foreground leading-tight">Salas</span>
+              <span className="text-[10px] font-bold text-primary">{roomCount}</span>
+            </div>
+            {teachers.map(t => {
+              const count     = byTeacher(t.id).length
+              const available = t.slots.length > 0
+              return (
+                <div
+                  key={t.id}
+                  style={{ width: COL_W, minWidth: COL_W }}
+                  className={`px-2 py-2 text-center border-l border-border ${
+                    !available ? "bg-muted/20" : ""
+                  }`}
+                >
+                  <p className="text-xs font-semibold truncate">{t.name.split(" ")[0]}
+                    <span className="hidden lg:inline"> {t.name.split(" ").slice(1).join(" ")}</span>
+                  </p>
+                  <div className="flex items-center justify-center gap-1.5 mt-0.5">
+                    <span className="text-[10px] text-muted-foreground">
+                      {count} aula{count !== 1 ? "s" : ""}
+                    </span>
+                    {available ? (
+                      <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded-full font-medium">
+                        disponível
+                      </span>
+                    ) : (
+                      <span className="text-[9px] bg-muted text-muted-foreground px-1 py-0.5 rounded-full">
+                        indisponível
+                      </span>
+                    )}
+                  </div>
+                  {/* Barrinhas de disponibilidade no header */}
+                  {available && (
+                    <div className="flex gap-0.5 justify-center mt-1">
+                      {t.slots.map((s, i) => (
+                        <span key={i} className="text-[8px] text-emerald-600 font-medium">
+                          {String(Math.floor(s.start / 60)).padStart(2,"0")}–{String(Math.floor(s.end / 60)).padStart(2,"0")}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           {/* Corpo: horários + colunas */}
@@ -313,43 +347,61 @@ export function AgendaGrid({ date, teachers, lessons, roomCount = 3 }: AgendaGri
             </div>
 
             {/* Colunas dos professores */}
-            {teachers.map((t, colIdx) => (
-              <div
-                key={t.id}
-                style={{ width: COL_W, minWidth: COL_W, height: TOTAL * HOUR_H }}
-                className={`relative ${colIdx > 0 ? "border-l border-border/50" : ""}`}
-              >
-                {/* Linhas de hora cheia */}
-                {hours.map(h => (
-                  <div key={h}
-                    style={{ top: (h - START) * HOUR_H }}
-                    className="absolute inset-x-0 border-t border-border/30 pointer-events-none"
-                  />
-                ))}
-                {/* Linhas de meia hora (tracejadas) */}
-                {hours.map(h => (
-                  <div key={`hh${h}`}
-                    style={{ top: (h - START) * HOUR_H + HOUR_H / 2 }}
-                    className="absolute inset-x-0 border-t border-border/15 border-dashed pointer-events-none"
-                  />
-                ))}
+            {teachers.map((t, colIdx) => {
+              const hasAvailToday = t.slots.length > 0
+              return (
+                <div
+                  key={t.id}
+                  style={{ width: COL_W, minWidth: COL_W, height: TOTAL * HOUR_H }}
+                  className={`relative ${colIdx > 0 ? "border-l border-border/50" : ""} ${
+                    !hasAvailToday ? "bg-muted/25" : ""
+                  }`}
+                >
+                  {/* ── Blocos de disponibilidade (fundo verde) ── */}
+                  {t.slots.map((slot, i) => {
+                    const top    = px(slot.start - START * 60)
+                    const height = px(slot.end - slot.start)
+                    if (top < 0 || height <= 0) return null
+                    return (
+                      <div key={i}
+                        style={{ top, height, left: 0, right: 0 }}
+                        className="absolute bg-emerald-50/70 dark:bg-emerald-950/20 pointer-events-none z-0"
+                      />
+                    )
+                  })}
 
-                {/* Linha de horário atual */}
-                {nowTop !== null && (
-                  <div
-                    style={{ top: nowTop }}
-                    className="absolute inset-x-0 border-t-2 border-red-500 z-10 pointer-events-none"
-                  >
-                    <span className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
-                  </div>
-                )}
+                  {/* Linhas de hora cheia */}
+                  {hours.map(h => (
+                    <div key={h}
+                      style={{ top: (h - START) * HOUR_H }}
+                      className="absolute inset-x-0 border-t border-border/30 pointer-events-none z-1"
+                    />
+                  ))}
+                  {/* Linhas de meia hora (tracejadas) */}
+                  {hours.map(h => (
+                    <div key={`hh${h}`}
+                      style={{ top: (h - START) * HOUR_H + HOUR_H / 2 }}
+                      className="absolute inset-x-0 border-t border-border/15 border-dashed pointer-events-none z-1"
+                    />
+                  ))}
 
-                {/* Blocos de aula */}
-                {byTeacher(t.id).map(lesson => (
-                  <LessonBlock key={lesson.id} lesson={lesson} />
-                ))}
-              </div>
-            ))}
+                  {/* Linha de horário atual */}
+                  {nowTop !== null && (
+                    <div
+                      style={{ top: nowTop }}
+                      className="absolute inset-x-0 border-t-2 border-red-500 z-10 pointer-events-none"
+                    >
+                      <span className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
+                    </div>
+                  )}
+
+                  {/* Blocos de aula */}
+                  {byTeacher(t.id).map(lesson => (
+                    <LessonBlock key={lesson.id} lesson={lesson} />
+                  ))}
+                </div>
+              )
+            })}
           </div>
 
         </div>

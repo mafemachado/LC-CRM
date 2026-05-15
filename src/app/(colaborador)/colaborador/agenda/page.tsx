@@ -1,24 +1,36 @@
-import { prisma }       from "@/lib/prisma"
-import { PageHeader }   from "@/components/shared/page-header"
-import { AgendaGrid }   from "./agenda-grid"
-import type { TeacherCol, LessonSlot } from "./agenda-grid"
-import { getRoomCount } from "@/lib/config"
-import { format, startOfDay, endOfDay, parseISO, isValid } from "date-fns"
+import { prisma }        from "@/lib/prisma"
+import { PageHeader }    from "@/components/shared/page-header"
+import { AgendaGrid }    from "./agenda-grid"
+import type { TeacherCol, LessonSlot, AvailSlot } from "./agenda-grid"
+import { getRoomCount }  from "@/lib/config"
+import type { Availability } from "@/lib/availability"
+import { format, startOfDay, endOfDay, parseISO, isValid, getDay } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
 interface AgendaPageProps {
   searchParams: Promise<{ date?: string }>
 }
 
+function parseAvailSlots(availability: unknown, dow: number): AvailSlot[] {
+  if (!availability || typeof availability !== "object") return []
+  const avail = availability as Availability
+  const daySlots = avail[String(dow)] ?? []
+  return daySlots.map(s => {
+    const [sh, sm] = s.start.split(":").map(Number)
+    const [eh, em] = s.end.split(":").map(Number)
+    return { start: sh * 60 + sm, end: eh * 60 + em }
+  })
+}
+
 export default async function ColaboradorAgendaPage({ searchParams }: AgendaPageProps) {
   const { date: rawDate } = await searchParams
 
-  // Resolve a data: usa ?date ou hoje
-  const parsed  = rawDate ? parseISO(rawDate) : new Date()
-  const dateObj = isValid(parsed) ? parsed : new Date()
-  const dateStr = format(dateObj, "yyyy-MM-dd")
+  const parsed   = rawDate ? parseISO(rawDate) : new Date()
+  const dateObj  = isValid(parsed) ? parsed : new Date()
+  const dateStr  = format(dateObj, "yyyy-MM-dd")
   const dayStart = startOfDay(dateObj)
   const dayEnd   = endOfDay(dateObj)
+  const dow      = getDay(dateObj)   // 0=Dom … 6=Sáb
 
   const [teachers, lessons, roomCount] = await Promise.all([
     prisma.teacher.findMany({
@@ -43,10 +55,10 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     getRoomCount(),
   ])
 
-  // Serializa para o client component (evita problemas com Date objects)
   const teacherCols: TeacherCol[] = teachers.map(t => ({
-    id:   t.id,
-    name: t.user.name,
+    id:    t.id,
+    name:  t.user.name,
+    slots: parseAvailSlots(t.availability, dow),
   }))
 
   const lessonSlots: LessonSlot[] = lessons.map(l => {
