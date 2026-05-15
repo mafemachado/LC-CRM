@@ -78,9 +78,10 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
     const guardianPhone = guardian?.user.phone?.replace(/\D/g, "")
 
     return (
-      <div className="flex flex-col sm:flex-row sm:items-start gap-4 p-4 rounded-xl border border-border bg-card">
+      <div className="relative flex flex-col sm:flex-row sm:items-start gap-4 p-4 rounded-xl border border-border bg-card hover:bg-accent/40 transition-colors cursor-pointer">
+        <Link href={`/colaborador/alunos/${student.id}`} className="absolute inset-0 rounded-xl z-0" aria-label={`Ver perfil de ${student.user.name}`} />
         {/* Info principal */}
-        <div className="flex gap-3 flex-1 min-w-0">
+        <div className="flex gap-3 flex-1 min-w-0 relative z-10">
           <div className="w-10 h-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
             <GraduationCap className="w-5 h-5 text-primary" />
           </div>
@@ -127,7 +128,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
         </div>
 
         {/* Ações */}
-        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+        <div className="relative z-10 flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {lastPayment && (
             <Badge variant={PAYMENT_CFG[lastPayment.status].variant} className="text-xs">
               {PAYMENT_CFG[lastPayment.status].label}
