@@ -237,3 +237,139 @@ export async function updateLessonStatusAction(
   revalidatePath("/professor/agenda")
   revalidatePath("/admin/agenda")
 }
+
+// ─── Criar aula diretamente (sem solicitação) ─────────────────────────────────
+
+export async function createLessonDirectAction(data: {
+  teacherId:  string
+  studentId:  string
+  subjectId:  string
+  date:       string  // "YYYY-MM-DD"
+  time:       string  // "HH:mm"
+  modality:   "PRESENCIAL" | "ONLINE"
+  duration?:  number
+}) {
+  await requireCollaboratorOrAdmin()
+
+  const duration    = data.duration ?? 60
+  const scheduledAt = new Date(`${data.date}T${data.time}:00`)
+
+  const student = await prisma.student.findUnique({
+    where:   { id: data.studentId },
+    include: {
+      user:     true,
+      packages: {
+        where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+        orderBy: { purchaseDate: "desc" },
+        take:    1,
+      },
+    },
+  })
+  if (!student) throw new Error("Aluno não encontrado")
+
+  const pkg = student.packages[0]
+  if (!pkg) throw new Error("Aluno sem saldo de aulas disponível")
+
+  const dayStart = startOfDay(scheduledAt)
+  const dayEnd   = endOfDay(scheduledAt)
+
+  // Verificação de salas presenciais
+  if (data.modality === "PRESENCIAL") {
+    const roomCount = await getRoomCount()
+    const reqStart  = scheduledAt.getTime()
+    const reqEnd    = reqStart + duration * 60_000
+
+    const presencialLessons = await prisma.lesson.findMany({
+      where:  {
+        modality:    "PRESENCIAL",
+        status:      { in: ["CONFIRMED", "SCHEDULED"] },
+        scheduledAt: { gte: dayStart, lte: dayEnd },
+      },
+      select: { scheduledAt: true, duration: true },
+    })
+
+    const conflicts = presencialLessons.filter(l => {
+      const lStart = l.scheduledAt.getTime()
+      const lEnd   = lStart + (l.duration ?? 60) * 60_000
+      return lStart < reqEnd && lEnd > reqStart
+    })
+
+    if (conflicts.length >= roomCount) {
+      throw new Error(
+        `Todas as ${roomCount} sala${roomCount !== 1 ? "s" : ""} estão ocupadas neste horário. ` +
+        `Altere para ONLINE para agendar mesmo assim.`
+      )
+    }
+  }
+
+  // Verificação de conflito do professor
+  const teacherLessons = await prisma.lesson.findMany({
+    where:  {
+      teacherId:   data.teacherId,
+      status:      { in: ["CONFIRMED", "SCHEDULED"] },
+      scheduledAt: { gte: dayStart, lte: dayEnd },
+    },
+    select: { scheduledAt: true, duration: true },
+  })
+
+  const reqStart = scheduledAt.getTime()
+  const reqEnd   = reqStart + duration * 60_000
+  const hasConflict = teacherLessons.some(l => {
+    const lStart = l.scheduledAt.getTime()
+    const lEnd   = lStart + (l.duration ?? 60) * 60_000
+    return lStart < reqEnd && lEnd > reqStart
+  })
+  if (hasConflict) throw new Error("Professor já tem uma aula neste horário")
+
+  const [teacher, subject] = await Promise.all([
+    prisma.teacher.findUnique({ where: { id: data.teacherId }, include: { user: true } }),
+    prisma.subject.findUnique({ where: { id: data.subjectId } }),
+  ])
+
+  await prisma.$transaction([
+    prisma.lesson.create({
+      data: {
+        studentId:   data.studentId,
+        teacherId:   data.teacherId,
+        subjectId:   data.subjectId,
+        scheduledAt,
+        duration,
+        modality:    data.modality,
+        status:      "CONFIRMED",
+      },
+    }),
+    prisma.lessonPackage.update({
+      where: { id: pkg.id },
+      data:  {
+        remainingLessons: { decrement: 1 },
+        status: pkg.remainingLessons <= 1 ? "EXHAUSTED" : "ACTIVE",
+      },
+    }),
+  ])
+
+  const scheduledAtFormatted = format(scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+  await notifyLessonConfirmed({
+    studentUserId: student.userId,
+    studentEmail:  student.user.email,
+    studentPhone:  student.user.phone,
+    teacherName:   teacher?.user.name ?? "–",
+    subject:       subject?.name ?? "–",
+    scheduledAt:   scheduledAtFormatted,
+    modality:      data.modality === "PRESENCIAL" ? "Presencial" : "Online",
+  })
+
+  const remaining = pkg.remainingLessons - 1
+  if (remaining <= 2 && remaining > 0) {
+    await notifyLowBalance({
+      studentUserId: student.userId,
+      studentEmail:  student.user.email,
+      studentPhone:  student.user.phone,
+      remaining,
+    })
+  }
+
+  revalidatePath("/colaborador/agenda")
+  revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+}

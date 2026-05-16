@@ -1,7 +1,7 @@
 import { prisma }        from "@/lib/prisma"
 import { PageHeader }    from "@/components/shared/page-header"
 import { AgendaGrid }    from "./agenda-grid"
-import type { TeacherCol, LessonSlot, AvailSlot } from "./agenda-grid"
+import type { TeacherCol, LessonSlot, AvailSlot, StudentOption } from "./agenda-grid"
 import { getRoomCount }  from "@/lib/config"
 import type { Availability } from "@/lib/availability"
 import { format, startOfDay, endOfDay, parseISO, isValid, getDay } from "date-fns"
@@ -30,12 +30,15 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
   const dateStr  = format(dateObj, "yyyy-MM-dd")
   const dayStart = startOfDay(dateObj)
   const dayEnd   = endOfDay(dateObj)
-  const dow      = getDay(dateObj)   // 0=Dom … 6=Sáb
+  const dow      = getDay(dateObj)
 
-  const [teachers, lessons, roomCount] = await Promise.all([
+  const [teachers, lessons, roomCount, studentsRaw] = await Promise.all([
     prisma.teacher.findMany({
       where:   { user: { active: true } },
-      include: { user: true },
+      include: {
+        user:     true,
+        subjects: { include: { subject: true } },
+      },
       orderBy: { user: { name: "asc" } },
     }),
     prisma.lesson.findMany({
@@ -53,12 +56,28 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
       orderBy: { scheduledAt: "asc" },
     }),
     getRoomCount(),
+    prisma.student.findMany({
+      where: {
+        user:     { active: true },
+        packages: { some: { status: "ACTIVE", remainingLessons: { gt: 0 } } },
+      },
+      include: {
+        user:     true,
+        packages: {
+          where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+          orderBy: { purchaseDate: "desc" },
+          take:    1,
+        },
+      },
+      orderBy: { user: { name: "asc" } },
+    }),
   ])
 
   const teacherCols: TeacherCol[] = teachers.map(t => ({
-    id:    t.id,
-    name:  t.user.name,
-    slots: parseAvailSlots(t.availability, dow),
+    id:       t.id,
+    name:     t.user.name,
+    slots:    parseAvailSlots(t.availability, dow),
+    subjects: t.subjects.map(ts => ({ id: ts.subject.id, name: ts.subject.name })),
   }))
 
   const lessonSlots: LessonSlot[] = lessons.map(l => {
@@ -78,6 +97,12 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     }
   })
 
+  const students: StudentOption[] = studentsRaw.map(s => ({
+    id:               s.id,
+    name:             s.user.name,
+    remainingLessons: s.packages[0]?.remainingLessons ?? 0,
+  }))
+
   const weekday = format(dateObj, "EEEE", { locale: ptBR })
 
   return (
@@ -91,6 +116,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         teachers={teacherCols}
         lessons={lessonSlots}
         roomCount={roomCount}
+        students={students}
       />
     </div>
   )
