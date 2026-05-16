@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }           from "@/components/ui/badge"
 import { buttonVariants }  from "@/components/ui/button"
 import Link                from "next/link"
-import { GraduationCap, BookOpen, MessageCircle, CalendarDays, AlertCircle, UserRound, Plus, ScanLine } from "lucide-react"
+import { GraduationCap, BookOpen, MessageCircle, CalendarDays, AlertCircle, UserRound, Plus } from "lucide-react"
 import { format }          from "date-fns"
 import { ptBR }            from "date-fns/locale"
 
@@ -169,12 +169,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
       )}
 
       {/* Botão de cadastro */}
-      <div className="flex justify-end gap-2 flex-wrap">
-        <Link href="/colaborador/alunos/digitalizar"
-          className={buttonVariants({ variant: "outline" }) + " gap-2 border-brand-orange text-brand-orange hover:bg-brand-orange hover:text-white"}>
-          <ScanLine className="w-4 h-4" />
-          Digitalizar Ficha
-        </Link>
+      <div className="flex justify-end">
         <Link href="/colaborador/alunos/novo"
           className={buttonVariants({ variant: "default" }) + " gap-2"}>
           <Plus className="w-4 h-4" />
