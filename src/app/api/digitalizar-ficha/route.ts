@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth }                      from "@/lib/auth"
+import { auth }          from "@/lib/auth"
+import { geminiVision }  from "@/lib/gemini"
 
 const PROMPT_EXTRACAO = `Você está analisando uma ficha de cadastro de aluno de uma empresa de aulas particulares chamada Lição de Casa.
 
@@ -57,8 +58,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Requisição inválida" }, { status: 400 })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
+  if (!geminiVision) {
     return NextResponse.json(
       { error: "Serviço de leitura indisponível. Preencha manualmente ou tente novamente." },
       { status: 503 }
@@ -66,50 +66,17 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method:  "POST",
-      headers: {
-        "Content-Type":    "application/json",
-        "x-api-key":       apiKey,
-        "anthropic-version": "2023-06-01",
+    const resultado = await geminiVision.generateContent([
+      PROMPT_EXTRACAO,
+      {
+        inlineData: {
+          data:     base64,
+          mimeType: mimeType as "image/jpeg" | "image/png" | "image/webp",
+        },
       },
-      body: JSON.stringify({
-        model:      "claude-haiku-4-5-20251001",
-        max_tokens: 1024,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type:       "base64",
-                  media_type: mimeType,
-                  data:       base64,
-                },
-              },
-              {
-                type: "text",
-                text: PROMPT_EXTRACAO,
-              },
-            ],
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(30_000),
-    })
+    ])
 
-    if (!anthropicRes.ok) {
-      const errText = await anthropicRes.text()
-      console.error("[digitalizar-ficha] Anthropic API error:", errText)
-      return NextResponse.json(
-        { error: "Serviço de leitura indisponível. Preencha manualmente ou tente novamente." },
-        { status: 502 }
-      )
-    }
-
-    const anthropicData = await anthropicRes.json()
-    const rawText = anthropicData.content?.[0]?.text ?? ""
+    const rawText = resultado.response.text()
 
     // Strip any accidental markdown fences
     const cleaned = rawText.replace(/```json|```/g, "").trim()
@@ -118,7 +85,6 @@ export async function POST(req: NextRequest) {
     try {
       dados = JSON.parse(cleaned)
     } catch {
-      // If the model returned an empty-looking description, treat as blank ficha
       if (rawText.toLowerCase().includes("vazi") || rawText.toLowerCase().includes("blank")) {
         return NextResponse.json(
           { error: "A ficha parece estar vazia. Verifique a imagem enviada." },
@@ -143,13 +109,22 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ sucesso: true, dados })
   } catch (err: unknown) {
+    // Rate limit do Gemini
+    if (typeof err === "object" && err !== null && "status" in err && (err as { status: number }).status === 429) {
+      return NextResponse.json(
+        { error: "Muitas leituras seguidas. Aguarde alguns segundos e tente novamente." },
+        { status: 429 }
+      )
+    }
+
     if (err instanceof Error && err.name === "TimeoutError") {
       return NextResponse.json(
         { error: "A análise demorou demais. Tente uma imagem menor ou preencha manualmente." },
         { status: 408 }
       )
     }
-    console.error("[digitalizar-ficha] Unexpected error:", err)
+
+    console.error("[digitalizar-ficha] Gemini error:", err)
     return NextResponse.json(
       { error: "Serviço de leitura indisponível. Preencha manualmente ou tente novamente." },
       { status: 500 }
