@@ -9,10 +9,11 @@ interface SidebarProps {
   email:      string
   role:       Role
   image?:     string | null
+  phone?:     string | null
   onNavigate?: () => void
 }
 
-export function Sidebar({ name, email, role, image, onNavigate }: SidebarProps) {
+export function Sidebar({ name, email, role, image, phone, onNavigate }: SidebarProps) {
   return (
     <div className="flex flex-col h-full bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
@@ -31,7 +32,7 @@ export function Sidebar({ name, email, role, image, onNavigate }: SidebarProps) 
 
       {/* Usuário */}
       <div className="p-3">
-        <UserMenu name={name} email={email} role={role} image={image} onBeforeOpen={onNavigate} />
+        <UserMenu name={name} email={email} role={role} image={image} phone={phone} onBeforeOpen={onNavigate} />
       </div>
     </div>
   )

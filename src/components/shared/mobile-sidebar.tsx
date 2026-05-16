@@ -12,9 +12,10 @@ interface MobileSidebarProps {
   email:  string
   role:   Role
   image?: string | null
+  phone?: string | null
 }
 
-export function MobileSidebar({ name, email, role, image }: MobileSidebarProps) {
+export function MobileSidebar({ name, email, role, image, phone }: MobileSidebarProps) {
   const [open, setOpen] = useState(false)
 
   return (
@@ -37,6 +38,7 @@ export function MobileSidebar({ name, email, role, image }: MobileSidebarProps) 
             email={email}
             role={role}
             image={image}
+            phone={phone}
             onNavigate={() => setOpen(false)}
           />
         </SheetContent>

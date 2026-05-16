@@ -24,6 +24,10 @@ const PAGE_TITLES: Record<string, string> = {
   "/aluno/aulas":              "Minhas Aulas",
   "/aluno/materiais":          "Materiais",
   "/aluno/licoes":             "Lições de Casa",
+  "/admin/perfil":             "Meu Perfil",
+  "/colaborador/perfil":       "Meu Perfil",
+  "/professor/perfil":         "Meu Perfil",
+  "/aluno/perfil":             "Meu Perfil",
 }
 
 interface HeaderProps {
@@ -32,15 +36,16 @@ interface HeaderProps {
   email:    string
   role:     Role
   image?:   string | null
+  phone?:   string | null
 }
 
-export function Header({ pathname, name, email, role, image }: HeaderProps) {
+export function Header({ pathname, name, email, role, image, phone }: HeaderProps) {
   const title = PAGE_TITLES[pathname] ?? "Lição de Casa"
 
   return (
     <header className="h-14 border-b border-border bg-background flex items-center justify-between px-4 gap-4 sticky top-0 z-10">
       <div className="flex items-center gap-3">
-        <MobileSidebar name={name} email={email} role={role} image={image} />
+        <MobileSidebar name={name} email={email} role={role} image={image} phone={phone} />
         <h2 className="font-sub font-semibold text-base text-foreground">{title}</h2>
       </div>
 

@@ -35,15 +35,16 @@ interface UserMenuProps {
   email:         string
   role:          string
   image?:        string | null
+  phone?:        string | null
   onBeforeOpen?: () => void
 }
 
-export function UserMenu({ name: initialName, email, role, image: initialImage, onBeforeOpen }: UserMenuProps) {
+export function UserMenu({ name: initialName, email, role, image: initialImage, phone: initialPhone, onBeforeOpen }: UserMenuProps) {
   const { update: updateSession } = useSession()
 
   const [sheetOpen,       setSheetOpen]       = useState(false)
   const [name,            setName]            = useState(initialName)
-  const [phone,           setPhone]           = useState("")
+  const [phone,           setPhone]           = useState(initialPhone ?? "")
   const [avatarPreview,   setAvatarPreview]   = useState<string | null>(initialImage ?? null)
   const [avatarBase64,    setAvatarBase64]    = useState<string | null>(null)
   const [currentPassword, setCurrentPassword] = useState("")
@@ -102,6 +103,7 @@ export function UserMenu({ name: initialName, email, role, image: initialImage, 
         setAvatarBase64(null)
         await updateSession({ name, image: avatarBase64 ?? initialImage })
       }
+      // phone state already reflects the submitted value — no reset needed
     })
   }
 

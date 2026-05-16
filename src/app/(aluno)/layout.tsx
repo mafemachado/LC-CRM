@@ -13,6 +13,7 @@ export default async function AlunoLayout({ children }: { children: React.ReactN
       email={session.user.email ?? ""}
       role={session.user.role}
       image={session.user.image}
+      phone={session.user.phone}
     >
       {children}
     </AppLayout>

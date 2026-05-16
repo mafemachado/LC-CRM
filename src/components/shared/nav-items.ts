@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, CalendarDays, DollarSign,
   BarChart3, Settings, BookOpen, ClipboardList,
-  GraduationCap, Wallet, FolderOpen, PenLine, Clock,
+  GraduationCap, Wallet, FolderOpen, PenLine, Clock, UserCircle,
 } from "lucide-react"
 import type { Role } from "@prisma/client"
 
@@ -19,6 +19,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Financeiro",  href: "/admin/financeiro", icon: DollarSign      },
     { label: "Relatórios",  href: "/admin/relatorios", icon: BarChart3       },
     { label: "Config.",     href: "/admin/config",     icon: Settings        },
+    { label: "Meu Perfil",  href: "/admin/perfil",     icon: UserCircle      },
   ],
   COLLABORATOR: [
     { label: "Dashboard",      href: "/colaborador/dashboard",     icon: LayoutDashboard },
@@ -26,6 +27,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Alunos",         href: "/colaborador/alunos",        icon: GraduationCap   },
     { label: "Agendamentos",   href: "/colaborador/agendamentos",  icon: ClipboardList   },
     { label: "Financeiro",     href: "/colaborador/financeiro",    icon: DollarSign      },
+    { label: "Meu Perfil",     href: "/colaborador/perfil",        icon: UserCircle      },
   ],
   TEACHER: [
     { label: "Dashboard",      href: "/professor/dashboard",      icon: LayoutDashboard },
@@ -34,6 +36,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Meus Alunos",    href: "/professor/alunos",         icon: GraduationCap   },
     { label: "Pagamentos",     href: "/professor/pagamentos",     icon: Wallet          },
     { label: "Materiais",      href: "/professor/materiais",      icon: FolderOpen      },
+    { label: "Meu Perfil",     href: "/professor/perfil",         icon: UserCircle      },
   ],
   STUDENT: [
     { label: "Dashboard",    href: "/aluno/dashboard",  icon: LayoutDashboard },
@@ -42,10 +45,12 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Materiais",    href: "/aluno/materiais",  icon: FolderOpen      },
     { label: "Lições",       href: "/aluno/licoes",     icon: PenLine         },
     { label: "Pagamentos",   href: "/aluno/pagamentos", icon: Wallet          },
+    { label: "Meu Perfil",   href: "/aluno/perfil",     icon: UserCircle      },
   ],
   GUARDIAN: [
     { label: "Dashboard",  href: "/aluno/dashboard",  icon: LayoutDashboard },
     { label: "Agenda",     href: "/aluno/aulas",      icon: CalendarDays    },
     { label: "Pagamentos", href: "/aluno/pagamentos", icon: Wallet          },
+    { label: "Meu Perfil", href: "/aluno/perfil",     icon: UserCircle      },
   ],
 }

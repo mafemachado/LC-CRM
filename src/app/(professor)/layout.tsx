@@ -13,6 +13,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
       email={session.user.email ?? ""}
       role={session.user.role}
       image={session.user.image}
+      phone={session.user.phone}
     >
       {children}
     </AppLayout>
