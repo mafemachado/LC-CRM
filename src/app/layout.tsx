@@ -3,6 +3,7 @@ import { Anton, Montserrat, Caveat, Inter } from "next/font/google";
 import { Geist_Mono } from "next/font/google";
 import { Providers }    from "@/components/providers";
 import { PwaRegister }  from "@/components/shared/pwa-register";
+import { Toaster }      from "sonner";
 import "./globals.css";
 
 /* ─── Fontes da Marca ─────────────────────────────────────────────────────
@@ -86,6 +87,7 @@ export default function RootLayout({
         <Providers>
           <PwaRegister />
           {children}
+          <Toaster richColors position="top-right" />
         </Providers>
       </body>
     </html>
