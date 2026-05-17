@@ -87,6 +87,8 @@ export interface LessonSlot {
   guardianName:  string | null
   isGroupLesson: boolean
   groupSize:     number | null
+  groupId:       string | null
+  groupMates:    string[]
 }
 
 export interface WeekLessonSlot extends LessonSlot {
@@ -195,6 +197,18 @@ function LessonDetailModal({
                 {lesson.time} · {lesson.duration}min
               </p>
             </div>
+            {lesson.isGroupLesson && lesson.groupMates.length > 0 && (
+              <div className="col-span-2">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Colegas de turma</p>
+                <div className="flex flex-wrap gap-1">
+                  {lesson.groupMates.map(name => (
+                    <span key={name} className="text-[11px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium flex items-center gap-1">
+                      <Users className="w-3 h-3" />{name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Modalidade</p>
               {lesson.modality === "ONLINE" ? (

@@ -27,9 +27,10 @@ const requestInclude = {
 type RawLesson  = Awaited<ReturnType<typeof prisma.lesson.findMany<{ include: typeof lessonInclude }>>>[number]
 type RawRequest = Awaited<ReturnType<typeof prisma.lessonRequest.findMany<{ include: typeof requestInclude }>>>[number]
 
-function mapLesson(l: RawLesson) {
-  const d   = l.scheduledAt
-  const min = d.getHours() * 60 + d.getMinutes()
+function mapLesson(l: RawLesson, groupMatesMap: Record<string, string[]> = {}) {
+  const d           = l.scheduledAt
+  const min         = d.getHours() * 60 + d.getMinutes()
+  const studentName = l.student.user.name
   return {
     id:            l.id,
     teacherId:     l.teacherId,
@@ -39,12 +40,16 @@ function mapLesson(l: RawLesson) {
     modality:      l.modality,
     teacherOnsite: l.teacherOnsite,
     time:          format(d, "HH:mm"),
-    studentName:   l.student.user.name,
+    studentName,
     subjectName:   l.subject.name,
     guardianName:  l.student.guardian?.user.name ?? null,
     date:          format(d, "yyyy-MM-dd"),
     isGroupLesson: l.isGroupLesson,
     groupSize:     l.groupSize,
+    groupId:       l.groupId,
+    groupMates:    l.groupId
+      ? (groupMatesMap[l.groupId] ?? []).filter(n => n !== studentName)
+      : [],
   }
 }
 
@@ -122,9 +127,24 @@ export async function GET(req: NextRequest) {
       : Promise.resolve([] as RawRequest[]),
   ])
 
+  // Colegas de turma para aulas em grupo
+  const allLessons = [...lessons, ...extraLessons]
+  const groupIds = [...new Set(allLessons.filter(l => l.isGroupLesson && l.groupId).map(l => l.groupId!))]
+  const groupSiblings = groupIds.length > 0
+    ? await prisma.lesson.findMany({
+        where:  { groupId: { in: groupIds } },
+        select: { groupId: true, student: { select: { user: { select: { name: true } } } } },
+      })
+    : []
+  const groupMatesMap = groupSiblings.reduce<Record<string, string[]>>((acc, l) => {
+    if (!l.groupId) return acc
+    ;(acc[l.groupId] ??= []).push(l.student.user.name)
+    return acc
+  }, {})
+
   return NextResponse.json({
-    lessons:             lessons.map(mapLesson),
-    extraLessons:        extraLessons.map(mapLesson),
+    lessons:             lessons.map(l => mapLesson(l, groupMatesMap)),
+    extraLessons:        extraLessons.map(l => mapLesson(l, groupMatesMap)),
     pendingRequests:     pendingRequests.map(mapPendingRequest),
     weekPendingRequests: weekPendingRequests.map(mapPendingRequest),
   })

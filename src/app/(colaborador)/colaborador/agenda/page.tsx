@@ -29,21 +29,26 @@ function parseAvailSlots(availability: unknown, dow: number): AvailSlot[] {
   })
 }
 
-function mapToLessonSlot(l: {
-  id: string
-  teacherId: string
-  scheduledAt: Date
-  duration: number | null
-  status: string
-  modality: string
-  teacherOnsite: boolean
-  isGroupLesson: boolean
-  groupSize: number | null
-  student: { user: { name: string }; guardian: { user: { name: string } } | null }
-  subject: { name: string }
-}): LessonSlot {
+function mapToLessonSlot(
+  l: {
+    id: string
+    teacherId: string
+    scheduledAt: Date
+    duration: number | null
+    status: string
+    modality: string
+    teacherOnsite: boolean
+    isGroupLesson: boolean
+    groupSize: number | null
+    groupId: string | null
+    student: { user: { name: string }; guardian: { user: { name: string } } | null }
+    subject: { name: string }
+  },
+  groupMatesMap: Record<string, string[]> = {},
+): LessonSlot {
   const d   = l.scheduledAt
   const min = d.getHours() * 60 + d.getMinutes()
+  const studentName = l.student.user.name
   return {
     id:            l.id,
     teacherId:     l.teacherId,
@@ -53,11 +58,15 @@ function mapToLessonSlot(l: {
     modality:      l.modality as LessonSlot["modality"],
     teacherOnsite: l.teacherOnsite,
     time:          format(d, "HH:mm"),
-    studentName:   l.student.user.name,
+    studentName,
     subjectName:   l.subject.name,
     guardianName:  l.student.guardian?.user.name ?? null,
     isGroupLesson: l.isGroupLesson,
     groupSize:     l.groupSize,
+    groupId:       l.groupId,
+    groupMates:    l.groupId
+      ? (groupMatesMap[l.groupId] ?? []).filter(n => n !== studentName)
+      : [],
   }
 }
 
@@ -174,6 +183,21 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
       : Promise.resolve([]),
   ])
 
+  // Busca colegas de turma para aulas em grupo
+  const allRawLessons = [...lessons, ...weekLessonsRaw, ...monthLessonsRaw]
+  const groupIds = [...new Set(allRawLessons.filter(l => l.isGroupLesson && l.groupId).map(l => l.groupId!))]
+  const groupSiblings = groupIds.length > 0
+    ? await prisma.lesson.findMany({
+        where:  { groupId: { in: groupIds } },
+        select: { groupId: true, student: { select: { user: { select: { name: true } } } } },
+      })
+    : []
+  const groupMatesMap = groupSiblings.reduce<Record<string, string[]>>((acc, l) => {
+    if (!l.groupId) return acc
+    ;(acc[l.groupId] ??= []).push(l.student.user.name)
+    return acc
+  }, {})
+
   const teacherCols: TeacherCol[] = teachers.map(t => ({
     id:              t.id,
     name:            t.user.name,
@@ -183,15 +207,15 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     subjects:        t.subjects.map(ts => ({ id: ts.subject.id, name: ts.subject.name })),
   }))
 
-  const lessonSlots: LessonSlot[] = lessons.map(mapToLessonSlot)
+  const lessonSlots: LessonSlot[] = lessons.map(l => mapToLessonSlot(l, groupMatesMap))
 
   const weekLessons: WeekLessonSlot[] = weekLessonsRaw.map(l => ({
-    ...mapToLessonSlot(l),
+    ...mapToLessonSlot(l, groupMatesMap),
     date: format(l.scheduledAt, "yyyy-MM-dd"),
   }))
 
   const monthLessons: WeekLessonSlot[] = monthLessonsRaw.map(l => ({
-    ...mapToLessonSlot(l),
+    ...mapToLessonSlot(l, groupMatesMap),
     date: format(l.scheduledAt, "yyyy-MM-dd"),
   }))
 
