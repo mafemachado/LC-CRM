@@ -6,7 +6,7 @@ import { createUserSchema, updateUserSchema } from "@/lib/validations/user"
 import { revalidatePath }   from "next/cache"
 import { redirect }         from "next/navigation"
 import bcrypt               from "bcryptjs"
-import type { Role }        from "@prisma/client"
+import type { Role, EducationLevel, TeacherMode } from "@prisma/client"
 
 async function requireAdmin() {
   const session = await auth()
@@ -39,12 +39,12 @@ export async function createUserAction(formData: FormData) {
 
     if (role === "STUDENT") {
       await tx.student.create({
-        data: { userId: user.id, grade: grade ?? "Não informado", school, educationLevel: educationLevel as never ?? undefined },
+        data: { userId: user.id, grade: grade ?? "Não informado", school, educationLevel: educationLevel as EducationLevel | undefined },
       })
     }
     if (role === "TEACHER") {
       await tx.teacher.create({
-        data: { userId: user.id, hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as never },
+        data: { userId: user.id, hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as TeacherMode },
       })
     }
     if (role === "GUARDIAN") {
@@ -78,15 +78,15 @@ export async function updateUserAction(id: string, formData: FormData) {
     if (role === "STUDENT") {
       await tx.student.upsert({
         where:  { userId: id },
-        update: { grade: grade ?? "Não informado", school, educationLevel: educationLevel as never ?? undefined },
-        create: { userId: id, grade: grade ?? "Não informado", school, educationLevel: educationLevel as never ?? undefined },
+        update: { grade: grade ?? "Não informado", school, educationLevel: educationLevel as EducationLevel | undefined },
+        create: { userId: id, grade: grade ?? "Não informado", school, educationLevel: educationLevel as EducationLevel | undefined },
       })
     }
     if (role === "TEACHER") {
       await tx.teacher.upsert({
         where:  { userId: id },
-        update: { hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as never },
-        create: { userId: id, hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as never },
+        update: { hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as TeacherMode },
+        create: { userId: id, hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as TeacherMode },
       })
     }
   })

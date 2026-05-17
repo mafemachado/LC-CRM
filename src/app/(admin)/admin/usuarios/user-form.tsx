@@ -100,7 +100,9 @@ export function UserForm({ action, error, defaultValues, isEdit }: UserFormProps
           <input type="hidden" name="role" value={role} />
           <Select value={role} onValueChange={(v) => v && setRole(v)}>
             <SelectTrigger id="role">
-              <SelectValue placeholder="Selecione o perfil" />
+              <SelectValue placeholder="Selecione o perfil">
+                {ROLES.find((r) => r.value === role)?.label ?? "Selecione o perfil"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {ROLES.map(({ value, label }) => (

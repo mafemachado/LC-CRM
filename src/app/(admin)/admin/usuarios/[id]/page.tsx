@@ -4,7 +4,7 @@ import { PageHeader }    from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { UserForm }      from "../user-form"
 import { updateUserAction } from "../actions"
-import { TeacherSubjectsForm } from "./teacher-subjects-form"
+import { TeacherSubjectsForm } from "@/components/shared/teacher-subjects-form"
 import type { Role, EducationLevel, TeacherMode } from "@prisma/client"
 
 interface EditUserPageProps {
