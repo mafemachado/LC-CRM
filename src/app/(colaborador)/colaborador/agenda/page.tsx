@@ -5,11 +5,12 @@ import type {
   TeacherCol, LessonSlot, AvailSlot, StudentOption,
   WeekLessonSlot, ViewMode,
 } from "./agenda-grid"
+
 import { getRoomCount }  from "@/lib/config"
 import type { Availability } from "@/lib/availability"
 import {
   format, startOfDay, endOfDay, parseISO, isValid, getDay,
-  startOfWeek, endOfWeek,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
 } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -65,7 +66,9 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
   const dayStart = startOfDay(dateObj)
   const dayEnd   = endOfDay(dateObj)
   const dow      = getDay(dateObj)
-  const viewMode: ViewMode = rawView === "week" ? "week" : "day"
+  const viewMode: ViewMode =
+    rawView === "week"  ? "week"  :
+    rawView === "month" ? "month" : "day"
 
   const lessonInclude = {
     student: {
@@ -116,7 +119,21 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         where: {
           scheduledAt: {
             gte: startOfDay(startOfWeek(dateObj, { weekStartsOn: 1 })),
-            lte: endOfDay(endOfWeek(dateObj,   { weekStartsOn: 1 })),
+            lte: endOfDay(endOfWeek(dateObj,     { weekStartsOn: 1 })),
+          },
+        },
+        include: lessonInclude,
+        orderBy: { scheduledAt: "asc" },
+      })
+    : []
+
+  // Fetch mês inteiro (incluindo dias de semanas parciais)
+  const monthLessonsRaw = viewMode === "month"
+    ? await prisma.lesson.findMany({
+        where: {
+          scheduledAt: {
+            gte: startOfDay(startOfWeek(startOfMonth(dateObj), { weekStartsOn: 1 })),
+            lte: endOfDay(endOfWeek(endOfMonth(dateObj),       { weekStartsOn: 1 })),
           },
         },
         include: lessonInclude,
@@ -134,6 +151,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
   const lessonSlots: LessonSlot[] = lessons.map(mapToLessonSlot)
 
   const weekLessons: WeekLessonSlot[] = weekLessonsRaw.map(l => ({
+    ...mapToLessonSlot(l),
+    date: format(l.scheduledAt, "yyyy-MM-dd"),
+  }))
+
+  const monthLessons: WeekLessonSlot[] = monthLessonsRaw.map(l => ({
     ...mapToLessonSlot(l),
     date: format(l.scheduledAt, "yyyy-MM-dd"),
   }))
@@ -159,6 +181,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         roomCount={roomCount}
         students={students}
         weekLessons={weekLessons}
+        monthLessons={monthLessons}
         initialView={viewMode}
       />
     </div>

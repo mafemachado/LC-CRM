@@ -2,10 +2,14 @@
 
 import { useState, useTransition } from "react"
 import { useRouter }               from "next/navigation"
-import { addDays, format, isToday, parseISO, startOfWeek } from "date-fns"
+import {
+  addDays, addMonths, format, isToday, parseISO,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  eachDayOfInterval, isSameMonth,
+} from "date-fns"
 import { ptBR }                    from "date-fns/locale"
 import {
-  ChevronLeft, ChevronRight, CalendarDays, CalendarRange,
+  ChevronLeft, ChevronRight, CalendarDays, CalendarRange, LayoutGrid,
   CheckCircle2, XCircle, UserX, MessageCircle,
   Loader2, Wifi, MapPin, Clock, Plus, Building2, Home,
 } from "lucide-react"
@@ -31,7 +35,9 @@ const px = (min: number) => (min / 60) * HOUR_H
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
-export type ViewMode = "day" | "week"
+export type ViewMode = "day" | "week" | "month"
+
+const DOW_LABELS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 type LessonStatus = "SCHEDULED" | "CONFIRMED" | "COMPLETED" | "CANCELLED" | "MISSED"
 
 const STATUS_STYLE: Record<LessonStatus, { bg: string; text: string; border: string }> = {
@@ -467,18 +473,19 @@ function LessonBlock({
 // ─── Grade principal ──────────────────────────────────────────────────────────
 
 interface AgendaGridProps {
-  date:         string
-  teachers:     TeacherCol[]
-  lessons:      LessonSlot[]
-  roomCount?:   number
-  students?:    StudentOption[]
-  weekLessons?: WeekLessonSlot[]
-  initialView?: ViewMode
+  date:          string
+  teachers:      TeacherCol[]
+  lessons:       LessonSlot[]
+  roomCount?:    number
+  students?:     StudentOption[]
+  weekLessons?:  WeekLessonSlot[]
+  monthLessons?: WeekLessonSlot[]
+  initialView?:  ViewMode
 }
 
 export function AgendaGrid({
   date, teachers, lessons, roomCount = 3, students,
-  weekLessons, initialView = "day",
+  weekLessons, monthLessons, initialView = "day",
 }: AgendaGridProps) {
   const router = useRouter()
   const parsed = parseISO(date)
@@ -499,19 +506,28 @@ export function AgendaGrid({
   // ── Navigation ────────────────────────────────────────────────────────────
 
   const navigate = (delta: number) => {
-    const step  = view === "week" ? delta * 7 : delta
-    const param = view === "week" ? `view=week&date=` : `date=`
-    router.push(`?${param}${format(addDays(parsed, step), "yyyy-MM-dd")}`)
+    if (view === "month") {
+      router.push(`?view=month&date=${format(addMonths(parsed, delta), "yyyy-MM-dd")}`)
+    } else if (view === "week") {
+      router.push(`?view=week&date=${format(addDays(parsed, delta * 7), "yyyy-MM-dd")}`)
+    } else {
+      router.push(`?date=${format(addDays(parsed, delta), "yyyy-MM-dd")}`)
+    }
   }
 
   const switchView = (v: ViewMode) => {
     setView(v)
     setHoveredCell(null)
-    if (v === "week") {
-      router.push(`?view=week&date=${date}`)
-    } else {
-      router.push(`?date=${date}`)
-    }
+    if (v === "week")  router.push(`?view=week&date=${date}`)
+    else if (v === "month") router.push(`?view=month&date=${date}`)
+    else router.push(`?date=${date}`)
+  }
+
+  const goToday = () => {
+    const today_ = format(new Date(), "yyyy-MM-dd")
+    if (view === "week")  router.push(`?view=week&date=${today_}`)
+    else if (view === "month") router.push(`?view=month&date=${today_}`)
+    else router.push(`?date=${today_}`)
   }
 
   // ── Day view helpers ──────────────────────────────────────────────────────
@@ -592,6 +608,23 @@ export function AgendaGrid({
     return `${from} – ${to}`
   })()
 
+  // ── Month view helpers ────────────────────────────────────────────────────
+
+  const monthStart  = startOfMonth(parsed)
+  const monthEnd    = endOfMonth(parsed)
+  const calStart    = startOfWeek(monthStart, { weekStartsOn: 1 })
+  const calEnd      = endOfWeek(monthEnd,     { weekStartsOn: 1 })
+  const calDays     = eachDayOfInterval({ start: calStart, end: calEnd })
+  const calWeeks    = Array.from(
+    { length: Math.ceil(calDays.length / 7) },
+    (_, i) => calDays.slice(i * 7, i * 7 + 7)
+  )
+  const lessonsByDay = (monthLessons ?? []).reduce<Record<string, WeekLessonSlot[]>>((acc, l) => {
+    ;(acc[l.date] ??= []).push(l)
+    return acc
+  }, {})
+  const monthLabel = format(parsed, "MMMM 'de' yyyy", { locale: ptBR })
+
   const totalW = TIME_W + teachers.length * COL_W
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -612,49 +645,41 @@ export function AgendaGrid({
               <Button size="sm" variant="outline" onClick={() => navigate(1)} className="h-7 w-7 p-0">
                 <ChevronRight className="w-4 h-4" />
               </Button>
-              {(!today || view === "week") && (
-                <Button
-                  size="sm" variant="outline" className="h-7 text-xs"
-                  onClick={() => router.push(view === "week"
-                    ? `?view=week&date=${format(new Date(), "yyyy-MM-dd")}`
-                    : `?date=${format(new Date(), "yyyy-MM-dd")}`
-                  )}
-                >
+              {(!today || view !== "day") && (
+                <Button size="sm" variant="outline" className="h-7 text-xs" onClick={goToday}>
                   Hoje
                 </Button>
               )}
             </div>
 
-            {/* Toggle Dia / Semana */}
+            {/* Toggle Dia / Semana / Mês */}
             <div className="flex items-center rounded-lg border border-border overflow-hidden h-7">
-              <button
-                onClick={() => switchView("day")}
-                className={`flex items-center gap-1.5 px-2.5 h-full text-xs font-medium transition-colors ${
-                  view === "day"
-                    ? "bg-primary text-white"
-                    : "text-muted-foreground hover:bg-muted/50 bg-background"
-                }`}
-              >
-                <CalendarDays className="w-3.5 h-3.5" />
-                Dia
-              </button>
-              <button
-                onClick={() => switchView("week")}
-                className={`flex items-center gap-1.5 px-2.5 h-full text-xs font-medium transition-colors border-l border-border ${
-                  view === "week"
-                    ? "bg-primary text-white"
-                    : "text-muted-foreground hover:bg-muted/50 bg-background"
-                }`}
-              >
-                <CalendarRange className="w-3.5 h-3.5" />
-                Semana
-              </button>
+              {(["day", "week", "month"] as ViewMode[]).map((v, i) => {
+                const Icon  = v === "day" ? CalendarDays : v === "week" ? CalendarRange : LayoutGrid
+                const label = v === "day" ? "Dia" : v === "week" ? "Semana" : "Mês"
+                return (
+                  <button
+                    key={v}
+                    onClick={() => switchView(v)}
+                    className={`flex items-center gap-1.5 px-2.5 h-full text-xs font-medium transition-colors ${i > 0 ? "border-l border-border" : ""} ${
+                      view === v
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-muted/50 bg-background"
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
           {/* Centro: data */}
           <div className="flex items-center gap-2">
-            {view === "week" ? (
+            {view === "month" ? (
+              <p className="text-sm font-semibold capitalize">{monthLabel}</p>
+            ) : view === "week" ? (
               <p className="text-sm font-semibold">{weekLabel}</p>
             ) : (
               <>
@@ -672,7 +697,9 @@ export function AgendaGrid({
           {/* Direita: contagem + legenda */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>
-              {view === "week"
+              {view === "month"
+                ? `${(monthLessons ?? []).length} aula${(monthLessons ?? []).length !== 1 ? "s" : ""} no mês`
+                : view === "week"
                 ? `${(weekLessons ?? []).length} aula${(weekLessons ?? []).length !== 1 ? "s" : ""} na semana`
                 : `${lessons.length} aula${lessons.length !== 1 ? "s" : ""}`
               }
@@ -687,6 +714,92 @@ export function AgendaGrid({
             </div>
           </div>
         </div>
+
+        {/* ── VISUALIZAÇÃO: MÊS ───────────────────────────── */}
+        {view === "month" && (
+          <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 240px)" }}>
+
+            {/* Cabeçalho dos dias da semana */}
+            <div className="sticky top-0 z-10 grid grid-cols-7 border-b border-border bg-background/95 backdrop-blur-sm">
+              {DOW_LABELS.map(label => (
+                <div key={label} className="py-2 text-center text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                  {label}
+                </div>
+              ))}
+            </div>
+
+            {/* Semanas */}
+            {calWeeks.map((week, wi) => (
+              <div key={wi} className="grid grid-cols-7 border-b border-border/50 last:border-b-0">
+                {week.map(day => {
+                  const dayStr     = format(day, "yyyy-MM-dd")
+                  const inMonth    = isSameMonth(day, parsed)
+                  const isCurrentDay = isToday(day)
+                  const isSelected = dayStr === date
+                  const dayLessons = (lessonsByDay[dayStr] ?? []).sort((a, b) => a.startMin - b.startMin)
+                  const visible    = dayLessons.slice(0, 3)
+                  const overflow   = dayLessons.length - visible.length
+
+                  return (
+                    <div
+                      key={dayStr}
+                      className={`min-h-28 border-r border-border/50 last:border-r-0 flex flex-col transition-colors ${
+                        inMonth ? "bg-card" : "bg-muted/20"
+                      } ${isSelected && !isCurrentDay ? "ring-1 ring-inset ring-primary/30" : ""}`}
+                    >
+                      {/* Número do dia */}
+                      <button
+                        className="flex items-center justify-between px-1.5 pt-1.5 pb-1 hover:bg-muted/40 transition-colors rounded-t"
+                        onClick={() => { switchView("day"); router.push(`?date=${dayStr}`) }}
+                      >
+                        <span className={`inline-flex w-6 h-6 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                          isCurrentDay
+                            ? "bg-primary text-white"
+                            : inMonth
+                            ? "text-foreground hover:bg-muted"
+                            : "text-muted-foreground/50"
+                        }`}>
+                          {format(day, "d")}
+                        </span>
+                        {dayLessons.length > 0 && (
+                          <span className={`text-[9px] font-medium px-1 rounded ${
+                            inMonth ? "text-primary/70" : "text-muted-foreground/40"
+                          }`}>
+                            {dayLessons.length}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Pills de aula */}
+                      <div className="flex-1 px-1 pb-1.5 space-y-0.5">
+                        {visible.map(lesson => {
+                          const { bg, text: txtCls } = STATUS_STYLE[lesson.status]
+                          return (
+                            <button
+                              key={lesson.id}
+                              className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] font-medium truncate transition-opacity hover:opacity-80 ${bg} ${txtCls} ${!inMonth ? "opacity-40" : ""}`}
+                              onClick={() => setSelectedLesson(lesson)}
+                            >
+                              {lesson.time} {lesson.studentName.split(" ")[0]}
+                            </button>
+                          )
+                        })}
+                        {overflow > 0 && (
+                          <button
+                            className="w-full text-left text-[10px] text-muted-foreground px-1.5 py-0.5 hover:bg-muted/50 rounded transition-colors"
+                            onClick={() => { switchView("day"); router.push(`?date=${dayStr}`) }}
+                          >
+                            +{overflow} mais
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── VISUALIZAÇÃO: SEMANA ─────────────────────────── */}
         {view === "week" && (
@@ -704,7 +817,7 @@ export function AgendaGrid({
                   <div
                     key={dayStr}
                     className={`flex flex-col border-l border-border/50 first:border-l-0 ${
-                      isActiveDay ? "bg-primary/[0.03]" : ""
+                      isActiveDay ? "bg-primary/3" : ""
                     }`}
                   >
                     {/* Cabeçalho do dia */}
@@ -719,7 +832,7 @@ export function AgendaGrid({
                         router.push(`?date=${dayStr}`)
                       }}
                     >
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground capitalize">
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                         {format(day, "EEE", { locale: ptBR })}
                       </p>
                       <p className={`text-2xl font-bold leading-tight ${isCurrentDay ? "text-primary" : ""}`}>
@@ -896,13 +1009,13 @@ export function AgendaGrid({
                       {hours.map(h => (
                         <div key={h}
                           style={{ top: (h - START) * HOUR_H }}
-                          className="absolute inset-x-0 border-t border-border/30 pointer-events-none z-[1]"
+                          className="absolute inset-x-0 border-t border-border/30 pointer-events-none z-1"
                         />
                       ))}
                       {hours.map(h => (
                         <div key={`hh${h}`}
                           style={{ top: (h - START) * HOUR_H + HOUR_H / 2 }}
-                          className="absolute inset-x-0 border-t border-border/15 border-dashed pointer-events-none z-[1]"
+                          className="absolute inset-x-0 border-t border-border/15 border-dashed pointer-events-none z-1"
                         />
                       ))}
 
@@ -915,7 +1028,7 @@ export function AgendaGrid({
                             left:   3,
                             right:  3,
                           }}
-                          className="absolute rounded-lg border-2 border-dashed border-primary/70 bg-primary/10 pointer-events-none z-[5] flex flex-col items-center justify-center gap-0.5 select-none"
+                          className="absolute rounded-lg border-2 border-dashed border-primary/70 bg-primary/10 pointer-events-none z-5 flex flex-col items-center justify-center gap-0.5 select-none"
                         >
                           <Plus className="w-3.5 h-3.5 text-primary/60" />
                           <span className="text-[12px] font-bold text-primary">{ghostTime}</span>
