@@ -3,7 +3,7 @@ import { PageHeader }    from "@/components/shared/page-header"
 import { AgendaGrid }    from "./agenda-grid"
 import type {
   TeacherCol, LessonSlot, AvailSlot, StudentOption,
-  WeekLessonSlot, ViewMode,
+  WeekLessonSlot, ViewMode, PendingRequestSlot,
 } from "./agenda-grid"
 
 import { getRoomCount }  from "@/lib/config"
@@ -81,7 +81,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     subject: true,
   } as const
 
-  const [teachers, lessons, roomCount, studentsRaw] = await Promise.all([
+  const [teachers, lessons, roomCount, studentsRaw, pendingRaw] = await Promise.all([
     prisma.teacher.findMany({
       where:   { user: { active: true } },
       include: {
@@ -110,6 +110,15 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         },
       },
       orderBy: { user: { name: "asc" } },
+    }),
+    prisma.lessonRequest.findMany({
+      where: { status: "PENDING", preferredAt: { gte: dayStart, lte: endOfDay(dateObj) } },
+      include: {
+        student: { include: { user: true } },
+        teacher: { include: { user: true } },
+        subject: true,
+      },
+      orderBy: { preferredAt: "asc" },
     }),
   ])
 
@@ -162,6 +171,19 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     date: format(l.scheduledAt, "yyyy-MM-dd"),
   }))
 
+  const pendingRequests: PendingRequestSlot[] = pendingRaw.map(r => ({
+    id:          r.id,
+    teacherId:   r.teacherId,
+    startMin:    r.preferredAt.getHours() * 60 + r.preferredAt.getMinutes(),
+    time:        format(r.preferredAt, "HH:mm"),
+    date:        format(r.preferredAt, "yyyy-MM-dd"),
+    studentName: r.student.user.name,
+    subjectName: r.subject?.name ?? "–",
+    modality:    r.modality as "PRESENCIAL" | "ONLINE",
+    teacherMode: r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID",
+    notes:       r.reason ?? null,
+  }))
+
   const students: StudentOption[] = studentsRaw.map(s => ({
     id:               s.id,
     name:             s.user.name,
@@ -185,6 +207,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         weekLessons={weekLessons}
         monthLessons={monthLessons}
         initialView={viewMode}
+        pendingRequests={pendingRequests}
       />
     </div>
   )

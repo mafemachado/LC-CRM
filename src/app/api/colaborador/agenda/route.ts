@@ -18,9 +18,14 @@ const lessonInclude = {
   subject: true,
 } as const
 
-type RawLesson = Awaited<ReturnType<typeof prisma.lesson.findMany<{
-  include: typeof lessonInclude
-}>>>[number]
+const requestInclude = {
+  student: { include: { user: true } },
+  teacher: { include: { user: true } },
+  subject: true,
+} as const
+
+type RawLesson  = Awaited<ReturnType<typeof prisma.lesson.findMany<{ include: typeof lessonInclude }>>>[number]
+type RawRequest = Awaited<ReturnType<typeof prisma.lessonRequest.findMany<{ include: typeof requestInclude }>>>[number]
 
 function mapLesson(l: RawLesson) {
   const d   = l.scheduledAt
@@ -41,6 +46,23 @@ function mapLesson(l: RawLesson) {
   }
 }
 
+function mapPendingRequest(r: RawRequest) {
+  const d   = r.preferredAt
+  const min = d.getHours() * 60 + d.getMinutes()
+  return {
+    id:          r.id,
+    teacherId:   r.teacherId,
+    startMin:    min,
+    time:        format(d, "HH:mm"),
+    date:        format(d, "yyyy-MM-dd"),
+    studentName: r.student.user.name,
+    subjectName: r.subject?.name ?? "–",
+    modality:    r.modality,
+    teacherMode: r.teacher.teachingMode,
+    notes:       r.reason ?? null,
+  }
+}
+
 export async function GET(req: NextRequest) {
   const session = await auth()
   if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
@@ -57,39 +79,51 @@ export async function GET(req: NextRequest) {
   const dayStart = startOfDay(dateObj)
   const dayEnd   = endOfDay(dateObj)
 
-  const [lessons, extraLessons] = await Promise.all([
+  // Intervalo para as views de semana/mês
+  const weekStart = startOfDay(startOfWeek(dateObj, { weekStartsOn: 1 }))
+  const weekEnd   = endOfDay(endOfWeek(dateObj,     { weekStartsOn: 1 }))
+  const extStart  = view === "week"  ? weekStart
+                  : view === "month" ? startOfDay(startOfWeek(startOfMonth(dateObj), { weekStartsOn: 1 }))
+                  : dayStart
+  const extEnd    = view === "week"  ? weekEnd
+                  : view === "month" ? endOfDay(endOfWeek(endOfMonth(dateObj), { weekStartsOn: 1 }))
+                  : dayEnd
+
+  const [lessons, extraLessons, pendingRequests, weekPendingRequests] = await Promise.all([
+    // Aulas do dia
     prisma.lesson.findMany({
       where:   { scheduledAt: { gte: dayStart, lte: dayEnd } },
       include: lessonInclude,
       orderBy: { scheduledAt: "asc" },
     }),
-    view === "week"
+    // Aulas da semana/mês (para views extras)
+    view !== "day"
       ? prisma.lesson.findMany({
-          where: {
-            scheduledAt: {
-              gte: startOfDay(startOfWeek(dateObj, { weekStartsOn: 1 })),
-              lte: endOfDay(endOfWeek(dateObj,     { weekStartsOn: 1 })),
-            },
-          },
-          include: lessonInclude,
-          orderBy: { scheduledAt: "asc" },
-        })
-      : view === "month"
-      ? prisma.lesson.findMany({
-          where: {
-            scheduledAt: {
-              gte: startOfDay(startOfWeek(startOfMonth(dateObj), { weekStartsOn: 1 })),
-              lte: endOfDay(endOfWeek(endOfMonth(dateObj),       { weekStartsOn: 1 })),
-            },
-          },
+          where:   { scheduledAt: { gte: extStart, lte: extEnd } },
           include: lessonInclude,
           orderBy: { scheduledAt: "asc" },
         })
       : Promise.resolve([] as RawLesson[]),
+    // Solicitações pendentes do dia
+    prisma.lessonRequest.findMany({
+      where:   { status: "PENDING", preferredAt: { gte: dayStart, lte: dayEnd } },
+      include: requestInclude,
+      orderBy: { preferredAt: "asc" },
+    }),
+    // Solicitações pendentes da semana/mês
+    view !== "day"
+      ? prisma.lessonRequest.findMany({
+          where:   { status: "PENDING", preferredAt: { gte: extStart, lte: extEnd } },
+          include: requestInclude,
+          orderBy: { preferredAt: "asc" },
+        })
+      : Promise.resolve([] as RawRequest[]),
   ])
 
   return NextResponse.json({
-    lessons:      lessons.map(mapLesson),
-    extraLessons: extraLessons.map(mapLesson),
+    lessons:             lessons.map(mapLesson),
+    extraLessons:        extraLessons.map(mapLesson),
+    pendingRequests:     pendingRequests.map(mapPendingRequest),
+    weekPendingRequests: weekPendingRequests.map(mapPendingRequest),
   })
 }

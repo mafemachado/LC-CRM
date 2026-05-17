@@ -76,6 +76,7 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
   const teacherCols: TeacherCol[] = teachers.map(t => ({
     id:              t.id,
     name:            t.user.name,
+    teachingMode:    t.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID",
     slots:           parseAvailSlots(t.availability, dow),
     rawAvailability: (t.availability ?? {}) as Record<string, { start: string; end: string }[]>,
     subjects:        t.subjects.map(ts => ({ id: ts.subject.id, name: ts.subject.name })),

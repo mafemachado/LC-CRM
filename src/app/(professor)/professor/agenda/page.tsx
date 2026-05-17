@@ -92,6 +92,8 @@ export default async function ProfessorAgendaPage() {
                   notes={r.reason}
                   hasConflict={conflict}
                   outOfSchedule={outOfSchedule}
+                  teacherMode={r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID"}
+                  requestModality={r.modality as "PRESENCIAL" | "ONLINE"}
                 />
               )
             })}

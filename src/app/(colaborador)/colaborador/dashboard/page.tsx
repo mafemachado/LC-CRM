@@ -134,6 +134,8 @@ export default async function ColaboradorDashboard() {
                     subjectName={r.subject?.name ?? "–"}
                     preferredAt={r.preferredAt}
                     notes={r.reason}
+                    teacherMode={r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID"}
+                    requestModality={r.modality as "PRESENCIAL" | "ONLINE"}
                   />
                 ))}
               </div>

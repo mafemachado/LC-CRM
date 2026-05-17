@@ -10,12 +10,16 @@ import { ptBR }                    from "date-fns/locale"
 import {
   ChevronLeft, ChevronRight, CalendarDays, CalendarRange, LayoutGrid,
   CheckCircle2, XCircle, UserX, MessageCircle,
-  Loader2, Wifi, MapPin, Clock, Plus, Building2, Home,
+  Loader2, Wifi, MapPin, Clock, Plus, Building2, Home, AlertCircle,
 } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
-import { updateLessonStatusAction } from "@/lib/actions/lesson-request"
+import {
+  updateLessonStatusAction,
+  createLessonDirectAction,
+  approveRequestAction,
+  rejectRequestAction,
+} from "@/lib/actions/lesson-request"
 import { sendLessonWhatsAppAction } from "@/lib/actions/colaborador"
-import { createLessonDirectAction } from "@/lib/actions/lesson-request"
 import { toast }                   from "sonner"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -84,6 +88,19 @@ export interface LessonSlot {
 
 export interface WeekLessonSlot extends LessonSlot {
   date: string // "yyyy-MM-dd"
+}
+
+export interface PendingRequestSlot {
+  id:          string
+  teacherId:   string
+  startMin:    number
+  time:        string
+  date:        string  // "yyyy-MM-dd"
+  studentName: string
+  subjectName: string
+  modality:    "PRESENCIAL" | "ONLINE"
+  teacherMode: "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID"
+  notes:       string | null
 }
 
 // ─── Modal: detalhes de aula ─────────────────────────────────────────────────
@@ -533,6 +550,220 @@ function LessonBlock({
   )
 }
 
+// ─── Modal: aprovar / recusar solicitação pendente ───────────────────────────
+
+function PendingApprovalModal({
+  req,
+  teacherName,
+  lessons,
+  onClose,
+}: {
+  req:         PendingRequestSlot
+  teacherName: string
+  lessons:     LessonSlot[]
+  onClose:     () => void
+}) {
+  const [modality,      setModality]      = useState<"PRESENCIAL" | "ONLINE">(
+    req.teacherMode === "ONLINE_ONLY" ? "ONLINE" : req.modality
+  )
+  const [teacherOnsite, setTeacherOnsite] = useState(false)
+  const [pending, start] = useTransition()
+
+  const canSetPresencial   = req.teacherMode !== "ONLINE_ONLY"
+  const showLocationToggle = modality === "ONLINE" && canSetPresencial
+
+  const hasConflict = lessons.some(l => {
+    if (l.teacherId !== req.teacherId) return false
+    if (l.status === "CANCELLED" || l.status === "MISSED") return false
+    return l.startMin < req.startMin + 60 && l.startMin + l.duration > req.startMin
+  })
+
+  const approve = () => start(async () => {
+    try {
+      await approveRequestAction(req.id, modality, showLocationToggle ? teacherOnsite : undefined)
+      toast.success(`Aula ${modality === "ONLINE" ? "online" : "presencial"} confirmada`)
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao aprovar")
+    }
+  })
+
+  const reject = () => start(async () => {
+    try {
+      await rejectRequestAction(req.id)
+      toast.success("Solicitação recusada")
+      onClose()
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erro ao recusar")
+    }
+  })
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose() }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <div className="flex items-center gap-2 flex-wrap">
+            <DialogTitle>Solicitação Pendente</DialogTitle>
+            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+              Aguardando aprovação
+            </span>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {hasConflict && (
+            <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              <span><strong>Conflito:</strong> o professor já tem uma aula confirmada neste horário.</span>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm rounded-lg bg-muted/40 px-4 py-3">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Aluno</p>
+              <p className="font-medium">{req.studentName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Matéria</p>
+              <p className="font-medium">{req.subjectName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Professor</p>
+              <p className="font-medium">{teacherName}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Horário solicitado</p>
+              <p className="font-medium flex items-center gap-1">
+                <Clock className="w-3 h-3" /> {req.time}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pedido pelo aluno</p>
+              <p className="font-medium flex items-center gap-1">
+                {req.modality === "ONLINE"
+                  ? <><Wifi    className="w-3 h-3 text-blue-500"  /> Online</>
+                  : <><MapPin  className="w-3 h-3 text-green-600" /> Presencial</>
+                }
+              </p>
+            </div>
+          </div>
+
+          {req.notes && (
+            <p className="text-xs text-muted-foreground bg-muted/30 px-3 py-2 rounded-lg italic">
+              &ldquo;{req.notes}&rdquo;
+            </p>
+          )}
+
+          <hr className="border-border" />
+
+          <div className="space-y-3">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Confirmar modalidade</p>
+
+            {canSetPresencial ? (
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button type="button" onClick={() => setModality("PRESENCIAL")} disabled={pending}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
+                    modality === "PRESENCIAL" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <MapPin className="w-3.5 h-3.5" /> Presencial
+                </button>
+                <button type="button" onClick={() => setModality("ONLINE")} disabled={pending}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
+                    modality === "ONLINE" ? "bg-brand-blue text-white" : "text-muted-foreground hover:bg-muted/50"
+                  }`}
+                >
+                  <Wifi className="w-3.5 h-3.5" /> Online
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
+                <Wifi className="w-4 h-4" /> Online (professor só atende remotamente)
+              </div>
+            )}
+
+            {showLocationToggle && (
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">Local do professor na aula online</p>
+                <div className="flex rounded-lg border border-border overflow-hidden">
+                  <button type="button" onClick={() => setTeacherOnsite(false)} disabled={pending}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
+                      !teacherOnsite ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <Home className="w-3.5 h-3.5" /> Em casa
+                  </button>
+                  <button type="button" onClick={() => setTeacherOnsite(true)} disabled={pending}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
+                      teacherOnsite ? "bg-amber-100 text-amber-800 font-medium" : "text-muted-foreground hover:bg-muted/50"
+                    }`}
+                  >
+                    <Building2 className="w-3.5 h-3.5" /> Na sede
+                  </button>
+                </div>
+                {teacherOnsite && (
+                  <p className="text-[10px] text-muted-foreground">Ocupará uma sala na sede.</p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline"
+              className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
+              onClick={reject} disabled={pending}
+            >
+              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <XCircle className="w-3.5 h-3.5 mr-1" />}
+              Recusar
+            </Button>
+            <Button className="flex-1" onClick={approve} disabled={pending}>
+              {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
+              Aprovar
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Bloco de solicitação pendente na grade ───────────────────────────────────
+
+function PendingBlock({
+  req,
+  onSelect,
+}: {
+  req:      PendingRequestSlot
+  onSelect: (r: PendingRequestSlot) => void
+}) {
+  const height = Math.max(px(60), 40)
+  return (
+    <div
+      data-lesson="true"
+      onClick={() => onSelect(req)}
+      style={{ top: px(req.startMin - START * 60), height, left: 3, right: 3 }}
+      className="absolute rounded-lg border-2 border-dashed border-orange-400 bg-orange-50 text-orange-900 overflow-hidden select-none cursor-pointer transition-all hover:bg-orange-100 hover:border-orange-500 active:opacity-70 z-10"
+    >
+      <div className="px-1.5 pt-1 pb-0.5">
+        <div className="flex items-center gap-1">
+          <p className="text-[11px] font-bold leading-tight">{req.time}</p>
+          <AlertCircle className="w-2.5 h-2.5 shrink-0 opacity-70" />
+        </div>
+        <p className="text-[12px] font-semibold leading-tight truncate">
+          {req.studentName.split(" ")[0]}
+          {req.studentName.split(" ").length > 1 && (
+            <span className="opacity-75"> {req.studentName.split(" ")[1]?.[0]}.</span>
+          )}
+        </p>
+        {height >= 52 && (
+          <p className="text-[10px] leading-tight truncate opacity-80">{req.subjectName}</p>
+        )}
+        <p className="text-[8px] font-bold uppercase tracking-wider opacity-50 mt-0.5">Pendente</p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Recalcula slots de disponibilidade pelo dia da semana ───────────────────
 
 function computeSlots(
@@ -549,19 +780,22 @@ function computeSlots(
 // ─── Grade principal ──────────────────────────────────────────────────────────
 
 interface AgendaGridProps {
-  date:          string
-  teachers:      TeacherCol[]
-  lessons:       LessonSlot[]
-  roomCount?:    number
-  students?:     StudentOption[]
-  weekLessons?:  WeekLessonSlot[]
-  monthLessons?: WeekLessonSlot[]
-  initialView?:  ViewMode
+  date:                  string
+  teachers:              TeacherCol[]
+  lessons:               LessonSlot[]
+  roomCount?:            number
+  students?:             StudentOption[]
+  weekLessons?:          WeekLessonSlot[]
+  monthLessons?:         WeekLessonSlot[]
+  initialView?:          ViewMode
+  pendingRequests?:      PendingRequestSlot[]
+  weekPendingRequests?:  PendingRequestSlot[]
 }
 
 export function AgendaGrid({
   date, teachers, lessons: initialLessons, roomCount = 3, students,
   weekLessons: initialWeekLessons, monthLessons: initialMonthLessons, initialView = "day",
+  pendingRequests: initialPending, weekPendingRequests: initialWeekPending,
 }: AgendaGridProps) {
   // ── Data state (managed client-side after initial SSR) ────────────────────
 
@@ -570,6 +804,8 @@ export function AgendaGrid({
   const [lessons, setLessons]       = useState(initialLessons)
   const [weekLessons, setWeekLessons]   = useState(initialWeekLessons ?? [])
   const [monthLessons, setMonthLessons] = useState(initialMonthLessons ?? [])
+  const [pendingRequests,     setPendingRequests]     = useState<PendingRequestSlot[]>(initialPending ?? [])
+  const [weekPendingRequests, setWeekPendingRequests] = useState<PendingRequestSlot[]>(initialWeekPending ?? [])
   const abortRef   = useRef<AbortController | null>(null)
   const hasMounted = useRef(false)
 
@@ -583,7 +819,8 @@ export function AgendaGrid({
   }))
 
   const [view, setView]                     = useState<ViewMode>(initialView)
-  const [selectedLesson, setSelectedLesson] = useState<LessonSlot | null>(null)
+  const [selectedLesson,  setSelectedLesson]  = useState<LessonSlot | null>(null)
+  const [selectedPending, setSelectedPending] = useState<PendingRequestSlot | null>(null)
   const [quickSchedule,  setQuickSchedule]  = useState<{
     teacherId:   string
     teacherName: string
@@ -608,6 +845,8 @@ export function AgendaGrid({
       setLessons(data.lessons)
       setWeekLessons(v === "week"  ? data.extraLessons : [])
       setMonthLessons(v === "month" ? data.extraLessons : [])
+      setPendingRequests(data.pendingRequests ?? [])
+      setWeekPendingRequests(v === "week" ? (data.weekPendingRequests ?? []) : [])
     } catch (e) {
       if ((e as Error).name !== "AbortError") console.error("agenda fetch error", e)
     } finally {
@@ -875,13 +1114,14 @@ export function AgendaGrid({
             {calWeeks.map((week, wi) => (
               <div key={wi} className="grid grid-cols-7 border-b border-border/50 last:border-b-0">
                 {week.map(day => {
-                  const dayStr     = format(day, "yyyy-MM-dd")
-                  const inMonth    = isSameMonth(day, parsed)
+                  const dayStr       = format(day, "yyyy-MM-dd")
+                  const inMonth      = isSameMonth(day, parsed)
                   const isCurrentDay = isToday(day)
-                  const isSelected = dayStr === date
-                  const dayLessons = (lessonsByDay[dayStr] ?? []).sort((a, b) => a.startMin - b.startMin)
-                  const visible    = dayLessons.slice(0, 3)
-                  const overflow   = dayLessons.length - visible.length
+                  const isSelected   = dayStr === date
+                  const dayLessons   = (lessonsByDay[dayStr] ?? []).sort((a, b) => a.startMin - b.startMin)
+                  const dayPending   = weekPendingRequests.filter(r => r.date === dayStr)
+                  const visible      = dayLessons.slice(0, dayPending.length > 0 ? 2 : 3)
+                  const overflow     = dayLessons.length - visible.length
 
                   const goDay = () => { setCurDate(dayStr); setView("day"); pushUrl(dayStr, "day") }
 
@@ -904,13 +1144,20 @@ export function AgendaGrid({
                         }`}>
                           {format(day, "d")}
                         </span>
-                        {dayLessons.length > 0 && (
-                          <span className={`text-[9px] font-medium px-1 rounded ${
-                            inMonth ? "text-primary/70" : "text-muted-foreground/40"
-                          }`}>
-                            {dayLessons.length}
-                          </span>
-                        )}
+                        <div className="flex items-center gap-0.5">
+                          {dayLessons.length > 0 && (
+                            <span className={`text-[9px] font-medium px-1 rounded ${
+                              inMonth ? "text-primary/70" : "text-muted-foreground/40"
+                            }`}>
+                              {dayLessons.length}
+                            </span>
+                          )}
+                          {dayPending.length > 0 && inMonth && (
+                            <span className="text-[9px] font-semibold px-1 rounded bg-orange-100 text-orange-600">
+                              !{dayPending.length}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Pills de aula */}
@@ -927,12 +1174,21 @@ export function AgendaGrid({
                             </button>
                           )
                         })}
+                        {dayPending.slice(0, 1).map(req => (
+                          <button
+                            key={req.id}
+                            className={`w-full text-left rounded px-1.5 py-0.5 text-[10px] font-medium truncate border border-dashed border-orange-400 bg-orange-50 text-orange-800 transition-opacity hover:opacity-80 ${!inMonth ? "opacity-40" : ""}`}
+                            onClick={e => { e.stopPropagation(); setSelectedPending(req) }}
+                          >
+                            ⏳ {req.time} {req.studentName.split(" ")[0]}
+                          </button>
+                        ))}
                         {overflow > 0 && (
                           <button
                             className="w-full text-left text-[10px] text-muted-foreground px-1.5 py-0.5 hover:bg-muted/50 rounded transition-colors"
                             onClick={e => { e.stopPropagation(); goDay() }}
                           >
-                            +{overflow} mais
+                            +{overflow + dayPending.slice(1).length} mais
                           </button>
                         )}
                       </div>
@@ -990,16 +1246,23 @@ export function AgendaGrid({
                         {dayLessons.length > 0 ? dayLessons.length : "—"}
                         {dayLessons.length > 0 && (dayLessons.length === 1 ? " aula" : " aulas")}
                       </span>
+                      {weekPendingRequests.filter(r => r.date === dayStr).length > 0 && (
+                        <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full mt-0.5 font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                          <AlertCircle className="w-2.5 h-2.5" />
+                          {weekPendingRequests.filter(r => r.date === dayStr).length}
+                        </span>
+                      )}
                     </button>
 
                     {/* Lista de aulas do dia */}
                     <div className="flex-1 p-1.5 space-y-1 min-h-48">
-                      {dayLessons.length === 0 ? (
+                      {dayLessons.length === 0 && weekPendingRequests.filter(r => r.date === dayStr).length === 0 ? (
                         <div className="flex items-center justify-center h-20">
                           <span className="text-[10px] text-muted-foreground/30">sem aulas</span>
                         </div>
                       ) : (
-                        dayLessons.map(lesson => {
+                        <>
+                        {dayLessons.map(lesson => {
                           const tName = effectiveTeachers.find(t => t.id === lesson.teacherId)?.name ?? ""
                           const { bg, text: txtCls } = STATUS_STYLE[lesson.status]
                           return (
@@ -1020,7 +1283,28 @@ export function AgendaGrid({
                               </p>
                             </button>
                           )
-                        })
+                        })}
+                        {weekPendingRequests.filter(r => r.date === dayStr).map(req => (
+                          <button
+                            key={req.id}
+                            className="w-full text-left rounded-md px-2 py-1.5 border-2 border-dashed border-orange-400 bg-orange-50 text-orange-900 transition-all hover:bg-orange-100 active:opacity-70"
+                            onClick={() => setSelectedPending(req)}
+                          >
+                            <p className="text-[11px] font-bold flex items-center gap-1">
+                              {req.time} <AlertCircle className="w-2.5 h-2.5 opacity-60" />
+                            </p>
+                            <p className="text-[11px] font-semibold truncate">
+                              {req.studentName.split(" ")[0]}
+                              {req.studentName.split(" ")[1] && (
+                                <span className="opacity-75"> {req.studentName.split(" ")[1][0]}.</span>
+                              )}
+                            </p>
+                            <p className="text-[9px] opacity-70 truncate">
+                              {effectiveTeachers.find(t => t.id === req.teacherId)?.name.split(" ")[0]} · {req.subjectName}
+                            </p>
+                          </button>
+                        ))}
+                        </>
                       )}
                     </div>
                   </div>
@@ -1044,8 +1328,9 @@ export function AgendaGrid({
                   <span className="text-[10px] font-bold text-primary">{roomCount}</span>
                 </div>
                 {effectiveTeachers.map(t => {
-                  const count     = byTeacher(t.id).length
-                  const available = t.slots.length > 0
+                  const count        = byTeacher(t.id).length
+                  const pendingCount = pendingRequests.filter(r => r.teacherId === t.id).length
+                  const available    = t.slots.length > 0
                   return (
                     <div
                       key={t.id}
@@ -1061,6 +1346,11 @@ export function AgendaGrid({
                         <span className="text-[10px] text-muted-foreground">
                           {count} aula{count !== 1 ? "s" : ""}
                         </span>
+                        {pendingCount > 0 && (
+                          <span className="text-[9px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-semibold">
+                            {pendingCount} pendente{pendingCount !== 1 ? "s" : ""}
+                          </span>
+                        )}
                         {available ? (
                           <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded-full font-medium">
                             disponível
@@ -1190,7 +1480,12 @@ export function AgendaGrid({
                         </div>
                       )}
 
-                      {/* Blocos de aula */}
+                      {/* Solicitações pendentes */}
+                      {pendingRequests.filter(r => r.teacherId === t.id).map(req => (
+                        <PendingBlock key={req.id} req={req} onSelect={setSelectedPending} />
+                      ))}
+
+                      {/* Blocos de aula (sobre as pendentes) */}
                       {byTeacher(t.id).map(lesson => (
                         <LessonBlock key={lesson.id} lesson={lesson} onSelect={setSelectedLesson} />
                       ))}
@@ -1217,6 +1512,14 @@ export function AgendaGrid({
           lesson={selectedLesson}
           teacherName={effectiveTeachers.find(t => t.id === selectedLesson.teacherId)?.name ?? ""}
           onClose={() => { setSelectedLesson(null); fetchData(curDate, view) }}
+        />
+      )}
+      {selectedPending && (
+        <PendingApprovalModal
+          req={selectedPending}
+          teacherName={effectiveTeachers.find(t => t.id === selectedPending.teacherId)?.name ?? ""}
+          lessons={lessons}
+          onClose={() => { setSelectedPending(null); fetchData(curDate, view) }}
         />
       )}
       {quickSchedule && students && (
