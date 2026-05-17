@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { CheckCircle2, CalendarDays, MessageCircle } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 
 export default function AgendarSucessoPage() {
   return (
@@ -47,12 +47,8 @@ export default function AgendarSucessoPage() {
 
         {/* Ações */}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
-          <Button asChild>
-            <Link href="/aluno/aulas">Ver minhas aulas</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href="/aluno/dashboard">Voltar ao início</Link>
-          </Button>
+          <Link href="/aluno/aulas" className={buttonVariants()}>Ver minhas aulas</Link>
+          <Link href="/aluno/dashboard" className={buttonVariants({ variant: "outline" })}>Voltar ao início</Link>
         </div>
       </div>
     </div>
