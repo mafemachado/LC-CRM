@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { LayoutList, CalendarDays, CalendarCheck, CheckCircle2, Link2, Download, ExternalLink } from "lucide-react"
@@ -183,14 +183,40 @@ export function TeacherAgendaView({ lessons, calendarToken, baseUrl }: Props) {
 }
 
 /* ── Sync hint card ─────────────────────────────────────── */
-function SyncHint({ webcalUrl, icsUrl }: { webcalUrl: string; icsUrl: string }) {
-  const [open, setOpen] = useState(false)
+type App = "google" | "iphone" | "outlook"
 
-  const googleSteps = [
-    { n: "1", text: <>Acesse <span className="font-mono text-[10px] bg-muted rounded px-1 py-0.5">calendar.google.com</span></> },
-    { n: "2", text: <>No menu lateral, clique em <strong>+</strong> ao lado de "Outros agendas" e escolha <strong>"De URL"</strong></> },
-    { n: "3", text: <>Cole o link copiado (botão "Copiar link" acima) e clique em <strong>"Adicionar agenda"</strong></> },
-  ]
+const APP_OPTIONS: { id: App; emoji: string; label: string }[] = [
+  { id: "google",  emoji: "🗓️", label: "Google Agenda" },
+  { id: "iphone",  emoji: "📱", label: "iPhone / iPad" },
+  { id: "outlook", emoji: "💼", label: "Outlook"        },
+]
+
+const APP_STEPS: Record<App, { text: React.ReactNode }[]> = {
+  google: [
+    { text: <>Clique no botão <strong>"Copiar link"</strong> acima.</> },
+    { text: <>Abra o <strong>Google Agenda</strong> no computador ou celular.</> },
+    { text: <>No menu lateral esquerdo, toque no <strong>"+"</strong> ao lado de "Outros agendas" e escolha <strong>"De URL"</strong>.</> },
+    { text: <>Cole o link copiado no campo que aparecer e clique em <strong>"Adicionar agenda"</strong>. Pronto!</> },
+  ],
+  iphone: [
+    { text: <>Clique no botão <strong>"Baixar .ics"</strong> acima.</> },
+    { text: <>Seu iPhone vai perguntar se deseja abrir o arquivo — toque em <strong>"Permitir"</strong>.</> },
+    { text: <>Na tela seguinte, toque em <strong>"Adicionar todos"</strong> para importar as aulas para o Calendário do iPhone.</> },
+  ],
+  outlook: [
+    { text: <>Clique no botão <strong>"Baixar .ics"</strong> acima.</> },
+    { text: <>O arquivo vai abrir automaticamente no Outlook. Clique em <strong>"Importar"</strong> na janela que aparecer.</> },
+    { text: <>As aulas serão adicionadas ao seu calendário do Outlook.</> },
+  ],
+}
+
+function SyncHint({ webcalUrl, icsUrl }: { webcalUrl: string; icsUrl: string }) {
+  const [open,       setOpen]       = useState(false)
+  const [activeApp,  setActiveApp]  = useState<App>("google")
+
+  void webcalUrl // available for future use
+
+  const steps = APP_STEPS[activeApp]
 
   return (
     <div className="rounded-xl border border-border bg-muted/10">
@@ -200,55 +226,50 @@ function SyncHint({ webcalUrl, icsUrl }: { webcalUrl: string; icsUrl: string }) 
         onClick={() => setOpen((o) => !o)}
       >
         <CalendarDays className="w-4 h-4 text-brand-blue shrink-0" />
-        <span className="text-foreground/80">Como sincronizar com Google Agenda, Apple Calendar ou Outlook?</span>
+        <span className="text-foreground/80">Quero ver minhas aulas na minha agenda pessoal</span>
         <span className="ml-auto text-muted-foreground text-xs">{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
-        <div className="px-4 pb-4 pt-1 space-y-4 border-t border-border">
+        <div className="px-4 pb-4 pt-2 border-t border-border space-y-4">
 
-          {/* Google Calendar */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue pt-2">
-              Google Agenda
-            </p>
-            <div className="space-y-2">
-              {googleSteps.map(({ n, text }) => (
-                <div key={n} className="flex items-start gap-3">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-brand-blue text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
-                    {n}
-                  </span>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
-                </div>
+          {/* App picker */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Qual aplicativo de agenda você usa?</p>
+            <div className="flex gap-2 flex-wrap">
+              {APP_OPTIONS.map(({ id, emoji, label }) => (
+                <button
+                  key={id}
+                  onClick={() => setActiveApp(id)}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors",
+                    activeApp === id
+                      ? "bg-brand-blue text-white border-brand-blue"
+                      : "bg-background text-muted-foreground border-border hover:bg-muted/50",
+                  )}
+                >
+                  <span>{emoji}</span>
+                  {label}
+                </button>
               ))}
             </div>
           </div>
 
-          {/* Divider */}
-          <div className="border-t border-dashed border-border" />
-
-          {/* Apple / Outlook */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-brand-blue">
-              Apple Calendar · Outlook · outros
-            </p>
-            <div className="flex items-start gap-3">
-              <span className="shrink-0 w-5 h-5 rounded-full bg-muted text-muted-foreground text-[10px] font-bold flex items-center justify-center mt-0.5">
-                1
-              </span>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Clique em <strong>"Baixar .ics"</strong> para importar manualmente, ou use o{" "}
-                <a href={webcalUrl} className="text-brand-blue underline underline-offset-2 hover:opacity-75">
-                  link webcal://
-                </a>{" "}
-                para assinar e receber atualizações automáticas.
-              </p>
-            </div>
+          {/* Steps */}
+          <div className="space-y-3">
+            {steps.map(({ text }, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <span className="shrink-0 w-5 h-5 rounded-full bg-brand-blue text-white text-[10px] font-bold flex items-center justify-center mt-0.5">
+                  {i + 1}
+                </span>
+                <p className="text-xs text-muted-foreground leading-relaxed">{text}</p>
+              </div>
+            ))}
           </div>
 
-          {/* Info note */}
-          <p className="text-[11px] text-muted-foreground/70 bg-muted/40 rounded-lg px-3 py-2">
-            As novas aulas aparecem automaticamente na sua agenda pessoal — sem precisar repetir esse processo.
+          {/* Note */}
+          <p className="text-[11px] text-muted-foreground/70 bg-muted/40 rounded-lg px-3 py-2 leading-relaxed">
+            Após configurar uma vez, as próximas aulas aparecem automaticamente na sua agenda — sem precisar repetir nenhum passo.
           </p>
         </div>
       )}
