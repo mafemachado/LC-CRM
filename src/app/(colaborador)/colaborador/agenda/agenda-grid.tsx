@@ -1323,53 +1323,64 @@ export function AgendaGrid({
               <div className="sticky top-0 z-20 flex border-b border-border bg-background/95 backdrop-blur-sm">
                 <div
                   style={{ width: TIME_W, minWidth: TIME_W }}
-                  className="sticky left-0 z-30 bg-background/95 border-r border-border shrink-0 flex flex-col items-center justify-end pb-1.5">
-                  <span className="text-[9px] text-muted-foreground leading-tight">Salas</span>
-                  <span className="text-[10px] font-bold text-primary">{roomCount}</span>
+                  className="sticky left-0 z-30 bg-background/95 border-r border-border shrink-0 flex flex-col items-center justify-center gap-0.5 py-2">
+                  <span className="text-[10px] font-bold text-primary tabular-nums">{roomCount}</span>
+                  <span className="text-[9px] text-muted-foreground leading-tight">sala{roomCount !== 1 ? "s" : ""}</span>
                 </div>
                 {effectiveTeachers.map(t => {
                   const count        = byTeacher(t.id).length
                   const pendingCount = pendingRequests.filter(r => r.teacherId === t.id).length
                   const available    = t.slots.length > 0
+                  const firstName    = t.name.split(" ")[0]
+                  const lastName     = t.name.split(" ").slice(1).join(" ")
+
                   return (
                     <div
                       key={t.id}
                       style={{ width: COL_W, minWidth: COL_W }}
-                      className={`px-2 py-2 text-center border-l border-border ${
-                        !available ? "bg-muted/20" : ""
+                      className={`px-3 py-2 border-l border-border flex flex-col items-center gap-1 ${
+                        !available ? "bg-muted/25" : ""
                       }`}
                     >
-                      <p className="text-xs font-semibold truncate">{t.name.split(" ")[0]}
-                        <span className="hidden lg:inline"> {t.name.split(" ").slice(1).join(" ")}</span>
+                      {/* Nome */}
+                      <p className="text-xs font-bold leading-tight truncate w-full text-center">
+                        {firstName}
+                        {lastName && (
+                          <span className="hidden lg:inline font-normal text-muted-foreground"> {lastName}</span>
+                        )}
                       </p>
-                      <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                        <span className="text-[10px] text-muted-foreground">
-                          {count} aula{count !== 1 ? "s" : ""}
-                        </span>
-                        {pendingCount > 0 && (
-                          <span className="text-[9px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-semibold">
-                            {pendingCount} pendente{pendingCount !== 1 ? "s" : ""}
-                          </span>
-                        )}
-                        {available ? (
-                          <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded-full font-medium">
-                            disponível
-                          </span>
-                        ) : (
-                          <span className="text-[9px] bg-muted text-muted-foreground px-1 py-0.5 rounded-full">
-                            indisponível
-                          </span>
-                        )}
-                      </div>
-                      {available && (
-                        <div className="flex gap-0.5 justify-center mt-1">
+
+                      {/* Disponibilidade */}
+                      {available ? (
+                        <div className="flex items-center gap-1 flex-wrap justify-center">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                           {t.slots.map((s, i) => (
-                            <span key={i} className="text-[8px] text-emerald-600 font-medium">
-                              {String(Math.floor(s.start / 60)).padStart(2, "0")}–{String(Math.floor(s.end / 60)).padStart(2, "0")}
+                            <span key={i} className="text-[10px] text-emerald-700 font-medium tabular-nums">
+                              {i > 0 && <span className="text-muted-foreground/50 mx-0.5">·</span>}
+                              {String(Math.floor(s.start / 60)).padStart(2, "0")}h–{String(Math.floor(s.end / 60)).padStart(2, "0")}h
                             </span>
                           ))}
                         </div>
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground/50 italic">sem agenda hoje</span>
                       )}
+
+                      {/* Contadores */}
+                      <div className="flex items-center gap-1.5 flex-wrap justify-center">
+                        {count > 0 ? (
+                          <span className="text-[10px] text-muted-foreground tabular-nums">
+                            {count} aula{count !== 1 ? "s" : ""}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] text-muted-foreground/40">livre</span>
+                        )}
+                        {pendingCount > 0 && (
+                          <span className="inline-flex items-center gap-0.5 text-[9px] bg-orange-100 text-orange-700 border border-orange-200 px-1.5 py-0.5 rounded-full font-bold leading-none">
+                            <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+                            {pendingCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )
                 })}
