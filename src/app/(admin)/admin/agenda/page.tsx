@@ -97,6 +97,8 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
       studentName:   l.student.user.name,
       subjectName:   l.subject.name,
       guardianName:  l.student.guardian?.user.name ?? null,
+      isGroupLesson: l.isGroupLesson,
+      groupSize:     l.groupSize,
     }
   })
 

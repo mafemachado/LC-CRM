@@ -37,6 +37,8 @@ function mapToLessonSlot(l: {
   status: string
   modality: string
   teacherOnsite: boolean
+  isGroupLesson: boolean
+  groupSize: number | null
   student: { user: { name: string }; guardian: { user: { name: string } } | null }
   subject: { name: string }
 }): LessonSlot {
@@ -54,6 +56,8 @@ function mapToLessonSlot(l: {
     studentName:   l.student.user.name,
     subjectName:   l.subject.name,
     guardianName:  l.student.guardian?.user.name ?? null,
+    isGroupLesson: l.isGroupLesson,
+    groupSize:     l.groupSize,
   }
 }
 

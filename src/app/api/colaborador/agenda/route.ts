@@ -43,6 +43,8 @@ function mapLesson(l: RawLesson) {
     subjectName:   l.subject.name,
     guardianName:  l.student.guardian?.user.name ?? null,
     date:          format(d, "yyyy-MM-dd"),
+    isGroupLesson: l.isGroupLesson,
+    groupSize:     l.groupSize,
   }
 }
 

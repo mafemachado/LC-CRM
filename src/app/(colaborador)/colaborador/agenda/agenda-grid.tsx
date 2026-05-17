@@ -85,6 +85,8 @@ export interface LessonSlot {
   studentName:   string
   subjectName:   string
   guardianName:  string | null
+  isGroupLesson: boolean
+  groupSize:     number | null
 }
 
 export interface WeekLessonSlot extends LessonSlot {
@@ -160,6 +162,12 @@ function LessonDetailModal({
             <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${bg} ${text}`}>
               {STATUS_LABEL[lesson.status]}
             </span>
+            {lesson.isGroupLesson && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-primary/10 text-primary flex items-center gap-1">
+                <Users className="w-3 h-3" />
+                Grupo · {lesson.groupSize ?? "?"} alunos
+              </span>
+            )}
           </div>
         </DialogHeader>
 
