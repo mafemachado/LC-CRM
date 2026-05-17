@@ -8,7 +8,35 @@ import { LessonStatusButtons } from "./lesson-status-buttons"
 import { AddHomeworkForm }     from "./add-homework-form"
 import { format }       from "date-fns"
 import { ptBR }         from "date-fns/locale"
-import { CalendarDays, User, BookOpen, Monitor, MapPin, PenLine, CheckCircle2, Clock } from "lucide-react"
+import { CalendarDays, User, BookOpen, Monitor, MapPin, PenLine, CheckCircle2, Clock, CalendarPlus } from "lucide-react"
+
+function buildGoogleCalendarUrl(lesson: {
+  scheduledAt: Date
+  duration:    number
+  subject:     { name: string }
+  student:     { user: { name: string } }
+  modality:    string
+  meetingLink: string | null
+  location:    string | null
+}): string {
+  const start   = lesson.scheduledAt
+  const end     = new Date(start.getTime() + lesson.duration * 60_000)
+  const fmt     = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
+  const title   = `Aula de ${lesson.subject.name} com ${lesson.student.user.name}`
+  const loc     = lesson.modality === "ONLINE"
+    ? (lesson.meetingLink ?? "Online")
+    : (lesson.location   ?? "Presencial")
+  const details = `Matéria: ${lesson.subject.name}\nAluno: ${lesson.student.user.name}\nModalidade: ${lesson.modality === "ONLINE" ? "Online" : "Presencial"}`
+
+  const p = new URLSearchParams({
+    action:  "TEMPLATE",
+    text:    title,
+    dates:   `${fmt(start)}/${fmt(end)}`,
+    details,
+    location: loc,
+  })
+  return `https://calendar.google.com/calendar/render?${p.toString()}`
+}
 
 interface LessonDetailProps {
   params: Promise<{ id: string }>
@@ -30,6 +58,7 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
   if (!lesson) notFound()
 
   const isCompleted = ["COMPLETED", "CANCELLED", "MISSED"].includes(lesson.status)
+  const gcUrl       = buildGoogleCalendarUrl(lesson)
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -40,21 +69,35 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
         <CardHeader className="pb-3">
           <CardTitle className="font-sub text-base">Informações</CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4 text-sm">
-          {[
-            { icon: User,        label: "Aluno",       value: lesson.student.user.name },
-            { icon: BookOpen,    label: "Matéria",     value: lesson.subject.name       },
-            { icon: CalendarDays,label: "Data/Hora",   value: format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) },
-            { icon: lesson.modality === "ONLINE" ? Monitor : MapPin, label: "Modalidade", value: lesson.modality === "ONLINE" ? "Online" : "Presencial" },
-          ].map(({ icon: Icon, label, value }) => (
-            <div key={label} className="flex items-start gap-2">
-              <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
-              <div>
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="font-medium">{value}</p>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            {[
+              { icon: User,        label: "Aluno",       value: lesson.student.user.name },
+              { icon: BookOpen,    label: "Matéria",     value: lesson.subject.name       },
+              { icon: CalendarDays,label: "Data/Hora",   value: format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) },
+              { icon: lesson.modality === "ONLINE" ? Monitor : MapPin, label: "Modalidade", value: lesson.modality === "ONLINE" ? "Online" : "Presencial" },
+            ].map(({ icon: Icon, label, value }) => (
+              <div key={label} className="flex items-start gap-2">
+                <Icon className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs text-muted-foreground">{label}</p>
+                  <p className="font-medium">{value}</p>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+
+          {!isCompleted && (
+            <a
+              href={gcUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 text-sm font-medium text-brand-blue hover:opacity-80 transition-opacity"
+            >
+              <CalendarPlus className="w-4 h-4" />
+              Adicionar ao Google Agenda
+            </a>
+          )}
         </CardContent>
       </Card>
 

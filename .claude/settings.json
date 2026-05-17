@@ -7,10 +7,13 @@
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\app\\\\\\(colaborador\\)\\\\colaborador\\\\agendamentos\\\\page.tsx\" | Measure-Object -Line\\).Lines)",
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\lib\\\\actions\\\\lesson-request.ts\" | Measure-Object -Line\\).Lines)",
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\lib\\\\actions\\\\colaborador.ts\" | Measure-Object -Line\\).Lines)",
-      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\components\\\\shared\\\\request-card.tsx\" | Measure-Object -Line\\).Lines)"
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\components\\\\shared\\\\request-card.tsx\" | Measure-Object -Line\\).Lines)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\app\\\\api\\\\professor\\\\calendar\\\\[token]\")",
+      "Bash(New-Item -ItemType Directory -Force \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\\\\components\\\\professor\")"
     ],
     "additionalDirectories": [
-      "c:\\Users\\licaodecasa_nprata\\Documents\\LC(CRM)\\src\\app\\(colaborador)\\colaborador\\professores"
+      "c:\\Users\\licaodecasa_nprata\\Documents\\LC(CRM)\\src\\app\\(colaborador)\\colaborador\\professores",
+      "c:\\Users\\licaodecasa_nprata\\Documents\\LC(CRM)\\src\\app\\api\\professor\\calendar"
     ]
   },
   "hooks": {
