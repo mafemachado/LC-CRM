@@ -846,7 +846,7 @@ export function AgendaGrid({
       setWeekLessons(v === "week"  ? data.extraLessons : [])
       setMonthLessons(v === "month" ? data.extraLessons : [])
       setPendingRequests(data.pendingRequests ?? [])
-      setWeekPendingRequests(v === "week" ? (data.weekPendingRequests ?? []) : [])
+      setWeekPendingRequests(v !== "day" ? (data.weekPendingRequests ?? []) : [])
     } catch (e) {
       if ((e as Error).name !== "AbortError") console.error("agenda fetch error", e)
     } finally {

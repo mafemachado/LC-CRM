@@ -122,33 +122,47 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     }),
   ])
 
-  // Fetch semana inteira apenas quando necessário
-  const weekLessonsRaw = viewMode === "week"
-    ? await prisma.lesson.findMany({
-        where: {
-          scheduledAt: {
-            gte: startOfDay(startOfWeek(dateObj, { weekStartsOn: 1 })),
-            lte: endOfDay(endOfWeek(dateObj,     { weekStartsOn: 1 })),
-          },
-        },
-        include: lessonInclude,
-        orderBy: { scheduledAt: "asc" },
-      })
-    : []
+  const pendingInclude = {
+    student: { include: { user: true } },
+    teacher: { include: { user: true } },
+    subject: true,
+  } as const
 
-  // Fetch mês inteiro (incluindo dias de semanas parciais)
-  const monthLessonsRaw = viewMode === "month"
-    ? await prisma.lesson.findMany({
-        where: {
-          scheduledAt: {
-            gte: startOfDay(startOfWeek(startOfMonth(dateObj), { weekStartsOn: 1 })),
-            lte: endOfDay(endOfWeek(endOfMonth(dateObj),       { weekStartsOn: 1 })),
-          },
-        },
-        include: lessonInclude,
-        orderBy: { scheduledAt: "asc" },
-      })
-    : []
+  // Fetch semana inteira apenas quando necessário
+  const weekStart = startOfDay(startOfWeek(dateObj, { weekStartsOn: 1 }))
+  const weekEnd   = endOfDay(endOfWeek(dateObj,     { weekStartsOn: 1 }))
+  const monthCalStart = startOfDay(startOfWeek(startOfMonth(dateObj), { weekStartsOn: 1 }))
+  const monthCalEnd   = endOfDay(endOfWeek(endOfMonth(dateObj),       { weekStartsOn: 1 }))
+
+  const [weekLessonsRaw, monthLessonsRaw, extPendingRaw] = await Promise.all([
+    viewMode === "week"
+      ? prisma.lesson.findMany({
+          where: { scheduledAt: { gte: weekStart, lte: weekEnd } },
+          include: lessonInclude,
+          orderBy: { scheduledAt: "asc" },
+        })
+      : Promise.resolve([]),
+    viewMode === "month"
+      ? prisma.lesson.findMany({
+          where: { scheduledAt: { gte: monthCalStart, lte: monthCalEnd } },
+          include: lessonInclude,
+          orderBy: { scheduledAt: "asc" },
+        })
+      : Promise.resolve([]),
+    viewMode === "week"
+      ? prisma.lessonRequest.findMany({
+          where: { status: "PENDING", preferredAt: { gte: weekStart, lte: weekEnd } },
+          include: pendingInclude,
+          orderBy: { preferredAt: "asc" },
+        })
+      : viewMode === "month"
+      ? prisma.lessonRequest.findMany({
+          where: { status: "PENDING", preferredAt: { gte: monthCalStart, lte: monthCalEnd } },
+          include: pendingInclude,
+          orderBy: { preferredAt: "asc" },
+        })
+      : Promise.resolve([]),
+  ])
 
   const teacherCols: TeacherCol[] = teachers.map(t => ({
     id:              t.id,
@@ -171,18 +185,23 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     date: format(l.scheduledAt, "yyyy-MM-dd"),
   }))
 
-  const pendingRequests: PendingRequestSlot[] = pendingRaw.map(r => ({
-    id:          r.id,
-    teacherId:   r.teacherId,
-    startMin:    r.preferredAt.getHours() * 60 + r.preferredAt.getMinutes(),
-    time:        format(r.preferredAt, "HH:mm"),
-    date:        format(r.preferredAt, "yyyy-MM-dd"),
-    studentName: r.student.user.name,
-    subjectName: r.subject?.name ?? "–",
-    modality:    r.modality as "PRESENCIAL" | "ONLINE",
-    teacherMode: r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID",
-    notes:       r.reason ?? null,
-  }))
+  function mapPending(r: typeof pendingRaw[0]): PendingRequestSlot {
+    return {
+      id:          r.id,
+      teacherId:   r.teacherId,
+      startMin:    r.preferredAt.getHours() * 60 + r.preferredAt.getMinutes(),
+      time:        format(r.preferredAt, "HH:mm"),
+      date:        format(r.preferredAt, "yyyy-MM-dd"),
+      studentName: r.student.user.name,
+      subjectName: r.subject?.name ?? "–",
+      modality:    r.modality as "PRESENCIAL" | "ONLINE",
+      teacherMode: r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID",
+      notes:       r.reason ?? null,
+    }
+  }
+
+  const pendingRequests:     PendingRequestSlot[] = pendingRaw.map(mapPending)
+  const weekPendingRequests: PendingRequestSlot[] = extPendingRaw.map(mapPending)
 
   const students: StudentOption[] = studentsRaw.map(s => ({
     id:               s.id,
@@ -208,6 +227,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         monthLessons={monthLessons}
         initialView={viewMode}
         pendingRequests={pendingRequests}
+        weekPendingRequests={weekPendingRequests}
       />
     </div>
   )
