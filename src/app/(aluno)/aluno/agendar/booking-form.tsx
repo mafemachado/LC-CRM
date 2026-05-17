@@ -208,10 +208,12 @@ export function BookingForm({
                         {t.bio && (
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{t.bio}</p>
                         )}
-                        <span className={`inline-flex items-center gap-1 mt-2 text-[11px] font-medium px-2 py-0.5 rounded-full border ${MODE_COLOR[t.teachingMode]}`}>
-                          {MODE_ICON[t.teachingMode]}
-                          {MODE_LABEL[t.teachingMode]}
-                        </span>
+                        {t.teachingMode && (
+                          <span className={`inline-flex items-center gap-1 mt-2 text-[11px] font-medium px-2 py-0.5 rounded-full border ${MODE_COLOR[t.teachingMode]}`}>
+                            {MODE_ICON[t.teachingMode]}
+                            {MODE_LABEL[t.teachingMode]}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </button>
