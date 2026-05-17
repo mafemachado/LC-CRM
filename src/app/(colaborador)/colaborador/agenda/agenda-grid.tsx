@@ -911,11 +911,16 @@ export function AgendaGrid({
 
   // ── Day view helpers ──────────────────────────────────────────────────────
 
-  const now    = new Date()
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-  const nowTop = today && nowMin >= START * 60 && nowMin <= END * 60
+  const [nowTime, setNowTime] = useState(() => new Date())
+  useEffect(() => {
+    const id = setInterval(() => setNowTime(new Date()), 30_000)
+    return () => clearInterval(id)
+  }, [])
+  const nowMin    = nowTime.getHours() * 60 + nowTime.getMinutes()
+  const nowTop    = today && nowMin >= START * 60 && nowMin <= END * 60
     ? px(nowMin - START * 60)
     : null
+  const nowLabel  = format(nowTime, "HH:mm")
 
   const hours     = Array.from({ length: TOTAL }, (_, i) => START + i)
   const byTeacher = (id: string) => lessons.filter(l => l.teacherId === id)
@@ -1499,9 +1504,19 @@ export function AgendaGrid({
                       {nowTop !== null && (
                         <div
                           style={{ top: nowTop }}
-                          className="absolute inset-x-0 border-t-2 border-red-500 z-10 pointer-events-none"
+                          className="absolute inset-x-0 z-10 pointer-events-none"
                         >
-                          <span className="absolute -left-1 -top-1 w-2 h-2 rounded-full bg-red-500" />
+                          {/* Ponto pulsante à esquerda */}
+                          <span className="absolute -left-1.5 -top-1.5 flex h-3 w-3">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                          </span>
+                          {/* Linha com gradiente */}
+                          <div className="h-[2px] w-full bg-gradient-to-r from-red-500 via-red-400 to-transparent" />
+                          {/* Badge com horário */}
+                          <span className="absolute left-3 -top-[10px] bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full shadow-sm shadow-red-300 leading-none">
+                            {nowLabel}
+                          </span>
                         </div>
                       )}
 

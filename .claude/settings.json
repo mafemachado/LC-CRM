@@ -15,7 +15,9 @@
       "Bash(xargs grep -l \"modality\\\\|TeacherMode\\\\|PRESENCIAL\\\\|ONLINE\")",
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\" -Recurse -Force)",
       "Bash(Select-Object -First 100)",
-      "Bash(Format-Table FullName)"
+      "Bash(Format-Table FullName)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\licaodecasa_nprata\\\\Documents\\\\LC\\(CRM\\)\\\\src\" -Recurse -Directory)",
+      "Bash(xargs grep -l \"nowTop\\\\|nowMin\\\\|border-red-500.*current\\\\|linha.*atual\")"
     ],
     "additionalDirectories": [
       "c:\\Users\\licaodecasa_nprata\\Documents\\LC(CRM)\\src\\app\\(colaborador)\\colaborador\\professores",
