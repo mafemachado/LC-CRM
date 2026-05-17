@@ -84,16 +84,17 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     const d   = l.scheduledAt
     const min = d.getHours() * 60 + d.getMinutes()
     return {
-      id:           l.id,
-      teacherId:    l.teacherId,
-      startMin:     min,
-      duration:     l.duration ?? 60,
-      status:       l.status as LessonSlot["status"],
-      modality:     l.modality as LessonSlot["modality"],
-      time:         format(d, "HH:mm"),
-      studentName:  l.student.user.name,
-      subjectName:  l.subject.name,
-      guardianName: l.student.guardian?.user.name ?? null,
+      id:            l.id,
+      teacherId:     l.teacherId,
+      startMin:      min,
+      duration:      l.duration ?? 60,
+      status:        l.status as LessonSlot["status"],
+      modality:      l.modality as LessonSlot["modality"],
+      teacherOnsite: l.teacherOnsite,
+      time:          format(d, "HH:mm"),
+      studentName:   l.student.user.name,
+      subjectName:   l.subject.name,
+      guardianName:  l.student.guardian?.user.name ?? null,
     }
   })
 

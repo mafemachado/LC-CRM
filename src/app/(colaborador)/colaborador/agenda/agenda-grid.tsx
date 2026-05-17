@@ -7,7 +7,7 @@ import { ptBR }                    from "date-fns/locale"
 import {
   ChevronLeft, ChevronRight, CalendarDays,
   CheckCircle2, XCircle, UserX, MessageCircle,
-  Loader2, Wifi, MapPin, Clock, Plus,
+  Loader2, Wifi, MapPin, Clock, Plus, Building2, Home,
 } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
 import { updateLessonStatusAction } from "@/lib/actions/lesson-request"
@@ -61,16 +61,17 @@ export interface TeacherCol {
 }
 
 export interface LessonSlot {
-  id:           string
-  teacherId:    string
-  startMin:     number
-  duration:     number
-  status:       LessonStatus
-  modality:     "PRESENCIAL" | "ONLINE"
-  time:         string
-  studentName:  string
-  subjectName:  string
-  guardianName: string | null
+  id:            string
+  teacherId:     string
+  startMin:      number
+  duration:      number
+  status:        LessonStatus
+  modality:      "PRESENCIAL" | "ONLINE"
+  teacherOnsite: boolean
+  time:          string
+  studentName:   string
+  subjectName:   string
+  guardianName:  string | null
 }
 
 // ─── Modal: detalhes de aula ─────────────────────────────────────────────────
@@ -158,12 +159,23 @@ function LessonDetailModal({
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Modalidade</p>
-              <p className="font-medium flex items-center gap-1">
-                {lesson.modality === "ONLINE"
-                  ? <><Wifi className="w-3 h-3" /> Online</>
-                  : <><MapPin className="w-3 h-3" /> Presencial</>
-                }
-              </p>
+              {lesson.modality === "ONLINE" ? (
+                <div>
+                  <p className="font-medium flex items-center gap-1">
+                    <Wifi className="w-3 h-3" /> Online
+                  </p>
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                    {lesson.teacherOnsite
+                      ? <><Building2 className="w-3 h-3 text-amber-500" /> Professor na sede</>
+                      : <><Home className="w-3 h-3 text-blue-400" /> Professor em casa</>
+                    }
+                  </p>
+                </div>
+              ) : (
+                <p className="font-medium flex items-center gap-1">
+                  <MapPin className="w-3 h-3" /> Presencial
+                </p>
+              )}
             </div>
           </div>
 
@@ -417,10 +429,16 @@ function LessonBlock({
       <div className="px-1.5 pt-1 pb-0.5">
         <div className="flex items-center gap-1">
           <p className="text-[11px] font-bold leading-tight">{lesson.time}</p>
-          {lesson.modality === "ONLINE"
-            ? <Wifi className="w-2.5 h-2.5 opacity-80 shrink-0" />
-            : <MapPin className="w-2.5 h-2.5 opacity-80 shrink-0" />
-          }
+          {lesson.modality === "ONLINE" ? (
+            <>
+              <Wifi className="w-2.5 h-2.5 opacity-80 shrink-0" />
+              {lesson.teacherOnsite && (
+                <Building2 className="w-2.5 h-2.5 opacity-90 shrink-0" />
+              )}
+            </>
+          ) : (
+            <MapPin className="w-2.5 h-2.5 opacity-80 shrink-0" />
+          )}
         </div>
         <p className="text-[12px] font-semibold leading-tight truncate">
           {lesson.studentName.split(" ")[0]}

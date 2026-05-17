@@ -88,12 +88,13 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
       teacherId:    l.teacherId,
       startMin:     min,
       duration:     l.duration ?? 60,
-      status:       l.status as LessonSlot["status"],
-      modality:     l.modality as LessonSlot["modality"],
-      time:         format(d, "HH:mm"),
-      studentName:  l.student.user.name,
-      subjectName:  l.subject.name,
-      guardianName: l.student.guardian?.user.name ?? null,
+      status:        l.status as LessonSlot["status"],
+      modality:      l.modality as LessonSlot["modality"],
+      teacherOnsite: l.teacherOnsite,
+      time:          format(d, "HH:mm"),
+      studentName:   l.student.user.name,
+      subjectName:   l.subject.name,
+      guardianName:  l.student.guardian?.user.name ?? null,
     }
   })
 
