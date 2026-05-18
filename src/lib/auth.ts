@@ -18,14 +18,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials)
-        if (!parsed.success) return null
+        if (!parsed.success) {
+          console.log("[AUTH-DEBUG] Schema inválido:", parsed.error)
+          return null
+        }
 
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email, active: true },
-        })
+        let user = null
+        try {
+          user = await prisma.user.findUnique({
+            where: { email: parsed.data.email, active: true },
+          })
+        } catch (e) {
+          console.log("[AUTH-DEBUG] Erro ao buscar usuário no banco:", e)
+          return null
+        }
+
+        console.log("[AUTH-DEBUG] Email buscado:", parsed.data.email)
+        console.log("[AUTH-DEBUG] Usuário encontrado:", user ? "SIM" : "NÃO")
+
         if (!user) return null
 
         const valid = await bcrypt.compare(parsed.data.password, user.password)
+        console.log("[AUTH-DEBUG] Senha válida:", valid)
         if (!valid) return null
 
         return { id: user.id, name: user.name, email: user.email, image: user.avatar, role: user.role, phone: user.phone }
