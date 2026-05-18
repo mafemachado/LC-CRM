@@ -11,7 +11,7 @@ export async function loginAction(formData: FormData) {
   const headerList = await headers()
   const ip = headerList.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown"
 
-  const { allowed, retryAfterSeconds } = checkRateLimit(`login:${ip}`)
+  const { allowed, retryAfterSeconds } = await checkRateLimit(`login:${ip}`)
   if (!allowed) {
     redirect(`/login?error=${encodeURIComponent(`Muitas tentativas. Aguarde ${Math.ceil(retryAfterSeconds / 60)} minuto(s).`)}`)
   }
