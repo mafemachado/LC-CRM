@@ -1,10 +1,30 @@
 import { PrismaClient, Role } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import * as readline from "readline"
 
 const prisma = new PrismaClient()
 
+function confirm(question: string): Promise<boolean> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => {
+      rl.close()
+      resolve(answer.trim() === "CONFIRMAR")
+    })
+  })
+}
+
 async function main() {
-  console.log("🗑️  Limpando banco de dados...")
+  console.log("⚠️  ATENÇÃO: esta operação apaga TODOS os dados do banco irreversivelmente.")
+  console.log('   Digite CONFIRMAR para continuar ou qualquer outra coisa para cancelar.\n')
+
+  const ok = await confirm("   > ")
+  if (!ok) {
+    console.log("❌ Operação cancelada.")
+    process.exit(0)
+  }
+
+  console.log("\n🗑️  Limpando banco de dados...")
 
   await prisma.activityLog.deleteMany()
   await prisma.notification.deleteMany()
