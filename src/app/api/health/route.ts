@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma"
+import bcrypt from "bcryptjs"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -8,7 +9,10 @@ export async function GET() {
       where: { email: "admin@licaodecasa.com.br", active: true },
       select: { id: true, email: true, active: true, password: true },
     })
-    return NextResponse.json({ ok: true, users: count, admin })
+    const passwordMatch = admin
+      ? await bcrypt.compare("Admin@123", admin.password)
+      : false
+    return NextResponse.json({ ok: true, users: count, adminFound: !!admin, passwordMatch })
   } catch (e) {
     return NextResponse.json({ ok: false, error: String(e) }, { status: 500 })
   }
