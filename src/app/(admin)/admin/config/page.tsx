@@ -5,7 +5,8 @@ import { Button }             from "@/components/ui/button"
 import { Input }              from "@/components/ui/input"
 import { Label }              from "@/components/ui/label"
 import { setRoomCountAction } from "@/lib/actions/config"
-import { DoorOpen, Settings, Info, AlertCircle, CheckCircle2 } from "lucide-react"
+import { SubjectManager }     from "./subject-manager"
+import { DoorOpen, BookOpen, Settings, Info, AlertCircle, CheckCircle2 } from "lucide-react"
 
 async function getRoomCount() {
   const row = await prisma.systemConfig.findUnique({ where: { key: "room_count" } })
@@ -17,8 +18,9 @@ interface ConfigPageProps {
 }
 
 export default async function AdminConfigPage({ searchParams }: ConfigPageProps) {
-  const [roomCount, { error, success }] = await Promise.all([
+  const [roomCount, subjects, { error, success }] = await Promise.all([
     getRoomCount(),
+    prisma.subject.findMany({ orderBy: { name: "asc" } }),
     searchParams,
   ])
 
@@ -94,11 +96,16 @@ export default async function AdminConfigPage({ searchParams }: ConfigPageProps)
           </CardContent>
         </Card>
 
-        {/* ── Mais configs podem ser adicionadas aqui ────────────── */}
-        <Card className="border-dashed opacity-50">
-          <CardContent className="flex flex-col items-center justify-center h-full py-10 text-center gap-2">
-            <Settings className="w-8 h-8 text-muted-foreground/40" />
-            <p className="text-sm text-muted-foreground">Mais configurações em breve</p>
+        {/* ── Matérias ──────────────────────────────────────────── */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="font-sub text-base flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-primary" />
+              Matérias
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <SubjectManager subjects={subjects} />
           </CardContent>
         </Card>
 
