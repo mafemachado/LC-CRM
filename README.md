@@ -8,12 +8,14 @@ Sistema de gestão de aulas particulares para a empresa **Lição de Casa**. Ate
 - **PostgreSQL** via **Prisma ORM** hospedado no **Supabase**
 - **Auth.js v5** com 4 roles: ADMIN, COLLABORATOR, TEACHER, STUDENT (+GUARDIAN)
 - **Tailwind CSS v4** + **shadcn/ui**
+- **Upstash Redis** — rate limiting distribuído (proteção brute force no login)
 - **Resend** (email) + **Z-API** (WhatsApp) + **Mercado Pago** (pagamentos)
 
 ## Pré-requisitos
 
 - Node.js 20+
 - Conta no [Supabase](https://supabase.com) (banco PostgreSQL)
+- Conta no [Upstash](https://upstash.com) (Redis — obrigatório em produção)
 - Conta no [Resend](https://resend.com) (opcional — emails)
 - Conta no [Z-API](https://z-api.io) (opcional — WhatsApp)
 
@@ -22,7 +24,7 @@ Sistema de gestão de aulas particulares para a empresa **Lição de Casa**. Ate
 ### 1. Clone e instale
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/oMarcolaXD/LC-CRM
 npm install
 ```
 
@@ -40,6 +42,9 @@ Edite `.env.local` com suas credenciais. Campos obrigatórios:
 | `DIRECT_URL` | URL direta do Supabase (porta 5432) |
 | `AUTH_SECRET` | Gere com `openssl rand -base64 32` |
 | `CRON_SECRET` | Gere com `openssl rand -base64 32` |
+| `UPSTASH_REDIS_REST_URL` | URL REST do banco Redis no Upstash |
+| `UPSTASH_REDIS_REST_TOKEN` | Token REST do banco Redis no Upstash |
+| `SEED_ADMIN_PASSWORD` | Senha do admin criada pelo `seed-admin.ts` |
 
 ### 3. Banco de dados
 
@@ -56,10 +61,12 @@ npm run dev
 
 Acesse [http://localhost:3000](http://localhost:3000).
 
-Credenciais do seed:
-- **Admin:** `admin@licaodecasa.com.br` / `Admin123`
-- **Professor:** `prof@licaodecasa.com.br` / `Prof123`
-- **Aluno:** `aluno@licaodecasa.com.br` / `Aluno123`
+Credenciais do seed de desenvolvimento:
+- **Admin:** `admin@licaodecasa.com.br` / `Admin@123`
+- **Professor:** `prof@licaodecasa.com.br` / `Prof@123`
+- **Aluno:** `aluno@licaodecasa.com.br` / `Aluno@123`
+
+> As senhas devem ter no mínimo 8 caracteres, letra maiúscula, número e caractere especial.
 
 ## Comandos úteis
 
@@ -67,16 +74,18 @@ Credenciais do seed:
 npm run dev              # Servidor de desenvolvimento (Turbopack)
 npm run build            # Build de produção
 npm run lint             # ESLint
-npx prisma studio        # Interface visual do banco
-npx prisma migrate dev   # Rodar migrations
-npx prisma generate      # Regerar o Prisma Client
+npm run db:studio        # Interface visual do banco
+npm run db:migrate       # Rodar migrations
+npm run db:seed          # Popular banco com dados de exemplo
 ```
 
 ## Deploy (Vercel + Supabase)
 
 1. Conecte o repositório ao Vercel
-2. Configure todas as variáveis de ambiente no painel do Vercel
+2. Configure todas as variáveis de ambiente no painel do Vercel (Production + Preview)
 3. O Vercel executa automaticamente os cron jobs definidos em `vercel.json`
+
+Variáveis obrigatórias na Vercel além das do `.env.example`: `UPSTASH_REDIS_REST_URL` e `UPSTASH_REDIS_REST_TOKEN`.
 
 ## Estrutura de pastas
 
