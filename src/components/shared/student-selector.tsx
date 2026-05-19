@@ -1,7 +1,7 @@
 "use client"
 
 import { useTransition }        from "react"
-import { usePathname }          from "next/navigation"
+import { useRouter }            from "next/navigation"
 import { ChevronDown, UserRound } from "lucide-react"
 import {
   DropdownMenu,
@@ -26,7 +26,7 @@ interface StudentSelectorProps {
 
 export function StudentSelector({ students, activeStudentId }: StudentSelectorProps) {
   const [, startTransition] = useTransition()
-  const pathname = usePathname()
+  const router = useRouter()
   const active = students.find((s) => s.id === activeStudentId) ?? students[0]
 
   if (!active) return null
@@ -57,11 +57,8 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
             className="cursor-pointer"
             onSelect={() => {
               startTransition(async () => {
-                try {
-                  await selectStudentAction(s.id, pathname)
-                } catch {
-                  // redirect() lança internamente — o Next.js processa a navegação
-                }
+                const result = await selectStudentAction(s.id)
+                if (result.ok) router.refresh()
               })
             }}
           >
