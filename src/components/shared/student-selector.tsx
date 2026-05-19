@@ -57,8 +57,12 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
             className="cursor-pointer"
             onSelect={() => {
               startTransition(async () => {
-                const result = await selectStudentAction(s.id)
-                if (result.ok) router.refresh()
+                try {
+                  const result = await selectStudentAction(s.id)
+                  if (result.ok) router.refresh()
+                } catch {
+                  // evita propagação para o error boundary
+                }
               })
             }}
           >
