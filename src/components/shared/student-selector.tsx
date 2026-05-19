@@ -55,11 +55,11 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
           <DropdownMenuItem
             key={s.id}
             className="cursor-pointer"
-            onSelect={() => {
+            onClick={() => {
               startTransition(async () => {
                 try {
                   const result = await selectStudentAction(s.id)
-                  if (result.ok) router.refresh()
+                  if (result.ok) setTimeout(() => router.refresh(), 50)
                 } catch {
                   // evita propagação para o error boundary
                 }
