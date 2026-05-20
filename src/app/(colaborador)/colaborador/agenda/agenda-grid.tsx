@@ -88,6 +88,7 @@ export interface LessonSlot {
   isGroupLesson: boolean
   groupSize:     number | null
   groupMates:    string[]
+  packageStatus: "pago" | "pendente" | "atrasado"
 }
 
 export interface WeekLessonSlot extends LessonSlot {
@@ -520,6 +521,318 @@ function QuickScheduleModal({
   )
 }
 
+// ─── Mini-pill de confirmação dentro do bloco de aula ────────────────────────
+
+type PillState = "ok" | "pend" | "atrasado"
+
+function ConfirmPill({ label, state }: { label: string; state: PillState }) {
+  const cfg: Record<PillState, { bg: string; color: string; ch: string }> = {
+    ok:       { bg: "var(--success-soft)", color: "var(--success)", ch: "✓" },
+    pend:     { bg: "var(--warn-soft)",    color: "var(--warn)",    ch: "?" },
+    atrasado: { bg: "var(--danger-soft)",  color: "var(--danger)",  ch: "!" },
+  }
+  const { bg, color, ch } = cfg[state]
+  return (
+    <span
+      style={{
+        flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center",
+        gap: 2, padding: "1px 3px", borderRadius: 2,
+        background: bg, color,
+        fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700,
+        whiteSpace: "nowrap", overflow: "hidden",
+      }}
+    >
+      {ch} {label}
+    </span>
+  )
+}
+
+// ─── Checklist row no painel lateral ─────────────────────────────────────────
+
+function SidePanelCheckRow({
+  label, state, detail, action,
+}: {
+  label:   string
+  state:   "ok" | "pend" | "err"
+  detail:  string
+  action?: string
+}) {
+  const cfg = {
+    ok:   { bg: "var(--success-soft)", color: "var(--success)", ch: "✓" },
+    pend: { bg: "var(--warn-soft)",    color: "var(--warn)",    ch: "?" },
+    err:  { bg: "var(--danger-soft)",  color: "var(--danger)",  ch: "!" },
+  }[state]
+  return (
+    <div className="flex items-start gap-2.5">
+      <span
+        className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-[5px] text-[11px] font-bold mt-0.5"
+        style={{ background: cfg.bg, color: cfg.color }}
+      >
+        {cfg.ch}
+      </span>
+      <div className="flex-1 min-w-0 leading-[1.35]">
+        <p className="text-[12.5px] font-medium">{label}</p>
+        <p className="text-[11px] text-muted-foreground truncate">{detail}</p>
+      </div>
+      {action && (
+        <span className="text-[11px] font-medium shrink-0" style={{ color: "var(--primary)" }}>
+          {action}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ─── Botão de ação rápida no painel lateral ───────────────────────────────────
+
+function ActionQuickBtn({
+  icon, label, onClick, disabled, danger,
+}: {
+  icon:      React.ReactNode
+  label:     string
+  onClick:   () => void
+  disabled?: boolean
+  danger?:   boolean
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`flex items-center gap-2 rounded-[7px] border px-2.5 py-2 text-left text-[11.5px] font-medium transition-colors disabled:opacity-50 ${
+        danger
+          ? "border-destructive/30 text-destructive hover:bg-destructive/10"
+          : "border-border text-muted-foreground hover:bg-[var(--hover)]"
+      }`}
+    >
+      <span className={danger ? "text-destructive" : "text-muted-foreground shrink-0"}>{icon}</span>
+      <span className="flex-1 leading-tight">{label}</span>
+    </button>
+  )
+}
+
+// ─── Painel lateral da aula selecionada (view de dia) ────────────────────────
+
+function AgDetailSidePanel({
+  lesson, teacherName, onClose, onRefresh,
+}: {
+  lesson:      LessonSlot
+  teacherName: string
+  onClose:     () => void
+  onRefresh:   () => void
+}) {
+  const [completing,    setCompleting]    = useState(false)
+  const [topicsCovered, setTopicsCovered] = useState("")
+  const [pending, start] = useTransition()
+
+  const modo   = lesson.modality === "ONLINE" ? "online" : "sede"
+  const canAct = lesson.status === "SCHEDULED" || lesson.status === "CONFIRMED"
+  const profOk  = lesson.status === "CONFIRMED" || lesson.status === "COMPLETED"
+  const alunoOk = profOk
+
+  const act = (next: "COMPLETED" | "CANCELLED" | "MISSED") =>
+    start(async () => {
+      try {
+        await updateLessonStatusAction(lesson.id, next,
+          next === "COMPLETED" ? topicsCovered : undefined)
+        toast.success(
+          next === "COMPLETED" ? "Aula concluída" :
+          next === "CANCELLED" ? "Aula cancelada" : "Falta registrada"
+        )
+        onRefresh()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erro")
+      }
+    })
+
+  const whatsapp = () =>
+    start(async () => {
+      try {
+        await sendLessonWhatsAppAction(lesson.id)
+        toast.success("WhatsApp enviado")
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erro")
+      }
+    })
+
+  return (
+    <div
+      className="flex flex-col overflow-y-auto border-l border-border bg-card shrink-0"
+      style={{ width: 340 }}
+    >
+      {/* Header */}
+      <div className="shrink-0 border-b border-border px-4 py-3.5">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+            Aula selecionada
+          </span>
+          <button
+            onClick={onClose}
+            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+          >
+            ×
+          </button>
+        </div>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="text-[16px] font-semibold leading-none">{lesson.studentName}</span>
+          <ModoBadgeDynamic modo={modo} />
+        </div>
+        <p className="mt-1.5 text-[12px] text-muted-foreground">
+          <span className="font-mono" style={{ color: "var(--text-2)" }}>{lesson.time}</span>
+          {" · "}{lesson.subjectName}{" · com "}{teacherName}
+        </p>
+      </div>
+
+      {/* Checklist */}
+      <div className="shrink-0 border-b border-border px-4 py-3.5">
+        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+          Checklist da aula
+        </p>
+        <div className="flex flex-col gap-2">
+          <SidePanelCheckRow
+            label="Pacote pago"
+            state={lesson.packageStatus === "pago" ? "ok" : lesson.packageStatus === "atrasado" ? "err" : "pend"}
+            detail={
+              lesson.packageStatus === "pago"     ? "Pacote ativo com aulas restantes" :
+              lesson.packageStatus === "atrasado" ? "Pacote esgotado ou vencido"       :
+                                                    "Sem pacote ativo"
+            }
+          />
+          <SidePanelCheckRow
+            label="Aluno confirmou presença"
+            state={alunoOk ? "ok" : "pend"}
+            detail={alunoOk ? "Confirmação registrada" : "Aguardando confirmação"}
+          />
+          <SidePanelCheckRow
+            label="Professor confirmou"
+            state={profOk ? "ok" : "pend"}
+            detail={profOk ? `${teacherName} confirmado` : "Aguardando confirmação"}
+          />
+          <SidePanelCheckRow
+            label={lesson.modality === "ONLINE" ? "Link da sala" : "Local da aula"}
+            state="ok"
+            detail={lesson.modality === "ONLINE" ? "Google Meet (link disponível)" : "Aula presencial na sede"}
+            action={lesson.modality === "ONLINE" ? "copiar" : undefined}
+          />
+        </div>
+      </div>
+
+      {/* Ações rápidas */}
+      <div className="shrink-0 border-b border-border px-4 py-3.5">
+        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+          Ações rápidas
+        </p>
+        {canAct && completing ? (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium">
+                Tópicos cobertos <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                value={topicsCovered}
+                onChange={e => setTopicsCovered(e.target.value)}
+                placeholder="Ex: Equações do 2º grau..."
+                className="mt-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                rows={3}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setCompleting(false)} disabled={pending}>
+                Voltar
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
+                onClick={() => act("COMPLETED")}
+                disabled={pending || !topicsCovered.trim()}
+              >
+                {pending
+                  ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                  : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                }
+                Salvar e concluir
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5">
+            <ActionQuickBtn
+              icon={<MessageCircle className="h-3.5 w-3.5" />}
+              label="Mensagem mãe"
+              onClick={whatsapp}
+              disabled={pending}
+            />
+            <ActionQuickBtn
+              icon={<MessageCircle className="h-3.5 w-3.5" />}
+              label="Mensagem prof."
+              onClick={() => toast.info("Em breve")}
+              disabled={pending}
+            />
+            <ActionQuickBtn
+              icon={<Clock className="h-3.5 w-3.5" />}
+              label="Mudar horário"
+              onClick={() => toast.info("Em breve")}
+              disabled={pending}
+            />
+            <ActionQuickBtn
+              icon={<Building2 className="h-3.5 w-3.5" />}
+              label="Mudar sala / modo"
+              onClick={() => toast.info("Em breve")}
+              disabled={pending}
+            />
+            {canAct && (
+              <>
+                <ActionQuickBtn
+                  icon={<CheckCircle2 className="h-3.5 w-3.5" />}
+                  label="Marcar realizada"
+                  onClick={() => setCompleting(true)}
+                  disabled={pending}
+                />
+                <ActionQuickBtn
+                  icon={<XCircle className="h-3.5 w-3.5" />}
+                  label="Cancelar aula"
+                  onClick={() => act("CANCELLED")}
+                  disabled={pending}
+                  danger
+                />
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Histórico de comunicação (stub) */}
+      <div className="flex-1 px-4 py-3.5">
+        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
+          Comunicação · hoje
+        </p>
+        <p className="text-xs italic text-muted-foreground">
+          Histórico disponível após integração com WhatsApp / e-mail.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// Helper lazy para evitar import circular — ModoBadge usa CSS vars da Fase 0
+function ModoBadgeDynamic({ modo }: { modo: "online" | "sede" }) {
+  const isOnline = modo === "online"
+  return (
+    <span
+      className="inline-flex items-center gap-[5px] rounded font-mono text-[10.5px] font-semibold leading-none whitespace-nowrap px-1.5 py-0.5"
+      style={{
+        background: isOnline ? "var(--info-soft)"   : "var(--muted-soft)",
+        color:      isOnline ? "var(--info)"         : "var(--text-2)",
+      }}
+    >
+      {isOnline
+        ? <Wifi className="h-2.5 w-2.5" />
+        : <Building2 className="h-2.5 w-2.5" />
+      }
+      {isOnline ? "Online" : "Sede"}
+    </span>
+  )
+}
+
 // ─── Bloco de aula dentro do grid ────────────────────────────────────────────
 
 function LessonBlock({
@@ -531,6 +844,13 @@ function LessonBlock({
 }) {
   const { bg, text, border } = STATUS_STYLE[lesson.status]
   const height = Math.max(px(lesson.duration), 32)
+  const modo = lesson.modality === "ONLINE" ? "online" : "sede"
+
+  const pkgState: PillState =
+    lesson.packageStatus === "pago"     ? "ok"       :
+    lesson.packageStatus === "atrasado" ? "atrasado" : "pend"
+  const profState: PillState  = lesson.status === "CONFIRMED" || lesson.status === "COMPLETED" ? "ok" : "pend"
+  const alunoState: PillState = profState
 
   return (
     <div
@@ -539,33 +859,28 @@ function LessonBlock({
       style={{ top: px(lesson.startMin - START * 60), height, left: 3, right: 3 }}
       className={`absolute rounded-lg border overflow-hidden select-none cursor-pointer transition-opacity hover:opacity-85 active:opacity-70 ${bg} ${text} ${border}`}
     >
-      <div className="px-1.5 pt-1 pb-0.5">
-        <div className="flex items-center gap-1">
-          <p className="text-[11px] font-bold leading-tight">{lesson.time}</p>
-          {lesson.modality === "ONLINE" ? (
-            <>
-              <Wifi className="w-2.5 h-2.5 opacity-80 shrink-0" />
-              {lesson.teacherOnsite && (
-                <Building2 className="w-2.5 h-2.5 opacity-90 shrink-0" />
-              )}
-            </>
-          ) : (
-            <MapPin className="w-2.5 h-2.5 opacity-80 shrink-0" />
+      <div className="flex h-full flex-col justify-between px-1.5 pt-1 pb-0.5">
+        <div>
+          <div className="flex items-center gap-1">
+            <p className="text-[11px] font-bold leading-tight">{lesson.time}</p>
+            <ModoBadgeDynamic modo={modo} />
+          </div>
+          <p className="text-[12px] font-semibold leading-tight truncate mt-0.5">
+            {lesson.studentName.split(" ")[0]}
+            {lesson.studentName.split(" ").length > 1 && (
+              <span className="opacity-80"> {lesson.studentName.split(" ")[1]?.[0]}.</span>
+            )}
+          </p>
+          {height >= 52 && (
+            <p className="text-[10px] leading-tight truncate opacity-85">{lesson.subjectName}</p>
           )}
         </div>
-        <p className="text-[12px] font-semibold leading-tight truncate">
-          {lesson.studentName.split(" ")[0]}
-          {lesson.studentName.split(" ").length > 1 && (
-            <span className="opacity-80"> {lesson.studentName.split(" ")[1]?.[0]}.</span>
-          )}
-        </p>
-        {height >= 52 && (
-          <p className="text-[10px] leading-tight truncate opacity-85">{lesson.subjectName}</p>
-        )}
-        {height >= 68 && lesson.guardianName && (
-          <p className="text-[10px] leading-tight truncate opacity-70">
-            ↳ {lesson.guardianName.split(" ")[0]}
-          </p>
+        {height >= 64 && (
+          <div className="flex gap-[3px] mt-1">
+            <ConfirmPill label="Pct"  state={pkgState}   />
+            <ConfirmPill label="Alu"  state={alunoState} />
+            <ConfirmPill label="Prof" state={profState}   />
+          </div>
         )}
       </div>
     </div>
@@ -813,12 +1128,14 @@ interface AgendaGridProps {
   initialView?:          ViewMode
   pendingRequests?:      PendingRequestSlot[]
   weekPendingRequests?:  PendingRequestSlot[]
+  scheduledCount?:       number
 }
 
 export function AgendaGrid({
   date, teachers, lessons: initialLessons, roomCount = 3, students, allStudents,
   weekLessons: initialWeekLessons, monthLessons: initialMonthLessons, initialView = "day",
   pendingRequests: initialPending, weekPendingRequests: initialWeekPending,
+  scheduledCount = 0,
 }: AgendaGridProps) {
   // ── Data state (managed client-side after initial SSR) ────────────────────
 
@@ -1356,7 +1673,8 @@ export function AgendaGrid({
 
         {/* ── VISUALIZAÇÃO: DIA ────────────────────────────── */}
         {view === "day" && (
-          <div className="overflow-auto" style={{ maxHeight: "calc(100vh - 240px)" }}>
+          <div className="flex overflow-hidden" style={{ maxHeight: "calc(100vh - 240px)" }}>
+            <div className="flex-1 min-w-0 overflow-auto">
             <div style={{ minWidth: totalW }}>
 
               {/* Cabeçalho de professores (sticky top) */}
@@ -1554,6 +1872,16 @@ export function AgendaGrid({
               </div>
 
             </div>
+            </div>{/* fim flex-1 overflow-auto */}
+
+            {selectedLesson && (
+              <AgDetailSidePanel
+                lesson={selectedLesson}
+                teacherName={effectiveTeachers.find(t => t.id === selectedLesson.teacherId)?.name ?? ""}
+                onClose={() => setSelectedLesson(null)}
+                onRefresh={() => { setSelectedLesson(null); fetchData(curDate, view) }}
+              />
+            )}
           </div>
         )}
 
@@ -1566,7 +1894,7 @@ export function AgendaGrid({
       </div>
 
       {/* ── Modais ───────────────────────────────────────────── */}
-      {selectedLesson && (
+      {selectedLesson && view !== "day" && (
         <LessonDetailModal
           lesson={selectedLesson}
           teacherName={effectiveTeachers.find(t => t.id === selectedLesson.teacherId)?.name ?? ""}

@@ -1,6 +1,8 @@
-import { prisma }        from "@/lib/prisma"
-import { PageHeader }    from "@/components/shared/page-header"
-import { AgendaGrid }    from "./agenda-grid"
+import { prisma }             from "@/lib/prisma"
+import { PageHeader }         from "@/components/shared/page-header"
+import { DayStarterBanner }   from "@/components/shared/day-starter-banner"
+import type { ConfirmacaoItem } from "@/components/shared/day-starter-banner"
+import { AgendaGrid }         from "./agenda-grid"
 import type {
   TeacherCol, LessonSlot, AvailSlot, StudentOption,
   WeekLessonSlot, ViewMode, PendingRequestSlot,
@@ -43,6 +45,7 @@ function mapToLessonSlot(
       student: {
         user: { name: string } | null
         guardian: { user: { name: string } } | null
+        packages: { remainingLessons: number }[]
       }
     }[]
     subject: { name: string }
@@ -53,6 +56,10 @@ function mapToLessonSlot(
   const first       = l.participants[0]
   const studentName = first?.student.user?.name ?? "Aluno"
   const isGroup     = l.participants.length > 1
+  const pkg         = first?.student.packages?.[0]
+  const packageStatus: LessonSlot["packageStatus"] =
+    !pkg                       ? "pendente" :
+    pkg.remainingLessons > 0   ? "pago"     : "atrasado"
   return {
     id:            l.id,
     teacherId:     l.teacherId,
@@ -68,6 +75,7 @@ function mapToLessonSlot(
     isGroupLesson: isGroup,
     groupSize:     isGroup ? l.participants.length : null,
     groupMates:    l.participants.slice(1).map(p => p.student.user?.name ?? "Aluno"),
+    packageStatus,
   }
 }
 
@@ -91,6 +99,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
           include: {
             user:     true,
             guardian: { include: { user: true } },
+            packages: {
+              where:   { status: "ACTIVE" },
+              orderBy: { purchaseDate: "desc" },
+              take:    1,
+            },
           },
         },
       },
@@ -197,7 +210,96 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     subjects:        t.subjects.map(ts => ({ id: ts.subject.id, name: ts.subject.name })),
   }))
 
-  const lessonSlots: LessonSlot[] = lessons.map(l => mapToLessonSlot(l))
+  const lessonSlots: LessonSlot[]  = lessons.map(l => mapToLessonSlot(l))
+  const scheduledCount             = lessonSlots.filter(l => l.status === "SCHEDULED").length
+
+  // ── Itens para o modal de confirmações ────────────────────────────────────
+  const scheduledLessons = lessons.filter(l => l.status === "SCHEDULED")
+
+  const confirmacaoItems: ConfirmacaoItem[] = (() => {
+    const items: ConfirmacaoItem[] = []
+
+    // 1. Responsáveis (uma linha por aula)
+    for (const lesson of scheduledLessons) {
+      const first    = lesson.participants[0]
+      if (!first) continue
+      const student  = first.student
+      const guardian = student.guardian
+      const time     = format(lesson.scheduledAt, "HH:mm")
+      const modality = lesson.modality === "ONLINE" ? "online" : "sede"
+      const studentFirst  = (student.user?.name ?? student.name).split(" ")[0]
+      const guardianName  = guardian?.user.name ?? student.user?.name ?? "Responsável"
+      const guardianFirst = guardianName.split(" ")[0]
+      const teacherFirst  = lesson.teacher.user.name.split(" ")[0]
+      const pkg      = student.packages[0]
+      const isOverdue = !pkg || pkg.remainingLessons <= 0
+      const phone    = guardian?.user.phone ?? student.user?.phone ?? null
+      const email    = guardian?.user.email ?? student.user?.email ?? null
+
+      items.push({
+        key:           `responsavel-${lesson.id}`,
+        lessonId:      lesson.id,
+        tipo:          "responsavel",
+        recipientName: guardianName,
+        recipientRole: `resp. de ${studentFirst}`,
+        recipientPhone: phone,
+        recipientEmail: email,
+        aula:          `hoje ${time} · ${lesson.subject.name} · ${modality}`,
+        via:           phone ? "WhatsApp" : "E-mail",
+        preview:       `Boa tarde, ${guardianFirst}! 💜 Confirmando a aula do(a) ${studentFirst} hoje às ${time} com ${teacherFirst} (${modality}).`,
+      })
+
+      // 3. Pacote vencido
+      if (isOverdue) {
+        items.push({
+          key:           `pacote-${lesson.id}`,
+          lessonId:      lesson.id,
+          tipo:          "pacote",
+          recipientName: guardianName,
+          recipientRole: `pacote · ${studentFirst}`,
+          recipientPhone: phone,
+          recipientEmail: email,
+          aula:          `hoje ${time} · ${studentFirst} · ${lesson.subject.name}`,
+          via:           phone ? "WhatsApp" : "E-mail",
+          preview:       `${guardianFirst}, o pacote do(a) ${studentFirst} está vencido. Pode regularizar antes da aula de hoje (${time})?`,
+        })
+      }
+    }
+
+    // 2. Professores (agrupados por teacher)
+    const teacherMap = new Map<string, typeof scheduledLessons>()
+    for (const l of scheduledLessons) {
+      teacherMap.set(l.teacherId, [...(teacherMap.get(l.teacherId) ?? []), l])
+    }
+    for (const [, tLessons] of teacherMap) {
+      const teacher      = tLessons[0].teacher
+      const teacherFirst = teacher.user.name.split(" ")[0]
+      const count        = tLessons.length
+      const aulaList     = tLessons
+        .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
+        .map(l => {
+          const t = format(l.scheduledAt, "HH:mm")
+          const s = (l.participants[0]?.student.user?.name ?? "aluno").split(" ")[0]
+          return `${t} ${s}`
+        })
+        .join(" · ")
+
+      items.push({
+        key:           `professor-${teacher.id}`,
+        lessonId:      tLessons[0].id,
+        tipo:          "professor",
+        recipientName: teacher.user.name,
+        recipientRole: tLessons[0].subject.name,
+        recipientPhone: teacher.user.phone ?? null,
+        recipientEmail: teacher.user.email ?? null,
+        aula:          aulaList,
+        via:           teacher.user.phone ? "WhatsApp" : "E-mail",
+        preview:       `Bom dia, ${teacherFirst}! Hoje você tem ${count} aula${count > 1 ? "s" : ""} agendada${count > 1 ? "s" : ""}. Confirma presença?`,
+      })
+    }
+
+    return items
+  })()
 
   const weekLessons: WeekLessonSlot[] = weekLessonsRaw.map(l => ({
     ...mapToLessonSlot(l),
@@ -243,6 +345,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         title="AGENDA"
         description={`${weekday.charAt(0).toUpperCase() + weekday.slice(1)} · ${format(dateObj, "dd/MM/yyyy")}`}
       />
+      <DayStarterBanner
+        scheduledCount={scheduledCount}
+        confirmacaoItems={confirmacaoItems}
+        dateLabel={`${weekday.charAt(0).toUpperCase() + weekday.slice(1)}, ${format(dateObj, "dd 'de' MMMM", { locale: ptBR })}`}
+      />
       <AgendaGrid
         date={dateStr}
         teachers={teacherCols}
@@ -255,6 +362,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         initialView={viewMode}
         pendingRequests={pendingRequests}
         weekPendingRequests={weekPendingRequests}
+        scheduledCount={scheduledCount}
       />
     </div>
   )

@@ -106,6 +106,7 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
       isGroupLesson: isGroup,
       groupSize:     isGroup ? l.participants.length : null,
       groupMates:    l.participants.slice(1).map(p => p.student.user?.name ?? "Aluno"),
+      packageStatus: "pago" as const,
     }
   })
 
