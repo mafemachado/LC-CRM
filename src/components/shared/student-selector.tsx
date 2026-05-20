@@ -79,10 +79,14 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
                   startTransition(async () => {
                     try {
                       const result = await selectStudentAction(s.id)
-                      if (result.ok) setTimeout(() => router.refresh(), 50)
-                      else setLocalActiveId(activeStudentId) // reverte se falhou
+                      if (result.ok) {
+                        await new Promise((r) => setTimeout(r, 50)) // deixa menu fechar
+                        router.refresh()
+                      } else {
+                        setLocalActiveId(activeStudentId) // reverte se falhou
+                      }
                     } catch {
-                      setLocalActiveId(activeStudentId)      // reverte se falhou
+                      setLocalActiveId(activeStudentId)
                     }
                   })
                 }}
