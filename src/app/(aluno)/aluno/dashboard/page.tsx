@@ -31,13 +31,13 @@ export default async function AlunoDashboard() {
 
   const [lessons, homework, materials] = await Promise.all([
     prisma.lesson.findMany({
-      where:   { studentId: student.id },
+      where:   { participants: { some: { studentId: student.id } } },
       include: { subject: true },
       orderBy: { scheduledAt: "desc" },
       take:    100,
     }),
     prisma.homework.count({
-      where: { lesson: { studentId: student.id }, status: "PENDING" },
+      where: { lesson: { participants: { some: { studentId: student.id } } }, status: "PENDING" },
     }),
     prisma.material.count({ where: { studentId: student.id } }),
   ])

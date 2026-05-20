@@ -110,7 +110,6 @@ export async function createStudentWithGuardianAction(formData: FormData) {
           const scheduledAt = new Date(`${row.date}T${row.time}:00`)
           await tx.lesson.create({
             data: {
-              studentId:    student.id,
               teacherId:    row.teacherId,
               subjectId:    row.subjectId,
               scheduledAt,
@@ -118,6 +117,7 @@ export async function createStudentWithGuardianAction(formData: FormData) {
               modality:     row.modality,
               status:       "COMPLETED",
               topicsCovered: row.topics || null,
+              participants: { create: { studentId: student.id } },
             },
           })
         }
@@ -247,7 +247,7 @@ export async function sendLessonWhatsAppAction(lessonId: string) {
   const lesson = await prisma.lesson.findUnique({
     where:   { id: lessonId },
     include: {
-      student: { include: { user: true } },
+      participants: { include: { student: { include: { user: true } } } },
       teacher: { include: { user: true } },
       subject: true,
     },
@@ -256,18 +256,20 @@ export async function sendLessonWhatsAppAction(lessonId: string) {
 
   const scheduledAt = format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
 
-  await notify({
-    userId:  lesson.student.userId ?? "",
-    type:    "LESSON_CONFIRMED",
-    title:   "Lembrete de aula confirmada",
-    message: `Sua aula de ${lesson.subject.name} com ${lesson.teacher.user.name} está confirmada para ${scheduledAt}.`,
-    email:   lesson.student.user?.email ?? undefined,
-    phone:   lesson.student.user?.phone ?? undefined,
-    data: {
-      "Matéria":    lesson.subject.name,
-      "Professor":  lesson.teacher.user.name,
-      "Data/Hora":  scheduledAt,
-      "Modalidade": lesson.modality === "ONLINE" ? "Online" : "Presencial",
-    },
-  })
+  for (const p of lesson.participants) {
+    await notify({
+      userId:  p.student.userId ?? "",
+      type:    "LESSON_CONFIRMED",
+      title:   "Lembrete de aula confirmada",
+      message: `Sua aula de ${lesson.subject.name} com ${lesson.teacher.user.name} está confirmada para ${scheduledAt}.`,
+      email:   p.student.user?.email ?? undefined,
+      phone:   p.student.user?.phone ?? undefined,
+      data: {
+        "Matéria":    lesson.subject.name,
+        "Professor":  lesson.teacher.user.name,
+        "Data/Hora":  scheduledAt,
+        "Modalidade": lesson.modality === "ONLINE" ? "Online" : "Presencial",
+      },
+    })
+  }
 }

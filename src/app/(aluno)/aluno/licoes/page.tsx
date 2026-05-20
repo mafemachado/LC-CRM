@@ -18,7 +18,7 @@ export default async function LicoesPage() {
   if (!student) redirect("/aluno/sem-aluno")
 
   const homework = await prisma.homework.findMany({
-        where:   { lesson: { studentId: student.id } },
+        where:   { lesson: { participants: { some: { studentId: student.id } } } },
         include: {
           lesson: {
             include: {

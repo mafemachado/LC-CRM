@@ -28,7 +28,7 @@ export default async function AlunoMateriaisPage() {
   if (!student) redirect("/aluno/sem-aluno")
 
   const teacherRows = await prisma.lesson.findMany({
-    where:    { studentId: student.id },
+    where:    { participants: { some: { studentId: student.id } } },
     select:   { teacherId: true },
     distinct: ["teacherId"],
   })

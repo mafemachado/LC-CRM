@@ -8,6 +8,7 @@ import { Button }       from "@/components/ui/button"
 import { Input }        from "@/components/ui/input"
 import { Label }        from "@/components/ui/label"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { PhoneInput } from "@/components/ui/phone-input"
 import { Badge }        from "@/components/ui/badge"
 import { Camera, User, Phone, Lock, CheckCircle, AlertCircle, Mail, CalendarDays } from "lucide-react"
 import { format }       from "date-fns"
@@ -204,11 +205,10 @@ export function ProfileForm({ user }: { user: ProfileUser }) {
               <Phone className="w-3.5 h-3.5 text-muted-foreground" />
               Telefone / WhatsApp
             </Label>
-            <Input
+            <PhoneInput
               id="phone"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="(11) 99999-9999"
+              onChange={(raw) => setPhone(raw)}
             />
           </div>
         </CardContent>

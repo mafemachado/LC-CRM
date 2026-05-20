@@ -34,7 +34,7 @@ export default async function ProfessorMateriaisPage() {
       orderBy: { uploadedAt: "desc" },
     }) : [],
     teacher ? prisma.student.findMany({
-      where:   { lessons: { some: { teacherId: teacher.id } } },
+      where:   { participations: { some: { lesson: { teacherId: teacher.id } } } },
       include: { user: { select: { name: true } } },
       orderBy: { user: { name: "asc" } },
     }) : [],

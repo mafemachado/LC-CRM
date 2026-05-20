@@ -30,7 +30,7 @@ export default async function ProfessorAgendaPage() {
     }) : [],
     teacher ? prisma.lesson.findMany({
       where:   { teacherId: teacher.id },
-      include: { student: { include: { user: true } }, subject: true },
+      include: { participants: { include: { student: { include: { user: true } } } }, subject: true },
       orderBy: { scheduledAt: "asc" },
       take:    60,
     }) : [],
@@ -50,7 +50,7 @@ export default async function ProfessorAgendaPage() {
     modality:    l.modality as string,
     meetingLink: l.meetingLink ?? null,
     location:    l.location   ?? null,
-    student:     { user: { name: l.student.user?.name ?? "Aluno" } },
+    student:     { user: { name: l.participants[0]?.student.user?.name ?? "Aluno" } },
     subject:     { name: l.subject.name },
   }))
 

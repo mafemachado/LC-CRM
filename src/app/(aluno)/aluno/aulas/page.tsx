@@ -38,8 +38,12 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
 
   const [lessons, requests] = await Promise.all([
     prisma.lesson.findMany({
-      where:   { studentId: student.id },
-      include: { teacher: { include: { user: true } }, subject: true },
+      where:   { participants: { some: { studentId: student.id } } },
+      include: {
+        teacher:      { include: { user: true } },
+        subject:      true,
+        participants: { include: { student: { include: { user: true } } } },
+      },
       orderBy: { scheduledAt: "desc" },
       take:    50,
     }),
@@ -49,26 +53,6 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
       orderBy: { requestedAt: "desc" },
     }),
   ])
-
-  // Busca colegas de grupo para aulas em grupo
-  const groupIds = lessons
-    .filter(l => l.isGroupLesson && l.groupId)
-    .map(l => l.groupId!)
-  const groupIdSet = [...new Set(groupIds)]
-
-  const groupSiblings = groupIdSet.length > 0
-    ? await prisma.lesson.findMany({
-        where:   { groupId: { in: groupIdSet }, studentId: { not: student?.id } },
-        select:  { groupId: true, student: { select: { user: { select: { name: true } } } } },
-      })
-    : []
-
-  // Mapa: groupId → nomes dos outros alunos
-  const groupMatesMap = groupSiblings.reduce<Record<string, string[]>>((acc, l) => {
-    if (!l.groupId) return acc
-    ;(acc[l.groupId] ??= []).push(l.student.user?.name ?? "Aluno")
-    return acc
-  }, {})
 
   return (
     <div className="space-y-6">
@@ -127,7 +111,11 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
           ) : (
             <div className="space-y-3">
               {lessons.map((lesson) => {
-                const cfg = STATUS_CONFIG[lesson.status]
+                const cfg      = STATUS_CONFIG[lesson.status]
+                const isGroup  = lesson.participants.length > 1
+                const mates    = lesson.participants
+                  .filter(p => p.studentId !== student.id)
+                  .map(p => p.student.user?.name ?? "Aluno")
                 return (
                   <div key={lesson.id} className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors">
                     {/* Data */}
@@ -148,7 +136,7 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium text-sm">{lesson.subject.name}</p>
                         <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
-                        {lesson.isGroupLesson && (
+                        {isGroup && (
                           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
                             <Users className="w-2.5 h-2.5" /> Grupo
                           </span>
@@ -157,9 +145,9 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
                       <p className="text-xs text-muted-foreground mt-0.5">
                         Prof. {lesson.teacher.user.name}
                       </p>
-                      {lesson.isGroupLesson && lesson.groupId && (groupMatesMap[lesson.groupId] ?? []).length > 0 && (
+                      {isGroup && mates.length > 0 && (
                         <p className="text-xs text-primary/70 mt-0.5">
-                          Com: {[...new Set(groupMatesMap[lesson.groupId] ?? [])].join(", ")}
+                          Com: {mates.join(", ")}
                         </p>
                       )}
                       {lesson.topicsCovered && (
@@ -174,7 +162,7 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
                             : <><MapPin className="w-3 h-3" /> Presencial</>
                           }
                         </span>
-                        {lesson.isGroupLesson && lesson.priceOverride && (
+                        {isGroup && lesson.priceOverride && (
                           <span className="text-xs text-muted-foreground">
                             R$ {Number(lesson.priceOverride).toFixed(2).replace(".", ",")} (grupo)
                           </span>

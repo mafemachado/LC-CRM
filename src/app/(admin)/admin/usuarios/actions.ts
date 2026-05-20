@@ -6,12 +6,30 @@ import { createUserSchema, updateUserSchema } from "@/lib/validations/user"
 import { revalidatePath }   from "next/cache"
 import { redirect }         from "next/navigation"
 import bcrypt               from "bcryptjs"
+import { sendWelcomeEmail } from "@/lib/email"
 import type { Role, EducationLevel, TeacherMode } from "@prisma/client"
+
+function generateStudentPassword(): string {
+  const upper   = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+  const lower   = "abcdefghjkmnpqrstuvwxyz"
+  const digits  = "23456789"
+  const special = "@#$%!"
+  const rand = (s: string) => s[Math.floor(Math.random() * s.length)]
+  const body = Array.from({ length: 4 }, () => rand(lower)).join("")
+  return rand(upper) + body + rand(digits) + rand(digits) + rand(special)
+}
 
 async function requireAdmin() {
   const session = await auth()
   if (session?.user?.role !== "ADMIN") throw new Error("Sem permissão")
   return session
+}
+
+async function guardAdminAccount(targetId: string, sessionUserId: string) {
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true } })
+  if (target?.role === "ADMIN" && targetId !== sessionUserId) {
+    redirect(`/admin/usuarios?error=${encodeURIComponent("Contas de administrador não podem ser editadas por outros usuários")}`)
+  }
 }
 
 // ─── Criar usuário ────────────────────────────────────────────────────────────
@@ -25,7 +43,7 @@ export async function createUserAction(formData: FormData) {
     redirect(`/admin/usuarios/novo?error=${encodeURIComponent(msg)}`)
   }
 
-  const { name, email, password, phone, role, grade, educationLevel, school, hourlyRate, bio, teachingMode, guardianId, relationship, selfGuardian } = parsed.data
+  const { name, email, password: rawPassword, phone, role, grade, educationLevel, school, hourlyRate, bio, teachingMode, guardianId, relationship, selfGuardian } = parsed.data
 
   const emailNorm = email && email.trim() ? email.trim() : undefined
   const phoneNorm = phone ? phone.replace(/\D/g, "") : undefined
@@ -39,7 +57,16 @@ export async function createUserAction(formData: FormData) {
     if (existsPhone) redirect("/admin/usuarios/novo?error=Telefone+já+cadastrado")
   }
 
-  const hashed = await bcrypt.hash(password, 12)
+  // Alunos: gerar senha automática se não foi fornecida
+  let generatedPassword: string | undefined
+  let passwordToHash = rawPassword
+  if (role === "STUDENT" && !rawPassword) {
+    generatedPassword = generateStudentPassword()
+    passwordToHash    = generatedPassword
+  }
+  if (!passwordToHash) redirect("/admin/usuarios/novo?error=Senha+obrigatória+para+este+perfil")
+
+  const hashed = await bcrypt.hash(passwordToHash, 12)
 
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
@@ -88,13 +115,23 @@ export async function createUserAction(formData: FormData) {
     }
   })
 
+  // Enviar e-mail de boas-vindas para alunos com e-mail cadastrado
+  if (role === "STUDENT" && emailNorm && generatedPassword) {
+    try {
+      await sendWelcomeEmail(emailNorm, name, generatedPassword)
+    } catch {
+      // Falha no e-mail não bloqueia o cadastro
+    }
+  }
+
   revalidatePath("/admin/usuarios")
   redirect("/admin/usuarios?success=Usuário+criado+com+sucesso")
 }
 
 // ─── Atualizar usuário ────────────────────────────────────────────────────────
 export async function updateUserAction(id: string, formData: FormData) {
-  await requireAdmin()
+  const session = await requireAdmin()
+  await guardAdminAccount(id, session.user.id)
 
   const raw = Object.fromEntries(formData)
   const parsed = updateUserSchema.safeParse(raw)
@@ -147,4 +184,21 @@ export async function toggleUserActiveAction(id: string, active: boolean) {
   await requireAdmin()
   await prisma.user.update({ where: { id }, data: { active } })
   revalidatePath("/admin/usuarios")
+}
+
+// ─── Excluir usuário ──────────────────────────────────────────────────────────
+export async function deleteUserAction(id: string) {
+  const session = await requireAdmin()
+
+  const target = await prisma.user.findUnique({ where: { id }, select: { role: true } })
+  if (target?.role === "ADMIN") {
+    return { error: "Contas de administrador não podem ser excluídas" }
+  }
+  if (id === session.user.id) {
+    return { error: "Você não pode excluir sua própria conta" }
+  }
+
+  await prisma.user.delete({ where: { id } })
+  revalidatePath("/admin/usuarios")
+  return { success: true }
 }

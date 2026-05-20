@@ -50,7 +50,8 @@ function gerarAulasMes(
       teacherMode === TeacherMode.PRESENCIAL ||
       (teacherMode === TeacherMode.HYBRID && modality === LessonModality.PRESENCIAL)
     return {
-      studentId, teacherId, subjectId,
+      studentId,
+      teacherId, subjectId,
       scheduledAt: pastDate(monthsAgo, day, hour),
       modality, teacherOnsite, status,
       studentRating: rating,
@@ -419,7 +420,10 @@ async function main() {
   ]
 
   for (const aula of todasAulas) {
-    await prisma.lesson.create({ data: aula })
+    const { studentId, ...lessonData } = aula
+    await prisma.lesson.create({
+      data: { ...lessonData, participants: { create: { studentId } } },
+    })
   }
   console.log(`✅ ${todasAulas.length} aulas criadas`)
 
@@ -527,14 +531,19 @@ async function main() {
   const PRECO_GRUPO_QUIMICA = 70
   const PRECO_GRUPO_MAT     = 65
 
-  const groupId1 = "group-seed-quimica-1"
   const groupDate1 = pastDate(1, 12, 15)
-  await prisma.lesson.createMany({
-    data: [
-      { studentId: "student-3",  teacherId: "teacher-3", subjectId: "sub-qui", scheduledAt: groupDate1, modality: LessonModality.PRESENCIAL, status: LessonStatus.COMPLETED, teacherOnsite: true, isGroupLesson: true, groupId: groupId1, groupSize: 3, priceOverride: PRECO_GRUPO_QUIMICA, topicsCovered: "Ácidos e bases — pH e escala pOH" },
-      { studentId: "student-8",  teacherId: "teacher-3", subjectId: "sub-qui", scheduledAt: groupDate1, modality: LessonModality.PRESENCIAL, status: LessonStatus.COMPLETED, teacherOnsite: true, isGroupLesson: true, groupId: groupId1, groupSize: 3, priceOverride: PRECO_GRUPO_QUIMICA, topicsCovered: "Ácidos e bases — pH e escala pOH" },
-      { studentId: "student-11", teacherId: "teacher-3", subjectId: "sub-qui", scheduledAt: groupDate1, modality: LessonModality.PRESENCIAL, status: LessonStatus.COMPLETED, teacherOnsite: true, isGroupLesson: true, groupId: groupId1, groupSize: 3, priceOverride: PRECO_GRUPO_QUIMICA, topicsCovered: "Ácidos e bases — pH e escala pOH" },
-    ],
+  await prisma.lesson.create({
+    data: {
+      teacherId: "teacher-3", subjectId: "sub-qui", scheduledAt: groupDate1,
+      modality: LessonModality.PRESENCIAL, status: LessonStatus.COMPLETED,
+      teacherOnsite: true, priceOverride: PRECO_GRUPO_QUIMICA,
+      topicsCovered: "Ácidos e bases — pH e escala pOH",
+      participants: { create: [
+        { studentId: "student-3"  },
+        { studentId: "student-8"  },
+        { studentId: "student-11" },
+      ]},
+    },
   })
   await prisma.payment.createMany({
     data: [
@@ -544,13 +553,17 @@ async function main() {
     ],
   })
 
-  const groupId2  = "group-seed-mat-1"
   const groupDate2 = addHours(now, 7 * 24)
-  await prisma.lesson.createMany({
-    data: [
-      { studentId: "student-1", teacherId: "teacher-1", subjectId: "sub-mat", scheduledAt: groupDate2, modality: LessonModality.PRESENCIAL, status: LessonStatus.CONFIRMED, teacherOnsite: true, isGroupLesson: true, groupId: groupId2, groupSize: 2, priceOverride: PRECO_GRUPO_MAT },
-      { studentId: "student-7", teacherId: "teacher-1", subjectId: "sub-mat", scheduledAt: groupDate2, modality: LessonModality.PRESENCIAL, status: LessonStatus.CONFIRMED, teacherOnsite: true, isGroupLesson: true, groupId: groupId2, groupSize: 2, priceOverride: PRECO_GRUPO_MAT },
-    ],
+  await prisma.lesson.create({
+    data: {
+      teacherId: "teacher-1", subjectId: "sub-mat", scheduledAt: groupDate2,
+      modality: LessonModality.PRESENCIAL, status: LessonStatus.CONFIRMED,
+      teacherOnsite: true, priceOverride: PRECO_GRUPO_MAT,
+      participants: { create: [
+        { studentId: "student-1" },
+        { studentId: "student-7" },
+      ]},
+    },
   })
   await prisma.payment.createMany({
     data: [

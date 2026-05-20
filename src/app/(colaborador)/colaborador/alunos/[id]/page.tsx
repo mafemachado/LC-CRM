@@ -37,26 +37,23 @@ interface Props {
 export default async function StudentDetailPage({ params }: Props) {
   const { id } = await params
 
-  const student = await prisma.student.findUnique({
-    where:   { id },
-    include: {
-      user: true,
-      guardian: { include: { user: true } },
-      packages: {
-        orderBy: { purchaseDate: "desc" },
-        take: 5,
+  const [student, studentLessons] = await Promise.all([
+    prisma.student.findUnique({
+      where:   { id },
+      include: {
+        user: true,
+        guardian: { include: { user: true } },
+        packages: { orderBy: { purchaseDate: "desc" }, take: 5 },
+        payments:  { orderBy: { dueDate: "desc" },    take: 5 },
       },
-      lessons: {
-        orderBy: { scheduledAt: "desc" },
-        take: 10,
-        include: { subject: true, teacher: { include: { user: true } } },
-      },
-      payments: {
-        orderBy: { dueDate: "desc" },
-        take: 5,
-      },
-    },
-  })
+    }),
+    prisma.lesson.findMany({
+      where:   { participants: { some: { studentId: id } } },
+      include: { subject: true, teacher: { include: { user: true } } },
+      orderBy: { scheduledAt: "desc" },
+      take:    10,
+    }),
+  ])
 
   if (!student) notFound()
 
@@ -65,10 +62,10 @@ export default async function StudentDetailPage({ params }: Props) {
   const guardianPhone = guardian?.user.phone?.replace(/\D/g, "")
   const activePkg    = student.packages.find((p) => p.status === "ACTIVE")
   const remaining    = activePkg?.remainingLessons ?? 0
-  const upcomingLessons = student.lessons.filter(
+  const upcomingLessons = studentLessons.filter(
     (l) => l.scheduledAt >= new Date() && ["SCHEDULED", "CONFIRMED"].includes(l.status)
   )
-  const pastLessons = student.lessons.filter(
+  const pastLessons = studentLessons.filter(
     (l) => l.scheduledAt < new Date() || ["COMPLETED", "CANCELLED", "MISSED"].includes(l.status)
   )
 

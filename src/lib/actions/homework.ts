@@ -29,7 +29,7 @@ export async function assignHomeworkAction(
 
   const lesson = await prisma.lesson.findUnique({
     where:   { id: lessonId },
-    include: { student: { include: { user: true } } },
+    include: { participants: { include: { student: { include: { user: true } } } } },
   })
   if (!lesson) throw new Error("Aula não encontrada")
 
@@ -52,15 +52,17 @@ export async function assignHomeworkAction(
     },
   })
 
-  if (lesson.student.user?.id) {
-    await notify({
-      userId:  lesson.student.user?.id,
-      type:    "HOMEWORK_ASSIGNED",
-      title:   "Nova lição de casa!",
-      message: `Você recebeu uma nova lição de casa: "${title}".${dueDate ? ` Prazo: ${new Date(dueDate).toLocaleDateString("pt-BR")}.` : ""}`,
-      email:   lesson.student.user?.email ?? undefined,
-      phone:   lesson.student.user?.phone ?? undefined,
-    })
+  for (const p of lesson.participants) {
+    if (p.student.user?.id) {
+      await notify({
+        userId:  p.student.user.id,
+        type:    "HOMEWORK_ASSIGNED",
+        title:   "Nova lição de casa!",
+        message: `Você recebeu uma nova lição de casa: "${title}".${dueDate ? ` Prazo: ${new Date(dueDate).toLocaleDateString("pt-BR")}.` : ""}`,
+        email:   p.student.user?.email ?? undefined,
+        phone:   p.student.user?.phone ?? undefined,
+      })
+    }
   }
 
   revalidatePath("/aluno/licoes")
@@ -72,7 +74,7 @@ export async function completeHomeworkAction(homeworkId: string) {
 
   const homework = await prisma.homework.findUnique({
     where:   { id: homeworkId },
-    include: { lesson: { select: { studentId: true } } },
+    include: { lesson: { include: { participants: { select: { studentId: true } } } } },
   })
   if (!homework) throw new Error("Lição não encontrada")
 
@@ -81,7 +83,8 @@ export async function completeHomeworkAction(homeworkId: string) {
       where:   { userId: session.user.id },
       include: { students: { select: { id: true } } },
     })
-    const owns = guardian?.students.some((s) => s.id === homework.lesson.studentId)
+    const participantIds = homework.lesson.participants.map((p) => p.studentId)
+    const owns = guardian?.students.some((s) => participantIds.includes(s.id))
     if (!owns) throw new Error("Sem permissão para esta lição")
   }
 

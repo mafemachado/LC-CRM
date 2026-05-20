@@ -4,7 +4,7 @@ import { passwordSchema } from "./auth"
 export const createUserSchema = z.object({
   name:          z.string().min(3, "Nome deve ter no mínimo 3 caracteres"),
   email:         z.string().email("E-mail inválido").optional().or(z.literal("")),
-  password:      passwordSchema,
+  password:      passwordSchema.optional().or(z.literal("")),
   phone:         z.string().optional(),
   role:          z.enum(["ADMIN", "COLLABORATOR", "TEACHER", "STUDENT", "GUARDIAN"]),
   grade:         z.string().optional(),

@@ -34,17 +34,16 @@ export default async function MeusAlunosPage() {
 
   const [lessonsCompleted, lessonsUpcoming, pendingPayments, activePackages] =
     await Promise.all([
-      prisma.lesson.groupBy({
+      prisma.lessonParticipant.groupBy({
         by:    ["studentId"],
-        where: { studentId: { in: studentIds }, status: "COMPLETED" },
+        where: { studentId: { in: studentIds }, lesson: { status: "COMPLETED" } },
         _count: { _all: true },
       }),
-      prisma.lesson.groupBy({
+      prisma.lessonParticipant.groupBy({
         by:    ["studentId"],
         where: {
-          studentId:   { in: studentIds },
-          status:      { in: ["SCHEDULED", "CONFIRMED"] },
-          scheduledAt: { gte: now },
+          studentId: { in: studentIds },
+          lesson:    { status: { in: ["SCHEDULED", "CONFIRMED"] }, scheduledAt: { gte: now } },
         },
         _count: { _all: true },
       }),

@@ -51,11 +51,11 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
         orderBy: { purchaseDate: "desc" },
         take:    1,
       },
-      lessons: {
-        where:   { scheduledAt: { gte: new Date() }, status: { in: ["SCHEDULED", "CONFIRMED"] } },
-        orderBy: { scheduledAt: "asc" },
+      participations: {
+        where:   { lesson: { scheduledAt: { gte: new Date() }, status: { in: ["SCHEDULED", "CONFIRMED"] } } },
+        orderBy: { lesson: { scheduledAt: "asc" } },
         take:    1,
-        include: { subject: true },
+        include: { lesson: { include: { subject: true } } },
       },
       payments: {
         orderBy: { dueDate: "desc" },
@@ -71,7 +71,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
   function StudentCard({ student }: { student: typeof students[number] }) {
     const pkg         = student.packages[0]
     const remaining   = pkg?.remainingLessons ?? 0
-    const nextLesson  = student.lessons[0]
+    const nextLesson  = student.participations[0]?.lesson
     const lastPayment = student.payments[0]
     const phone       = student.user?.phone?.replace(/\D/g, "")
     const guardian    = student.guardian
