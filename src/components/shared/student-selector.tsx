@@ -2,7 +2,7 @@
 
 import { useTransition, useState, useEffect } from "react"
 import { useRouter }                          from "next/navigation"
-import { ChevronDown, GraduationCap, Check }  from "lucide-react"
+import { ChevronDown, GraduationCap, Check, Loader2 } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,7 +55,10 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
       >
         <GraduationCap className="w-3.5 h-3.5 shrink-0" />
         <span className="max-w-[120px] truncate">{active.name}</span>
-        <ChevronDown className="w-3 h-3 shrink-0 opacity-70" />
+        {isPending
+          ? <Loader2 className="w-3 h-3 shrink-0 animate-spin opacity-70" />
+          : <ChevronDown className="w-3 h-3 shrink-0 opacity-70" />
+        }
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-52">

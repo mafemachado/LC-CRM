@@ -1,13 +1,13 @@
 "use client"
 
-import { useState }   from "react"
-import { useFormStatus } from "react-dom"
-import { Button }     from "@/components/ui/button"
+import { useState }      from "react"
+import { Button }        from "@/components/ui/button"
+import { SubmitButton }  from "@/components/ui/submit-button"
 import { Input }      from "@/components/ui/input"
 import { Label }      from "@/components/ui/label"
 import { Textarea }   from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle } from "lucide-react"
 import type { Role, TeacherMode, EducationLevel } from "@prisma/client"
 
 const ROLES = [
@@ -50,15 +50,6 @@ interface UserFormProps {
   isEdit?: boolean
 }
 
-function SubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus()
-  return (
-    <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-      {pending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-      {label}
-    </Button>
-  )
-}
 
 export function UserForm({ action, error, defaultValues, guardians = [], isEdit }: UserFormProps) {
   const [role, setRole]             = useState<string>(defaultValues?.role ?? "STUDENT")
@@ -238,7 +229,7 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
       )}
 
       <div className="flex gap-3 pt-2">
-        <SubmitButton label={isEdit ? "Salvar Alterações" : "Criar Usuário"} />
+        <SubmitButton className="w-full sm:w-auto">{isEdit ? "Salvar Alterações" : "Criar Usuário"}</SubmitButton>
         <Button type="button" variant="outline" onClick={() => history.back()}>Cancelar</Button>
       </div>
     </form>

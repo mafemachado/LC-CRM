@@ -1,34 +1,18 @@
 "use client"
 
-import { useFormStatus }  from "react-dom"
 import { loginAction }    from "./actions"
 import { GoogleButton }   from "./google-button"
-import { Button }         from "@/components/ui/button"
+import { SubmitButton }   from "@/components/ui/submit-button"
 import { Input }          from "@/components/ui/input"
 import { Label }          from "@/components/ui/label"
 import { Checkbox }       from "@/components/ui/checkbox"
 import {
-  Loader2, AlertCircle, Mail, Lock, Eye, EyeOff,
+  AlertCircle, Mail, Lock, Eye, EyeOff,
   Headphones, ShieldCheck, ArrowRight,
 } from "lucide-react"
 import Link               from "next/link"
 import { useState }       from "react"
 
-function SubmitButton() {
-  const { pending } = useFormStatus()
-  return (
-    <Button
-      type="submit"
-      disabled={pending}
-      className="w-full h-11 font-sub font-semibold text-base rounded-lg gap-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/30 active:translate-y-0 active:shadow-none"
-    >
-      {pending
-        ? <Loader2 className="w-4 h-4 animate-spin" />
-        : <><span>Entrar</span><ArrowRight className="w-4 h-4" /></>
-      }
-    </Button>
-  )
-}
 
 const ERROR_MESSAGES: Record<string, string> = {
   credentials:             "E-mail, telefone ou senha incorretos.",
@@ -112,7 +96,10 @@ export function LoginForm({ error }: { error?: string }) {
           </div>
         )}
 
-        <SubmitButton />
+        <SubmitButton className="w-full h-11 font-sub font-semibold text-base rounded-lg gap-2 transition-all duration-300 ease-out hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/30 active:translate-y-0 active:shadow-none">
+          <span>Entrar</span>
+          <ArrowRight className="w-4 h-4" />
+        </SubmitButton>
       </form>
 
       {/* Divider */}
