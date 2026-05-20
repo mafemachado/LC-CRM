@@ -1,8 +1,8 @@
 "use client"
 
-import { useTransition }                    from "react"
-import { useRouter }                        from "next/navigation"
-import { ChevronDown, GraduationCap, Check } from "lucide-react"
+import { useTransition, useState, useEffect } from "react"
+import { useRouter }                          from "next/navigation"
+import { ChevronDown, GraduationCap, Check }  from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,9 +25,14 @@ interface StudentSelectorProps {
 }
 
 export function StudentSelector({ students, activeStudentId }: StudentSelectorProps) {
-  const [isPending, startTransition] = useTransition()
-  const router   = useRouter()
-  const active   = students.find((s) => s.id === activeStudentId) ?? students[0]
+  const [isPending, startTransition]   = useTransition()
+  const router                         = useRouter()
+  const [localActiveId, setLocalActiveId] = useState(activeStudentId)
+
+  // Sincroniza quando o servidor confirma a troca (após router.refresh)
+  useEffect(() => { setLocalActiveId(activeStudentId) }, [activeStudentId])
+
+  const active = students.find((s) => s.id === localActiveId) ?? students[0]
 
   if (!active) return null
 
@@ -60,19 +65,21 @@ export function StudentSelector({ students, activeStudentId }: StudentSelectorPr
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
           {students.map((s) => {
-            const isActive = s.id === activeStudentId
+            const isActive = s.id === localActiveId
             return (
               <DropdownMenuItem
                 key={s.id}
                 className="cursor-pointer gap-2"
                 onClick={() => {
                   if (isActive) return
+                  setLocalActiveId(s.id)          // feedback visual imediato
                   startTransition(async () => {
                     try {
                       const result = await selectStudentAction(s.id)
                       if (result.ok) setTimeout(() => router.refresh(), 50)
+                      else setLocalActiveId(activeStudentId) // reverte se falhou
                     } catch {
-                      // evita propagação para o error boundary
+                      setLocalActiveId(activeStudentId)      // reverte se falhou
                     }
                   })
                 }}
