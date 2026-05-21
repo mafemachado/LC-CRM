@@ -42,7 +42,6 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
   const { success } = await searchParams
 
   const students = await prisma.student.findMany({
-    where:   { user: { active: true } },
     include: {
       user: true,
       guardian: { include: { user: true } },
@@ -62,7 +61,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
         take:    1,
       },
     },
-    orderBy: { user: { name: "asc" } },
+    orderBy: { name: "asc" },
   })
 
   const low    = students.filter((s) => (s.packages[0]?.remainingLessons ?? 0) <= 2)
