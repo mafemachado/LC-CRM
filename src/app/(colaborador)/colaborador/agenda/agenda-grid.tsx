@@ -881,19 +881,40 @@ export function AgendaGrid({
   const [monthLessons, setMonthLessons] = useState(initialMonthLessons ?? [])
   const [pendingRequests,     setPendingRequests]     = useState<PendingRequestSlot[]>(initialPending ?? [])
   const [weekPendingRequests, setWeekPendingRequests] = useState<PendingRequestSlot[]>(initialWeekPending ?? [])
-  const abortRef   = useRef<AbortController | null>(null)
-  const hasMounted = useRef(false)
+  const abortRef     = useRef<AbortController | null>(null)
+  const hasMounted   = useRef(false)
+  const scrollRef    = useRef<HTMLDivElement | null>(null)
+  const [canScrollRight, setCanScrollRight] = useState(false)
 
   const parsed = parseISO(curDate)
   const today  = isToday(parsed)
 
   // Recalcula disponibilidade dos professores conforme o dia navegado
-  const effectiveTeachers = teachers.map(t => ({
-    ...t,
-    slots: computeSlots(t.rawAvailability, getDay(parsed)),
-  }))
+  // Professores com maior disponibilidade no dia ficam à esquerda
+  const effectiveTeachers = teachers
+    .map(t => ({
+      ...t,
+      slots: computeSlots(t.rawAvailability, getDay(parsed)),
+    }))
+    .sort((a, b) => {
+      const minA = a.slots.reduce((sum, s) => sum + (s.end - s.start), 0)
+      const minB = b.slots.reduce((sum, s) => sum + (s.end - s.start), 0)
+      return minB - minA
+    })
 
   const [view, setView]                     = useState<ViewMode>(initialView)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const check = () => setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4)
+    check()
+    el.addEventListener("scroll", check, { passive: true })
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => { el.removeEventListener("scroll", check); ro.disconnect() }
+  }, [view])
+
   const [selectedLesson,  setSelectedLesson]  = useState<LessonSlot | null>(null)
   const [selectedPending, setSelectedPending] = useState<PendingRequestSlot | null>(null)
   const [quickSchedule,  setQuickSchedule]  = useState<{
@@ -1409,8 +1430,17 @@ export function AgendaGrid({
 
         {/* ── VISUALIZAÇÃO: DIA ────────────────────────────── */}
         {view === "day" && (
-          <div className="flex overflow-hidden" style={{ maxHeight: "calc(100vh - 240px)" }}>
-            <div className="flex-1 min-w-0 overflow-auto">
+          <div className="flex overflow-hidden relative" style={{ maxHeight: "calc(100vh - 240px)" }}>
+            {canScrollRight && (
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 z-40 flex items-center justify-end w-20"
+                style={{ background: "linear-gradient(to left, hsl(var(--background)) 10%, transparent 100%)" }}>
+                <div className="mr-2 flex flex-col items-center gap-1 text-muted-foreground animate-pulse">
+                  <ChevronRight className="w-5 h-5" />
+                  <span className="text-[10px] font-medium leading-tight text-center">mais<br/>prof.</span>
+                </div>
+              </div>
+            )}
+            <div ref={scrollRef} className="flex-1 min-w-0 overflow-auto">
             <div style={{ minWidth: totalW }}>
 
               {/* Cabeçalho de professores (sticky top) */}

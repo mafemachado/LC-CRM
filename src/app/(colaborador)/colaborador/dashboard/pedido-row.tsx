@@ -26,7 +26,8 @@ export function PedidoRow({
   id, studentName, respName, teacherName, teacherMode,
   subjectName, preferredAt, modality, notes, horasAtras, tag,
 }: PedidoRowProps) {
-  const [pending, startTransition] = useTransition()
+  const [approving, startApprove] = useTransition()
+  const [rejecting, startReject]  = useTransition()
   const [mod] = useState<"PRESENCIAL" | "ONLINE">(
     teacherMode === "ONLINE_ONLY" ? "ONLINE" : modality
   )
@@ -48,7 +49,7 @@ export function PedidoRow({
                        { background: "var(--hover)",       color: "var(--subtle)"   }
 
   function handleApprove() {
-    startTransition(async () => {
+    startApprove(async () => {
       try {
         await approveRequestAction(id, mod)
         toast.success("Aula confirmada")
@@ -59,7 +60,7 @@ export function PedidoRow({
   }
 
   function handleReject() {
-    startTransition(async () => {
+    startReject(async () => {
       try {
         await rejectRequestAction(id)
         toast.success("Pedido recusado")
@@ -118,20 +119,20 @@ export function PedidoRow({
           Sugerir outro
         </Link>
         <button
-          disabled={pending}
+          disabled={approving || rejecting}
           onClick={handleReject}
           className="rounded-[5px] border px-[9px] py-[5px] text-[11px] font-medium transition-colors hover:bg-[var(--danger-soft)] disabled:opacity-50"
           style={{ borderColor: "var(--danger-soft)", background: "var(--card)", color: "var(--danger)" }}
         >
-          {pending ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "Recusar"}
+          {rejecting ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "Recusar"}
         </button>
         <button
-          disabled={pending}
+          disabled={approving || rejecting}
           onClick={handleApprove}
           className="rounded-[5px] px-[10px] py-[5px] text-[11px] font-semibold text-white transition-opacity hover:opacity-80 disabled:opacity-50"
           style={{ background: "var(--primary)" }}
         >
-          {pending ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "Confirmar"}
+          {approving ? <Loader2 className="mx-auto h-3 w-3 animate-spin" /> : "Confirmar"}
         </button>
       </div>
     </div>

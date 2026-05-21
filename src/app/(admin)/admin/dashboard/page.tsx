@@ -4,6 +4,7 @@ import { prisma }      from "@/lib/prisma"
 import { Sparkline }   from "@/components/shared/kpi-card"
 import { RevenueMetaChart } from "@/components/charts/revenue-meta-chart"
 import { ModoBadge }   from "@/components/shared/modo-badge"
+import { PeriodSelector } from "./period-selector"
 import Link            from "next/link"
 import { cn }          from "@/lib/utils"
 import {
@@ -411,23 +412,7 @@ export default async function AdminOpsPage({
         </div>
 
         {/* Seletor de período */}
-        <div className="flex items-center gap-[3px] self-start rounded-[9px] border border-border bg-card p-[3px]">
-          {PERIODOS.map((p) => (
-            <Link
-              key={p.id}
-              href={`?periodo=${p.id}`}
-              className={cn(
-                "rounded-[6px] px-[11px] py-[5px] text-[12px] font-medium transition-colors",
-                periodo === p.id
-                  ? "text-white shadow-sm"
-                  : "text-muted-foreground hover:bg-[var(--hover)] hover:text-[var(--text)]"
-              )}
-              style={periodo === p.id ? { background: "var(--primary)" } : {}}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </div>
+        <PeriodSelector current={periodo} />
       </div>
 
       {/* KPI row */}

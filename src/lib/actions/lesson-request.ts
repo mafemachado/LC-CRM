@@ -143,6 +143,7 @@ export async function approveRequestAction(
     }
   }
 
+  revalidatePath("/colaborador/dashboard")
   revalidatePath("/colaborador/agendamentos")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")
@@ -173,6 +174,7 @@ export async function rejectRequestAction(requestId: string, reason?: string) {
     phone:   request.student.user?.phone ?? undefined,
   })
 
+  revalidatePath("/colaborador/dashboard")
   revalidatePath("/colaborador/agendamentos")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")

@@ -84,14 +84,35 @@ async function getColabData(userId?: string) {
     (r) => r.preferredAt >= startOfDay(now) && r.preferredAt <= endOfDay(now)
   )
 
-  const teacherIdsWithData = new Set([
-    ...todayLessons.map((l) => l.teacherId),
-    ...todayRequests.map((r) => r.teacherId),
-  ])
-  const gridTeachers = [
-    ...teachers.filter((t) => teacherIdsWithData.has(t.id)),
-    ...teachers.filter((t) => !teacherIdsWithData.has(t.id)),
-  ].slice(0, 6)
+  // Prioridade: professores já no Lição (têm aula hoje) com dia mais compacto primeiro.
+  // Dia compacto = menor span entre primeira e última aula → professor não fica esperando/sai tarde.
+  // Depois: quem tem disponibilidade mas sem aulas. Por último: sem agenda hoje.
+  function teacherPriority(t: typeof teachers[0]): { tier: number; span: number } {
+    const lessonHours = todayLessons
+      .filter((l) => l.teacherId === t.id && ["SCHEDULED", "CONFIRMED"].includes(l.status))
+      .map((l) => l.scheduledAt.getHours())
+      .sort((a, b) => a - b)
+
+    if (lessonHours.length > 0) {
+      const span = lessonHours[lessonHours.length - 1] - lessonHours[0]
+      return { tier: 2, span }
+    }
+    if (HOURS.some((h) => isAvailableAt(t.availability, h))) {
+      return { tier: 1, span: 0 }
+    }
+    return { tier: 0, span: 0 }
+  }
+
+  const GRID_LIMIT = 6
+  const sortedTeachers = [...teachers].sort((a, b) => {
+    const pa = teacherPriority(a)
+    const pb = teacherPriority(b)
+    if (pb.tier !== pa.tier) return pb.tier - pa.tier
+    // Mesmo tier: span menor aparece primeiro (dia mais compacto)
+    return pa.span - pb.span
+  })
+  const gridTeachers   = sortedTeachers.slice(0, GRID_LIMIT)
+  const hiddenTeachers = Math.max(0, teachers.length - GRID_LIMIT)
 
   type CellStatus = "busy" | "request" | "free" | "none"
   function cellStatus(teacherId: string, hour: number): CellStatus {
@@ -210,8 +231,10 @@ async function getColabData(userId?: string) {
     overdueUrgent,
     unreadCount,
     formattedRequests,
-    gridTeachers:  gridMatrix,
-    hours:         HOURS,
+    gridTeachers:   gridMatrix,
+    hiddenTeachers,
+    totalTeachers:  teachers.length,
+    hours:          HOURS,
     encaixe,
     cobrancas,
     tasks,
@@ -389,10 +412,21 @@ export default async function ColaboradorDashboard() {
             <div>
               <p className="text-[13px] font-semibold tracking-[-0.01em]">Disponibilidade hoje</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Use para confirmar pedidos com encaixe rápido
+                {d.hiddenTeachers > 0
+                  ? `Top ${Math.min(d.totalTeachers, 6)} por relevância · ${d.hiddenTeachers} professor${d.hiddenTeachers !== 1 ? "es" : ""} oculto${d.hiddenTeachers !== 1 ? "s" : ""}`
+                  : "Use para confirmar pedidos com encaixe rápido"}
               </p>
             </div>
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+              {d.hiddenTeachers > 0 && (
+                <Link
+                  href="/colaborador/agenda"
+                  className="shrink-0 font-medium transition-opacity hover:opacity-70"
+                  style={{ color: "var(--primary)" }}
+                >
+                  Ver todos ({d.totalTeachers}) →
+                </Link>
+              )}
               {(["free", "busy", "request"] as const).map((s) => (
                 <span key={s} className="flex items-center gap-1.5">
                   <span
