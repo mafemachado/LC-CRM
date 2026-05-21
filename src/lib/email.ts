@@ -1,6 +1,6 @@
 import { Resend } from "resend"
 
-const FROM = "Lição de Casa <noreply@licaodecasa.com.br>"
+const FROM = "Lição de Casa <noreply@licaocasaoficial.com>"
 
 export async function sendWelcomeEmail(to: string, name: string, password: string) {
   const resend = new Resend(process.env.RESEND_API_KEY)

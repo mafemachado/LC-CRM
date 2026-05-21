@@ -239,6 +239,73 @@ export async function markPaymentPaidColaboradorAction(id: string) {
   revalidatePath("/admin/financeiro/pagamentos")
 }
 
+// ─── Enviar confirmações em massa ─────────────────────────────────────────────
+
+export async function sendConfirmationsBatchAction(items: {
+  key:          string
+  lessonId:     string
+  destinatario: "responsavel" | "professor"
+  mensagem:     string
+}[]) {
+  await requireCollaboratorOrAdmin()
+
+  for (const item of items) {
+    const lesson = await prisma.lesson.findUnique({
+      where:   { id: item.lessonId },
+      include: {
+        participants: {
+          include: {
+            student: {
+              include: {
+                user:     true,
+                guardian: { include: { user: true } },
+              },
+            },
+          },
+          take: 1,
+        },
+        teacher: { include: { user: true } },
+        subject: true,
+      },
+    })
+    if (!lesson) continue
+
+    if (item.destinatario === "responsavel") {
+      const first    = lesson.participants[0]
+      const student  = first?.student
+      const guardian = student?.guardian
+      const userId   = guardian?.userId ?? student?.userId
+      if (!userId) continue
+
+      await notify({
+        userId,
+        type:    "LESSON_CONFIRMATION_REQUEST",
+        title:   "Confirmação de aula",
+        message: item.mensagem,
+        phone:   guardian?.user.phone   ?? student?.user?.phone   ?? undefined,
+        email:   guardian?.user.email   ?? student?.user?.email   ?? undefined,
+        data: {
+          "Matéria":  lesson.subject.name,
+          "Horário":  format(lesson.scheduledAt, "HH:mm"),
+        },
+      })
+    } else {
+      await notify({
+        userId:  lesson.teacher.userId,
+        type:    "LESSON_CONFIRMATION_REQUEST",
+        title:   "Confirmação de presença",
+        message: item.mensagem,
+        phone:   lesson.teacher.user.phone ?? undefined,
+        email:   lesson.teacher.user.email ?? undefined,
+        data: {
+          "Matéria":  lesson.subject.name,
+          "Horário":  format(lesson.scheduledAt, "HH:mm"),
+        },
+      })
+    }
+  }
+}
+
 // ─── Enviar WhatsApp de confirmação de aula ────────────────────────────────────
 
 export async function sendLessonWhatsAppAction(lessonId: string) {

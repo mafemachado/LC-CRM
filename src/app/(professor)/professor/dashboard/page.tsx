@@ -1,179 +1,717 @@
+import React     from "react"
 import { auth }   from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge }  from "@/components/ui/badge"
-import { LinkButton } from "@/components/shared/link-button"
-import { SimpleBarChart }  from "@/components/charts/bar-chart"
-import { DonutChart }      from "@/components/charts/donut-chart"
-import { CalendarCheck, GraduationCap, Wallet, Star, Clock, ArrowRight } from "lucide-react"
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns"
+import { redirect }  from "next/navigation"
+import Link       from "next/link"
+import { MeusAlunos } from "./meus-alunos"
+import { ModoBadge }  from "@/components/shared/modo-badge"
+import {
+  format, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay,
+  differenceInHours, differenceInDays, differenceInMinutes,
+} from "date-fns"
 import { ptBR } from "date-fns/locale"
 
-function brl(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
+function brl(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+}
+function relDate(date: Date, now: Date): string {
+  const h = differenceInHours(now, date)
+  const d = differenceInDays(now, date)
+  if (h < 2)  return `hoje ${format(date, "HH")}h`
+  if (h < 24) return `há ${h}h`
+  if (d === 1) return "ontem"
+  return `há ${d} dias`
+}
+function relAgo(date: Date, now: Date): string {
+  const h = differenceInHours(now, date)
+  const d = differenceInDays(now, date)
+  if (h < 1)  return "há pouco"
+  if (h < 24) return `há ${h}h`
+  if (d === 1) return "ontem"
+  return `há ${d} dias`
+}
 
-export default async function ProfessorDashboard() {
-  const session = await auth()
-  const teacher = await prisma.teacher.findFirst({
-    where: { user: { email: session?.user?.email ?? "" } },
-  })
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
-  if (!teacher) return <div className="p-8 text-muted-foreground">Perfil de professor não encontrado.</div>
+async function getProfData(email: string) {
+  const now = new Date()
 
-  const now    = new Date()
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = subMonths(now, 5 - i)
     return { start: startOfMonth(d), end: endOfMonth(d), label: format(d, "MMM", { locale: ptBR }) }
   })
+  const thisStart = startOfMonth(now)
+  const thisEnd   = endOfMonth(now)
+  const prevStart = startOfMonth(subMonths(now, 1))
+  const prevEnd   = endOfMonth(subMonths(now, 1))
 
-  const [lessons, requests, payout] = await Promise.all([
+  const teacher = await prisma.teacher.findFirst({
+    where:   { user: { email } },
+    include: { user: true, subjects: { include: { subject: true } } },
+  })
+  if (!teacher) return null
+
+  const rate = Number(teacher.hourlyRate)
+
+  const [todayLessons, allLessons] = await Promise.all([
     prisma.lesson.findMany({
-      where:   { teacherId: teacher.id },
-      include: { participants: { include: { student: { include: { user: true } } } }, subject: true },
-      orderBy: { scheduledAt: "desc" },
-      take:    100,
+      where: {
+        teacherId:   teacher.id,
+        scheduledAt: { gte: startOfDay(now), lte: endOfDay(now) },
+      },
+      include: {
+        participants: {
+          take:    1,
+          include: { student: { include: { user: true } } },
+        },
+        subject: true,
+      },
+      orderBy: { scheduledAt: "asc" },
     }),
-    prisma.lessonRequest.count({ where: { teacherId: teacher.id, status: "PENDING" } }),
-    prisma.teacherPayout.findMany({
-      where:   { teacherId: teacher.id },
-      orderBy: [{ year: "desc" }, { month: "desc" }],
-      take:    1,
+    prisma.lesson.findMany({
+      where:   { teacherId: teacher.id, scheduledAt: { gte: months[0].start } },
+      include: {
+        participants: {
+          take:    1,
+          include: {
+            student: {
+              include: {
+                user:     true,
+                packages: { where: { status: "ACTIVE" }, take: 1, orderBy: { purchaseDate: "desc" } },
+              },
+            },
+          },
+        },
+        subject:   true,
+        homework: true,
+      },
+      orderBy: { scheduledAt: "desc" },
     }),
   ])
 
-  const rate          = Number(teacher.hourlyRate)
-  const aulasDoMes    = lessons.filter((l) => l.scheduledAt >= startOfMonth(now) && l.status === "COMPLETED").length
-  const allStudentIds = lessons.flatMap((l) => l.participants.map((p) => p.studentId))
-  const totalAlunos   = new Set(allStudentIds).size
-  const projecaoMes   = aulasDoMes * rate
-  const avgRating     = lessons.filter((l) => l.studentRating).length > 0
-    ? (lessons.filter((l) => l.studentRating).reduce((s, l) => s + (l.studentRating ?? 0), 0) / lessons.filter((l) => l.studentRating).length).toFixed(1)
+  // ── MiniStats ─────────────────────────────────────────────────────────────────
+  const aulasHoje    = todayLessons.filter(l => ["SCHEDULED","CONFIRMED","COMPLETED"].includes(l.status)).length
+  const aulasMes     = allLessons.filter(l => l.status === "COMPLETED" && l.scheduledAt >= thisStart && l.scheduledAt <= thisEnd).length
+  const aulasPrevMes = allLessons.filter(l => l.status === "COMPLETED" && l.scheduledAt >= prevStart && l.scheduledAt <= prevEnd).length
+  const ganhosMes    = aulasMes * rate
+  const deltaAulas   = aulasPrevMes > 0 ? Math.round(((aulasMes - aulasPrevMes) / aulasPrevMes) * 100) : null
+
+  const ratedLessons = allLessons.filter(l => l.studentRating != null)
+  const avgRating    = ratedLessons.length > 0
+    ? (ratedLessons.reduce((s, l) => s + (l.studentRating ?? 0), 0) / ratedLessons.length).toFixed(1)
     : "–"
 
-  // Aulas por mês
-  const aulasMes = months.map(({ start, end, label }) => ({
-    label,
-    value: lessons.filter((l) => l.status === "COMPLETED" && l.scheduledAt >= start && l.scheduledAt <= end).length,
+  // ── Timeline (8h–22h) ─────────────────────────────────────────────────────────
+  const SH = 8, EH = 22, SPAN = EH - SH
+
+  const nextLesson = todayLessons.find(
+    l => l.scheduledAt > now && ["SCHEDULED","CONFIRMED"].includes(l.status)
+  )
+  const minutesUntil = nextLesson ? differenceInMinutes(nextLesson.scheduledAt, now) : null
+
+  const timelineItems = todayLessons.map(l => {
+    const lh   = l.scheduledAt.getHours() + l.scheduledAt.getMinutes() / 60
+    const le   = lh + (l.duration ?? 60) / 60
+    const isNext = nextLesson?.id === l.id
+    return {
+      left:    `${((lh - SH) / SPAN) * 100}%`,
+      width:   `${((le - lh)  / SPAN) * 100}%`,
+      time:    format(l.scheduledAt, "HH:mm"),
+      aluno:   (l.participants[0]?.student.name ?? "Aluno").split(" ")[0],
+      materia: l.subject.name,
+      modo:    (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
+      status:  l.status === "COMPLETED" ? "done"
+             : isNext                   ? "next"
+             : "soon",
+    }
+  })
+
+  const nowH    = now.getHours() + now.getMinutes() / 60
+  const nowLeft = `${((Math.min(Math.max(nowH, SH), EH) - SH) / SPAN) * 100}%`
+  const nowLabel = format(now, "HH:mm")
+  const nowVisible = nowH >= SH && nowH <= EH
+
+  // ── Próxima aula hero ─────────────────────────────────────────────────────────
+  let hero: {
+    lessonId:      string
+    hora:          string
+    horaFim:       string
+    subjectName:   string
+    studentName:   string
+    studentGrade:  string
+    initials:      string
+    aulaNum:       number
+    topicos:       string
+    modality:      "PRESENCIAL" | "ONLINE"
+    meetingLink:   string | null
+    minutesAte:    number
+  } | null = null
+
+  if (nextLesson) {
+    const stId      = nextLesson.participants[0]?.studentId
+    const aulaNum   = stId
+      ? allLessons.filter(l => l.participants[0]?.studentId === stId && l.status === "COMPLETED").length + 1
+      : 1
+    const stName    = nextLesson.participants[0]?.student.name ?? ""
+    const initials  = stName.split(" ").filter(Boolean).slice(0, 2).map(s => s[0]).join("").toUpperCase() || "AL"
+    const stGrade   = nextLesson.participants[0]?.student.grade ?? "—"
+    const endH      = new Date(nextLesson.scheduledAt.getTime() + (nextLesson.duration ?? 60) * 60000)
+
+    hero = {
+      lessonId:     nextLesson.id,
+      hora:         format(nextLesson.scheduledAt, "HH:mm"),
+      horaFim:      format(endH, "HH:mm"),
+      subjectName:  nextLesson.subject.name,
+      studentName:  stName,
+      studentGrade: stGrade,
+      initials,
+      aulaNum,
+      topicos:      nextLesson.topicsCovered ?? nextLesson.subject.name,
+      modality:     nextLesson.modality as "PRESENCIAL" | "ONLINE",
+      meetingLink:  nextLesson.meetingLink ?? null,
+      minutesAte:   minutesUntil ?? 0,
+    }
+  }
+
+  // ── Avaliações ────────────────────────────────────────────────────────────────
+  const avaliacoes = allLessons
+    .filter(l => (l.studentRating ?? 0) > 0 && l.studentFeedback)
+    .slice(0, 3)
+    .map(l => ({
+      aluno: (l.participants[0]?.student.name ?? "Aluno").split(" ").slice(0, 2).join(" "),
+      nota:  l.studentRating ?? 5,
+      txt:   l.studentFeedback ?? "",
+      data:  relAgo(l.scheduledAt, now),
+    }))
+
+  // ── Ganhos chart (6 meses) ────────────────────────────────────────────────────
+  const ganhosMeses = months.map(m => ({
+    m: m.label,
+    v: allLessons.filter(l => l.status === "COMPLETED" && l.scheduledAt >= m.start && l.scheduledAt <= m.end).length * rate,
   }))
+  const ganhosMax = Math.max(...ganhosMeses.map(m => m.v), 1)
 
-  // Status das aulas
-  const lessonStatus = [
-    { label: "Realizadas",  value: lessons.filter((l) => l.status === "COMPLETED").length,  color: "#FB8500" },
-    { label: "Confirmadas", value: lessons.filter((l) => l.status === "CONFIRMED").length,  color: "#219EBC" },
-    { label: "Canceladas",  value: lessons.filter((l) => l.status === "CANCELLED").length,  color: "#ef4444" },
-    { label: "Faltou",      value: lessons.filter((l) => l.status === "MISSED").length,     color: "#f97316" },
-  ].filter((d) => d.value > 0)
-
-  // Próximas aulas
-  const proximas = lessons.filter((l) => ["SCHEDULED","CONFIRMED"].includes(l.status) && l.scheduledAt >= now)
-    .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
+  const subjectBreak = new Map<string, { name: string; aulas: number }>()
+  for (const l of allLessons.filter(l => l.status === "COMPLETED" && l.scheduledAt >= thisStart)) {
+    const sid = l.subjectId ?? "other"
+    const cur = subjectBreak.get(sid) ?? { name: l.subject?.name ?? "Outros", aulas: 0 }
+    cur.aulas++
+    subjectBreak.set(sid, cur)
+  }
+  const BREAKDOWN_COLORS = ["var(--primary)", "var(--info)", "var(--success)", "var(--warn)"]
+  const ganhosBreakdown = Array.from(subjectBreak.values())
+    .sort((a, b) => b.aulas - a.aulas)
     .slice(0, 4)
+    .map((s, i) => ({ ...s, valor: s.aulas * rate, color: BREAKDOWN_COLORS[i] ?? "var(--muted)" }))
 
-  const hora     = new Date().getHours()
+  const diasAtePagamento = Math.max(1, differenceInDays(endOfMonth(now), now))
+
+  // ── Meus alunos ───────────────────────────────────────────────────────────────
+  type AlunoRow = { id: string; name: string; initials: string; grade: string; aulas: number; lastAula: string; content: string; modo: "sede"|"online"; tag: string; tagColor: "success"|"warn"|"danger"|"muted" }
+  const studentMap = new Map<string, AlunoRow & { _lastDate: Date }>()
+
+  for (const l of allLessons) {
+    const p = l.participants[0]
+    if (!p) continue
+    const sid = p.studentId
+    if (!studentMap.has(sid)) {
+      const n = p.student.name ?? "Aluno"
+      studentMap.set(sid, {
+        id:       sid,
+        name:     n,
+        initials: n.split(" ").filter(Boolean).slice(0,2).map((s: string)=>s[0]).join("").toUpperCase(),
+        grade:    p.student.grade ?? "—",
+        aulas:    0,
+        lastAula: "—",
+        content:  l.subject.name,
+        modo:     l.modality === "PRESENCIAL" ? "sede" : "online",
+        tag:      "Em dia",
+        tagColor: "success",
+        _lastDate: l.scheduledAt,
+      })
+    }
+    const s = studentMap.get(sid)!
+    if (["COMPLETED","SCHEDULED","CONFIRMED"].includes(l.status)) s.aulas++
+    if (l.scheduledAt > s._lastDate || s.aulas === 1) {
+      s._lastDate = l.scheduledAt
+      s.content   = l.topicsCovered ?? l.subject.name
+      s.modo      = l.modality === "PRESENCIAL" ? "sede" : "online"
+    }
+    const pkg = p.student.packages?.[0]
+    if (pkg && pkg.remainingLessons <= 2 && s.tag === "Em dia") {
+      s.tag = "Renovar"; s.tagColor = "warn"
+    }
+  }
+
+  const alunos: AlunoRow[] = Array.from(studentMap.values())
+    .map(({ _lastDate, ...rest }) => ({ ...rest, lastAula: relDate(_lastDate, now) }))
+    .sort((a, b) => b.aulas - a.aulas)
+    .slice(0, 15)
+
+  // ── Lições ────────────────────────────────────────────────────────────────────
+  type LicaoRow = { id: string; titulo: string; aluno: string; alunoInitials: string; tipo: "lição"|"resumo"|"material"; enviado: string; status: "feito"|"pendente"; sub: string }
+  const licoes: LicaoRow[] = []
+  for (const l of allLessons) {
+    for (const hw of l.homework) {
+      const stName = (l.participants[0]?.student.name ?? "Aluno").split(" ").slice(0, 2).join(" ")
+      licoes.push({
+        id:            hw.id,
+        titulo:        hw.title,
+        aluno:         stName,
+        alunoInitials: stName.split(" ").filter(Boolean).slice(0,2).map((s: string)=>s[0]).join("").toUpperCase(),
+        tipo:          "lição",
+        enviado:       relAgo(hw.createdAt, now),
+        status:        hw.status === "COMPLETED" ? "feito" : "pendente",
+        sub:           hw.status === "COMPLETED"
+          ? (hw.completedAt ? `concluído ${relAgo(hw.completedAt, now)}` : "concluído")
+          : "ainda não entregue",
+      })
+    }
+  }
+
+  const hora     = now.getHours()
   const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite"
 
+  return {
+    teacherName:     teacher.user.name,
+    teacherSubjects: teacher.subjects.map(ts => ts.subject.name),
+    saudacao,
+    dateLabel:  format(now, "EEEE · dd 'de' MMMM", { locale: ptBR }),
+    aulasHoje, aulasMes, deltaAulas, ganhosMes, avgRating,
+    timelineItems, nowLeft, nowLabel, nowVisible, minutesUntil,
+    hero,
+    avaliacoes,
+    totalAvaliacoes: ratedLessons.length,
+    ganhosMeses, ganhosMax, ganhosBreakdown,
+    diasAtePagamento,
+    alunos,
+    licoes: licoes.slice(0, 8),
+    totalAlunos: studentMap.size,
+  }
+}
+
+// ─── Timeline tick labels ─────────────────────────────────────────────────────
+const TIMELINE_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
+const TIMELINE_SPAN  = 14 // 8 to 22
+
+const TL_COLOR = {
+  done: { bg: "var(--success-soft)", border: "var(--success)" },
+  next: { bg: "var(--accent-soft)",  border: "var(--primary)" },
+  soon: { bg: "var(--info-soft)",    border: "var(--info)"    },
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default async function ProfessorDashboard() {
+  const session = await auth()
+  if (!session?.user?.email) redirect("/login")
+
+  const d = await getProfData(session.user.email)
+  if (!d) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+        Perfil de professor não encontrado. Contate o administrador.
+      </div>
+    )
+  }
+
+  const dateCapitalized = d.dateLabel.charAt(0).toUpperCase() + d.dateLabel.slice(1)
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-3">
+    <div className="flex flex-col gap-[18px]">
+
+      {/* Header: greeting + 4 MiniStats */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl">{saudacao}, {session?.user?.name?.split(" ")[0]}!</h1>
-          <p className="text-muted-foreground text-sm mt-1">{format(new Date(), "EEEE, dd/MM/yyyy", { locale: ptBR })}</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+            {d.saudacao}, {d.teacherName.split(" ")[0]}
+          </p>
+          <h1 className="font-sub text-[22px] font-semibold leading-tight tracking-[-0.02em]">
+            {d.aulasHoje} aula{d.aulasHoje !== 1 ? "s" : ""} hoje
+            {d.minutesUntil != null && (
+              <>
+                {" · próxima em "}
+                <span style={{ color: "var(--primary)" }}>
+                  {d.minutesUntil < 60
+                    ? `${d.minutesUntil} min`
+                    : `${Math.floor(d.minutesUntil / 60)}h${d.minutesUntil % 60 > 0 ? `${d.minutesUntil % 60}` : ""}`}
+                </span>
+              </>
+            )}
+          </h1>
         </div>
-        {requests > 0 && (
-          <LinkButton href="/professor/agenda" variant="outline" size="sm">
-            <Clock className="w-4 h-4 mr-2 text-orange-500" />
-            {requests} solicitação{requests > 1 ? "ões" : ""} pendente{requests > 1 ? "s" : ""}
-            <ArrowRight className="w-3 h-3 ml-1" />
-          </LinkButton>
-        )}
+
+        {/* 4 MiniStats */}
+        <div
+          className="flex overflow-hidden rounded-[8px] border border-border"
+          style={{ gap: "1px", background: "var(--border)" }}
+        >
+          {[
+            { label: "Aulas hoje",    value: String(d.aulasHoje),  sub: `${d.aulasHoje} total`,          mono: false },
+            { label: "Aulas no mês",  value: String(d.aulasMes),   sub: d.deltaAulas != null ? `${d.deltaAulas >= 0 ? "+" : ""}${d.deltaAulas}% vs. mês ant.` : "primeiro mês", mono: false, subPos: d.deltaAulas != null ? d.deltaAulas >= 0 : null },
+            { label: "Ganhos do mês", value: brl(d.ganhosMes),     sub: `${d.aulasMes} aulas`,            mono: true  },
+            { label: "Avaliação",     value: d.avgRating,          sub: `${d.totalAvaliacoes} reviews`,   mono: false },
+          ].map(({ label, value, sub, mono, subPos }) => (
+            <div key={label} className="min-w-[130px] bg-card px-[16px] py-[10px]">
+              <p className="text-[10.5px] font-medium uppercase tracking-[0.04em] text-muted-foreground">{label}</p>
+              <p
+                className="mt-[2px] text-[18px] font-semibold leading-none tracking-[-0.02em]"
+                style={{ fontFamily: mono ? "var(--font-mono, ui-monospace)" : "inherit", fontFeatureSettings: '"tnum"' }}
+              >
+                {value}
+              </p>
+              <p
+                className="mt-[2px] text-[10.5px]"
+                style={{ color: subPos === true ? "var(--success)" : subPos === false ? "var(--danger)" : "var(--muted)" }}
+              >
+                {sub}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { title: "Aulas Realizadas (Mês)", value: aulasDoMes,         icon: CalendarCheck, color: "text-primary",    bg: "bg-primary/10"   },
-          { title: "Meus Alunos",            value: totalAlunos,        icon: GraduationCap, color: "text-secondary",  bg: "bg-secondary/10" },
-          { title: "Projeção do Mês",        value: brl(projecaoMes),   icon: Wallet,        color: "text-green-600",  bg: "bg-green-50"     },
-          { title: "Avaliação Média",        value: `${avgRating}★`,    icon: Star,          color: "text-yellow-500", bg: "bg-yellow-50"    },
-        ].map(({ title, value, icon: Icon, color, bg }, i) => (
-          <Card key={title} className="card-lift animate-fade-up"
-            style={{ "--delay": `${i * 60}ms` } as React.CSSProperties}>
-            <CardContent className="p-5 flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">{title}</p>
-                <p className="text-xl font-bold mt-1">{value}</p>
-              </div>
-              <div className={`${bg} p-2.5 rounded-xl shrink-0`}><Icon className={`w-5 h-5 ${color}`} /></div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Aulas por mês */}
-        <Card className="animate-scale-in" style={{ "--delay": "120ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <CalendarCheck className="w-4 h-4 text-primary" /> Aulas Realizadas — 6 Meses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {aulasMes.some((r) => r.value > 0)
-              ? <SimpleBarChart data={aulasMes} color="#FB8500" height={200} />
-              : <p className="text-sm text-muted-foreground text-center py-16">Nenhuma aula realizada ainda</p>
-            }
-          </CardContent>
-        </Card>
-
-        {/* Status geral */}
-        <Card className="animate-scale-in" style={{ "--delay": "180ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <Star className="w-4 h-4 text-primary" /> Status das Aulas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {lessonStatus.length > 0
-              ? <DonutChart data={lessonStatus} height={220} />
-              : <p className="text-sm text-muted-foreground text-center py-16">Nenhuma aula registrada ainda</p>
-            }
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Próximas aulas */}
-      {proximas.length > 0 && (
-        <Card className="animate-fade-up" style={{ "--delay": "240ms" } as React.CSSProperties}>
-          <CardHeader className="pb-3">
-            <CardTitle className="font-sub text-base flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                <CalendarCheck className="w-4 h-4 text-primary" /> Próximas Aulas
+      {/* Timeline */}
+      <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+        <div className="flex flex-wrap items-start justify-between gap-3 p-[14px_18px_6px]">
+          <div>
+            <p className="text-[13px] font-semibold tracking-[-0.01em]">Linha do dia</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              {d.aulasHoje} aula{d.aulasHoje !== 1 ? "s" : ""} hoje
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            {(["done","next","soon"] as const).map((s, i) => (
+              <span key={s} className="flex items-center gap-1.5">
+                <span className="inline-block h-[10px] w-[10px] rounded-[2px]" style={{ background: TL_COLOR[s].border }} />
+                {["Concluída","Próxima","Agendada"][i]}
               </span>
-              <LinkButton href="/professor/agenda" variant="ghost" size="sm">Ver todas <ArrowRight className="w-3 h-3 ml-1" /></LinkButton>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {proximas.map((l, i) => (
-              <div key={l.id} className="flex items-center justify-between p-3 rounded-lg border border-border
-                transition-colors duration-150 hover:bg-muted/40"
-                style={{ animationDelay: `${260 + i * 40}ms` }}>
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="shrink-0 w-12 text-center">
-                    <p className="text-base font-bold text-primary">{format(l.scheduledAt, "dd")}</p>
-                    <p className="text-xs text-muted-foreground">{format(l.scheduledAt, "HH:mm")}</p>
+            ))}
+          </div>
+        </div>
+
+        {/* Timeline track */}
+        <div className="overflow-x-auto px-[18px] pb-[16px]">
+          <div className="relative mt-[14px]" style={{ height: 70, minWidth: 600 }}>
+            {/* Tick marks */}
+            {TIMELINE_HOURS.map((h) => {
+              const left = `${((h - 8) / TIMELINE_SPAN) * 100}%`
+              return (
+                <React.Fragment key={h}>
+                  <div
+                    className="absolute"
+                    style={{ left, top: 22, bottom: 8, width: 1, background: "var(--border)" }}
+                  />
+                  <div
+                    className="absolute font-mono text-[10px]"
+                    style={{ left, top: 0, transform: "translateX(-50%)", color: "var(--muted)" }}
+                  >
+                    {String(h).padStart(2, "0")}h
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{l.participants[0]?.student.user?.name ?? "Aluno"}</p>
-                    <p className="text-xs text-muted-foreground">{l.subject.name}</p>
+                </React.Fragment>
+              )
+            })}
+
+            {/* Track background */}
+            <div
+              className="absolute left-0 right-0 rounded-[6px] border border-border"
+              style={{ top: 32, height: 38, background: "var(--card-2)" }}
+            />
+
+            {/* "Agora" indicator */}
+            {d.nowVisible && (
+              <div
+                className="absolute z-10"
+                style={{ left: d.nowLeft, top: 18, bottom: 4, width: 2, background: "var(--danger)" }}
+              >
+                <div
+                  className="absolute rounded-full"
+                  style={{ top: -2, left: -4, width: 10, height: 10, background: "var(--danger)" }}
+                />
+                <div
+                  className="absolute left-[6px] font-mono text-[10px] font-semibold whitespace-nowrap"
+                  style={{ top: -16, color: "var(--danger)" }}
+                >
+                  {d.nowLabel}
+                </div>
+              </div>
+            )}
+
+            {/* Lesson blocks */}
+            {d.timelineItems.map((item, i) => {
+              const c = TL_COLOR[item.status as keyof typeof TL_COLOR]
+              return (
+                <div
+                  key={i}
+                  className="absolute z-[2] flex flex-col justify-center overflow-hidden rounded-[4px] px-2 py-1"
+                  style={{
+                    left:        item.left,
+                    width:       item.width,
+                    top:         33,
+                    height:      36,
+                    background:  c.bg,
+                    borderLeft:  `3px solid ${c.border}`,
+                  }}
+                >
+                  <div className="flex items-center gap-1.5 overflow-hidden whitespace-nowrap">
+                    <span className="overflow-hidden text-ellipsis text-[11px] font-semibold" style={{ color: "var(--text)" }}>
+                      {item.aluno}
+                    </span>
+                    <span
+                      className="shrink-0 rounded-[2px] px-[4px] py-px font-mono text-[8.5px] font-bold"
+                      style={{
+                        background: item.modo === "online" ? "var(--info-soft)"  : "var(--muted-soft)",
+                        color:      item.modo === "online" ? "var(--info)"       : "var(--text-2)",
+                      }}
+                    >
+                      {item.modo === "online" ? "ON" : "SD"}
+                    </span>
+                  </div>
+                  <div
+                    className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px]"
+                    style={{ color: "var(--muted)" }}
+                  >
+                    {item.time} · {item.materia}
                   </div>
                 </div>
-                <Badge variant={l.status === "CONFIRMED" ? "default" : "secondary"}>
-                  {l.status === "CONFIRMED" ? "Confirmada" : "Agendada"}
-                </Badge>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Main grid: Left (hero + alunos) | Right (avaliações + ganhos) */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.45fr_1fr]">
+
+        {/* Left column */}
+        <div className="flex flex-col gap-4">
+
+          {/* ProxAulaHero */}
+          {d.hero ? (
+            <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+              <div className="flex items-start justify-between gap-3 p-[12px_14px_0_14px]">
+                <div>
+                  <p className="text-[13px] font-semibold tracking-[-0.01em]">
+                    Próxima aula · em {d.hero.minutesAte < 60 ? `${d.hero.minutesAte} min` : `${Math.floor(d.hero.minutesAte/60)}h`}
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    {d.hero.hora} — {d.hero.horaFim} · {d.hero.subjectName}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <ModoBadge modo={d.hero.modality === "PRESENCIAL" ? "sede" : "online"} size="md" />
+                  <Link
+                    href={`/professor/agenda/${d.hero.lessonId}`}
+                    className="rounded-[6px] border border-border bg-card px-3 py-[5px] text-[12px] font-medium transition-colors hover:bg-[var(--hover)]"
+                    style={{ color: "var(--text)" }}
+                  >
+                    + Lição de casa
+                  </Link>
+                  {d.hero.modality === "ONLINE" && d.hero.meetingLink && (
+                    <a
+                      href={d.hero.meetingLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-[6px] px-3 py-[5px] text-[12px] font-semibold text-white transition-opacity hover:opacity-80"
+                      style={{ background: "var(--primary)" }}
+                    >
+                      Abrir sala →
+                    </a>
+                  )}
+                </div>
               </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+
+              <div className="grid gap-[14px] p-[12px_14px_14px]" style={{ gridTemplateColumns: "52px 1fr" }}>
+                {/* Avatar */}
+                <div
+                  className="flex h-[52px] w-[52px] items-center justify-center rounded-[10px] text-[18px] font-semibold text-white"
+                  style={{ background: "linear-gradient(135deg, var(--primary), #ea580c)" }}
+                >
+                  {d.hero.initials}
+                </div>
+
+                {/* Info */}
+                <div className="min-w-0">
+                  <div className="mb-[2px] flex flex-wrap items-center gap-2">
+                    <span className="text-[15px] font-semibold">{d.hero.studentName}</span>
+                    <span
+                      className="rounded-[4px] px-[7px] py-[2px] font-mono text-[10.5px]"
+                      style={{ background: "var(--info-soft)", color: "var(--info)" }}
+                    >
+                      {d.hero.studentGrade}
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground">
+                      {d.hero.aulaNum}ª aula
+                    </span>
+                  </div>
+                  <p className="mb-3 text-[12px]" style={{ color: "var(--muted)" }}>
+                    Plano:{" "}
+                    <span style={{ color: "var(--text-2)" }}>{d.hero.topicos}</span>
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+                    <div className="rounded-[7px] p-[10px]" style={{ background: "var(--card-2)" }}>
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                        Histórico recente
+                      </p>
+                      <p style={{ color: "var(--text-2)", lineHeight: 1.4 }}>
+                        {d.hero.aulaNum > 1
+                          ? `${Math.min(d.hero.aulaNum - 1, 3)} aula${d.hero.aulaNum > 2 ? "s" : ""} anterior${d.hero.aulaNum > 2 ? "es" : ""}`
+                          : "Primeira aula com este aluno"}
+                      </p>
+                    </div>
+                    <div className="rounded-[7px] p-[10px]" style={{ background: "var(--card-2)" }}>
+                      <p className="mb-1 text-[10px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                        Próxima aula
+                      </p>
+                      <p style={{ color: "var(--text-2)", lineHeight: 1.4 }}>
+                        {d.hero.hora} — {d.hero.horaFim} · {d.hero.subjectName}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="flex items-center justify-center rounded-[10px] border border-border bg-card py-8 text-[12.5px] text-muted-foreground"
+            >
+              Nenhuma aula agendada para as próximas horas
+            </div>
+          )}
+
+          {/* MeusAlunos (client, with tabs) */}
+          <MeusAlunos
+            alunos={d.alunos}
+            licoes={d.licoes}
+            totalAlunos={d.totalAlunos}
+          />
+        </div>
+
+        {/* Right column */}
+        <div className="flex flex-col gap-4">
+
+          {/* Avaliações */}
+          <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 p-[12px_14px_8px]">
+              <div>
+                <p className="text-[13px] font-semibold tracking-[-0.01em]">Avaliações recentes</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {d.totalAvaliacoes} avaliações{d.avgRating !== "–" ? ` · média ${d.avgRating}` : ""}
+                </p>
+              </div>
+              <span className="text-[11px] font-medium" style={{ color: "var(--primary)" }}>
+                Ver todas →
+              </span>
+            </div>
+            <div className="flex flex-col gap-[10px] px-[16px] pb-[14px]">
+              {d.avaliacoes.length === 0 ? (
+                <p className="py-4 text-center text-[12px] text-muted-foreground">
+                  Nenhuma avaliação ainda
+                </p>
+              ) : (
+                d.avaliacoes.map((r, i) => (
+                  <div key={i} className="rounded-[7px] p-[10px_12px]" style={{ background: "var(--card-2)" }}>
+                    <div className="mb-1 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11.5px] font-medium">{r.aluno}</span>
+                        <span className="text-[11px]" style={{ color: "var(--primary)" }}>
+                          {"★".repeat(r.nota)}
+                          <span style={{ color: "var(--subtle)" }}>{"★".repeat(Math.max(0, 5 - r.nota))}</span>
+                        </span>
+                      </div>
+                      <span className="text-[10.5px] text-muted-foreground">{r.data}</span>
+                    </div>
+                    <p className="text-[12px] leading-[1.4]" style={{ color: "var(--text-2)" }}>
+                      &ldquo;{r.txt}&rdquo;
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Ganhos */}
+          <div className="flex flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="p-[12px_14px_8px]">
+              <p className="text-[13px] font-semibold tracking-[-0.01em]">Meus ganhos · {format(new Date(), "MMMM", { locale: ptBR })}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {d.aulasMes} aulas · próximo pagamento em ~{d.diasAtePagamento} dias
+              </p>
+            </div>
+
+            <div className="flex flex-1 flex-col gap-[14px] px-[18px] pb-[16px]">
+              {/* Big number */}
+              <div className="flex items-baseline gap-3">
+                <span className="text-[30px] font-semibold leading-none tracking-[-0.025em]" style={{ fontFeatureSettings: '"tnum"' }}>
+                  {brl(d.ganhosMes)}
+                </span>
+                {d.deltaAulas != null && (
+                  <span
+                    className="rounded-[4px] px-[7px] py-[2px] font-mono text-[11px]"
+                    style={{
+                      background: d.deltaAulas >= 0 ? "var(--success-soft)" : "var(--danger-soft)",
+                      color:      d.deltaAulas >= 0 ? "var(--success)"      : "var(--danger)",
+                    }}
+                  >
+                    {d.deltaAulas >= 0 ? "▲" : "▼"} {Math.abs(d.deltaAulas)}%
+                  </span>
+                )}
+              </div>
+
+              {/* Bar chart (6 months) */}
+              <div className="flex h-[72px] items-end gap-1.5">
+                {d.ganhosMeses.map((m, i) => {
+                  const hPct = d.ganhosMax > 0 ? (m.v / d.ganhosMax) * 100 : 0
+                  const isCurrent = i === d.ganhosMeses.length - 1
+                  return (
+                    <div key={m.m} className="flex flex-1 flex-col items-center gap-1">
+                      <div
+                        className="w-full rounded-[3px]"
+                        style={{
+                          height:     `${Math.max(hPct, 4)}%`,
+                          background: isCurrent ? "var(--primary)" : "var(--border-strong)",
+                        }}
+                      />
+                      <span className="font-mono text-[10px] text-muted-foreground">{m.m}</span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Breakdown by subject */}
+              {d.ganhosBreakdown.length > 0 && (
+                <div className="border-t border-border pt-3">
+                  <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                    Por matéria
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {d.ganhosBreakdown.map((b, i) => (
+                      <div key={i} className="grid items-center gap-2 text-[12px]" style={{ gridTemplateColumns: "80px 1fr 60px 24px" }}>
+                        <span style={{ color: "var(--text-2)" }} className="truncate">{b.name}</span>
+                        <div className="h-[6px] overflow-hidden rounded-[2px]" style={{ background: "var(--border)" }}>
+                          <div
+                            style={{
+                              width:      d.ganhosMes > 0 ? `${(b.valor / d.ganhosMes) * 100}%` : "0%",
+                              height:     "100%",
+                              background: b.color,
+                            }}
+                          />
+                        </div>
+                        <span className="text-right font-mono" style={{ fontFeatureSettings: '"tnum"' }}>
+                          {brl(b.valor)}
+                        </span>
+                        <span className="text-right font-mono text-muted-foreground">{b.aulas}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
     </div>
   )
 }

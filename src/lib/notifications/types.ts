@@ -12,6 +12,7 @@ export type NotificationType =
   | "PAYMENT_DUE"           // pagamento próximo do vencimento
   | "PAYMENT_OVERDUE"       // pagamento vencido
   | "PAYOUT_GENERATED"      // repasse calculado
+  | "LESSON_CONFIRMATION_REQUEST" // solicitação de confirmação em massa
 
 export interface NotificationPayload {
   userId:   string

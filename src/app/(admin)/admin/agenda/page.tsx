@@ -61,14 +61,11 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
     }),
     getRoomCount(),
     prisma.student.findMany({
-      where: {
-        user:     { active: true },
-        packages: { some: { status: "ACTIVE", remainingLessons: { gt: 0 } } },
-      },
+      where: { user: { active: true } },
       include: {
         user:     true,
         packages: {
-          where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+          where:   { status: "ACTIVE" },
           orderBy: { purchaseDate: "desc" },
           take:    1,
         },
@@ -100,12 +97,13 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
       modality:      l.modality as LessonSlot["modality"],
       teacherOnsite: l.teacherOnsite,
       time:          format(d, "HH:mm"),
-      studentName:   first?.student.user?.name ?? "Aluno",
+      studentName:   first?.student.name ?? "Aluno",
       subjectName:   l.subject.name,
       guardianName:  first?.student.guardian?.user.name ?? null,
       isGroupLesson: isGroup,
       groupSize:     isGroup ? l.participants.length : null,
-      groupMates:    l.participants.slice(1).map(p => p.student.user?.name ?? "Aluno"),
+      groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
+      packageStatus: "pago" as const,
     }
   })
 

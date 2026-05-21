@@ -1,6 +1,7 @@
 "use client"
 
 import Link                                        from "next/link"
+import { useSession }                              from "next-auth/react"
 import { Avatar, AvatarFallback, AvatarImage }     from "@/components/ui/avatar"
 import { ChevronRight }                            from "lucide-react"
 
@@ -30,8 +31,11 @@ interface UserMenuProps {
 }
 
 export function UserMenu({ name, role, image, onBeforeOpen }: UserMenuProps) {
-  const href     = ROLE_PROFILE[role] ?? "/login"
-  const initials = name
+  const { data: session } = useSession()
+  const liveImage = session?.user?.image ?? image
+  const liveName  = session?.user?.name  ?? name
+  const href      = ROLE_PROFILE[role] ?? "/login"
+  const initials  = liveName
     .split(" ")
     .slice(0, 2)
     .map((n) => n[0])
@@ -45,13 +49,13 @@ export function UserMenu({ name, role, image, onBeforeOpen }: UserMenuProps) {
       className="flex items-center gap-3 w-full px-3 py-2 rounded-lg hover:bg-accent transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary"
     >
       <Avatar className="w-8 h-8 shrink-0">
-        <AvatarImage src={image ?? undefined} alt={name} />
+        <AvatarImage src={liveImage ?? undefined} alt={liveName} />
         <AvatarFallback className="bg-primary text-white text-xs font-semibold">
           {initials}
         </AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-foreground truncate">{name}</p>
+        <p className="text-sm font-medium text-foreground truncate">{liveName}</p>
         <p className="text-xs text-muted-foreground truncate">{ROLE_LABEL[role]}</p>
       </div>
       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />

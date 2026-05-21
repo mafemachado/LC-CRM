@@ -72,7 +72,7 @@ export default async function StudentDetailPage({ params }: Props) {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={student.user?.name ?? "Aluno"}
+        title={student.name ?? "Aluno"}
         description={`${student.grade}${student.school ? ` · ${student.school}` : ""}`}
         backHref="/colaborador/alunos"
       >

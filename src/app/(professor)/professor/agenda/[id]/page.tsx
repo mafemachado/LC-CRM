@@ -14,7 +14,7 @@ function buildGoogleCalendarUrl(lesson: {
   scheduledAt:  Date
   duration:     number
   subject:      { name: string }
-  participants: { student: { user: { name: string } | null } }[]
+  participants: { student: { name: string; user: { name: string } | null } }[]
   modality:     string
   meetingLink:  string | null
   location:     string | null
@@ -22,7 +22,7 @@ function buildGoogleCalendarUrl(lesson: {
   const start      = lesson.scheduledAt
   const end        = new Date(start.getTime() + lesson.duration * 60_000)
   const fmt        = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
-  const firstName  = lesson.participants[0]?.student.user?.name ?? "Aluno"
+  const firstName  = lesson.participants[0]?.student.name ?? "Aluno"
   const title      = `Aula de ${lesson.subject.name} com ${firstName}`
   const loc        = lesson.modality === "ONLINE"
     ? (lesson.meetingLink ?? "Online")
@@ -73,7 +73,7 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4 text-sm">
             {[
-              { icon: User,        label: "Aluno",       value: lesson.participants[0]?.student.user?.name ?? "Aluno" },
+              { icon: User,        label: "Aluno",       value: lesson.participants[0]?.student.name ?? "Aluno" },
               { icon: BookOpen,    label: "Matéria",     value: lesson.subject.name       },
               { icon: CalendarDays,label: "Data/Hora",   value: format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) },
               { icon: lesson.modality === "ONLINE" ? Monitor : MapPin, label: "Modalidade", value: lesson.modality === "ONLINE" ? "Online" : "Presencial" },
@@ -99,7 +99,7 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
                 <div className="flex flex-wrap gap-1">
                   {lesson.participants.map((p, i) => (
                     <span key={i} className={`text-xs px-2 py-0.5 rounded-full font-medium ${i === 0 ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>
-                      {p.student.user?.name ?? "Aluno"}
+                      {p.student.name ?? "Aluno"}
                     </span>
                   ))}
                 </div>

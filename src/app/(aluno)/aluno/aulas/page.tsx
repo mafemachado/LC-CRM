@@ -115,7 +115,7 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
                 const isGroup  = lesson.participants.length > 1
                 const mates    = lesson.participants
                   .filter(p => p.studentId !== student.id)
-                  .map(p => p.student.user?.name ?? "Aluno")
+                  .map(p => p.student.name ?? "Aluno")
                 return (
                   <div key={lesson.id} className="flex gap-4 p-4 rounded-xl border border-border bg-card hover:bg-muted/30 transition-colors">
                     {/* Data */}

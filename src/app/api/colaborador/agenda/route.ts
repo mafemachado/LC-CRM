@@ -45,13 +45,13 @@ function mapLesson(l: RawLesson) {
     modality:      l.modality,
     teacherOnsite: l.teacherOnsite,
     time:          format(d, "HH:mm"),
-    studentName:   first?.student.user?.name ?? "Aluno",
+    studentName:   first?.student.name ?? "Aluno",
     subjectName:   l.subject.name,
     guardianName:  first?.student.guardian?.user.name ?? null,
     date:          format(d, "yyyy-MM-dd"),
     isGroupLesson: isGroup,
     groupSize:     isGroup ? l.participants.length : null,
-    groupMates:    l.participants.slice(1).map(p => p.student.user?.name ?? "Aluno"),
+    groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
   }
 }
 
@@ -64,7 +64,7 @@ function mapPendingRequest(r: RawRequest) {
     startMin:    min,
     time:        format(d, "HH:mm"),
     date:        format(d, "yyyy-MM-dd"),
-    studentName: r.student.user?.name ?? "Aluno",
+    studentName: r.student.name ?? "Aluno",
     subjectName: r.subject?.name ?? "–",
     modality:    r.modality,
     teacherMode: r.teacher.teachingMode,

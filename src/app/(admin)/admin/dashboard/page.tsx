@@ -1,210 +1,565 @@
-import { auth }   from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge }  from "@/components/ui/badge"
-import { LinkButton } from "@/components/shared/link-button"
-import { SimpleAreaChart } from "@/components/charts/area-chart"
-import { SimpleBarChart }  from "@/components/charts/bar-chart"
-import { DonutChart }      from "@/components/charts/donut-chart"
+import React           from "react"
+import { auth }        from "@/lib/auth"
+import { prisma }      from "@/lib/prisma"
+import { Sparkline }   from "@/components/shared/kpi-card"
+import { RevenueMetaChart } from "@/components/charts/revenue-meta-chart"
+import { ModoBadge }   from "@/components/shared/modo-badge"
+import Link            from "next/link"
+import { cn }          from "@/lib/utils"
 import {
-  Users, GraduationCap, CalendarCheck, DollarSign,
-  TrendingUp, Clock, CheckCircle2, AlertCircle, ArrowRight,
-} from "lucide-react"
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns"
+  format, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay,
+  differenceInDays,
+} from "date-fns"
 import { ptBR } from "date-fns/locale"
 
-function brl(v: number) { return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
+function brl(v: number) {
+  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
+}
+function pct(v: number) {
+  return `${Math.round(Math.min(v, 9.99) * 100)}%`
+}
 
-async function getDashboardData() {
-  const now  = new Date()
+// ─── Data ─────────────────────────────────────────────────────────────────────
 
-  // Últimos 6 meses para gráficos
+async function getOpsData() {
+  const now = new Date()
+
   const months = Array.from({ length: 6 }, (_, i) => {
     const d = subMonths(now, 5 - i)
     return { start: startOfMonth(d), end: endOfMonth(d), label: format(d, "MMM", { locale: ptBR }) }
   })
 
+  const thisStart = startOfMonth(now)
+  const thisEnd   = endOfMonth(now)
+  const prevStart = startOfMonth(subMonths(now, 1))
+  const prevEnd   = endOfMonth(subMonths(now, 1))
+
   const [
-    totalAlunos, totalProfessores, totalColaboradores,
-    aulasHoje, pendentes,
-    allLessons, payments,
+    paidPayments,
+    overduePayments,
+    allLessons,
+    alunosAtivos,
+    pendingCount,
+    proximasAulas,
+    lowPackages,
   ] = await Promise.all([
-    prisma.student.count(),
-    prisma.teacher.count(),
-    prisma.user.count({ where: { role: "COLLABORATOR" } }),
-    prisma.lesson.count({
-      where: { scheduledAt: { gte: startOfMonth(now), lte: endOfMonth(now) } },
+    prisma.payment.findMany({
+      where:  { status: "PAID", paidAt: { gte: months[0].start } },
+      select: { amount: true, paidAt: true },
+    }),
+    prisma.payment.findMany({
+      where:   { status: "OVERDUE" },
+      include: { student: { include: { user: true } } },
+      orderBy: { dueDate: "asc" },
+      take:    50,
+    }),
+    prisma.lesson.findMany({
+      where:  { scheduledAt: { gte: months[0].start } },
+      select: { status: true, scheduledAt: true },
+    }),
+    prisma.student.count({
+      where: { packages: { some: { status: "ACTIVE", remainingLessons: { gt: 0 } } } },
     }),
     prisma.lessonRequest.count({ where: { status: "PENDING" } }),
-    prisma.lesson.findMany({ select: { status: true, scheduledAt: true }, take: 500 }),
-    prisma.payment.findMany({ select: { amount: true, status: true, paidAt: true } }),
+    prisma.lesson.findMany({
+      where: {
+        scheduledAt: { gte: startOfDay(now), lte: endOfDay(now) },
+        status:      { in: ["SCHEDULED", "CONFIRMED"] },
+      },
+      include: {
+        participants: { take: 1, include: { student: { include: { user: true } } } },
+        teacher:      { include: { user: true } },
+        subject:      true,
+      },
+      orderBy: { scheduledAt: "asc" },
+      take:    10,
+    }),
+    prisma.lessonPackage.count({
+      where: { status: "ACTIVE", remainingLessons: { gt: 0, lte: 2 } },
+    }),
   ])
 
-  // Receita por mês
-  const receitaMes = months.map(({ start, end, label }) => ({
-    label,
-    value: payments
-      .filter((p) => p.status === "PAID" && p.paidAt && p.paidAt >= start && p.paidAt <= end)
-      .reduce((s, p) => s + Number(p.amount), 0),
-  }))
+  // ── Revenue ──────────────────────────────────────────────────────────────────
+  const sumPaid = (s: Date, e: Date) =>
+    paidPayments
+      .filter((p) => p.paidAt! >= s && p.paidAt! <= e)
+      .reduce((acc, p) => acc + Number(p.amount), 0)
 
-  // Aulas por mês
-  const aulasMes = months.map(({ start, end, label }) => ({
-    label,
-    value: allLessons.filter((l) => l.scheduledAt >= start && l.scheduledAt <= end).length,
-  }))
+  const receitaMes     = sumPaid(thisStart, thisEnd)
+  const receitaPrevMes = sumPaid(prevStart, prevEnd)
+  const receitaGoal    = receitaPrevMes > 0
+    ? Math.round(receitaPrevMes * 1.1)
+    : Math.max(Math.round(receitaMes * 1.2), 1000)
+  const receitaSpark   = months.map((m) => sumPaid(m.start, m.end))
+  const receitaDeltaNum = receitaPrevMes > 0
+    ? Math.round(((receitaMes - receitaPrevMes) / receitaPrevMes) * 100)
+    : null
 
-  // Status das aulas (mês atual)
-  const mesLessons = allLessons.filter((l) =>
-    l.scheduledAt >= startOfMonth(now) && l.scheduledAt <= endOfMonth(now)
+  // ── Lessons ─────────────────────────────────────────────────────────────────
+  const countLessons = (status: string, s: Date, e: Date) =>
+    allLessons.filter((l) => l.status === status && l.scheduledAt >= s && l.scheduledAt <= e).length
+
+  const aulasMes     = countLessons("COMPLETED", thisStart, thisEnd)
+  const aulasPrevMes = countLessons("COMPLETED", prevStart, prevEnd)
+  const aulasGoal    = aulasPrevMes > 0 ? Math.round(aulasPrevMes * 1.1) : Math.max(Math.round(aulasMes * 1.2), 10)
+  const aulasSpark   = months.map((m) => countLessons("COMPLETED", m.start, m.end))
+  const aulasDeltaNum = aulasPrevMes > 0
+    ? Math.round(((aulasMes - aulasPrevMes) / aulasPrevMes) * 100)
+    : null
+
+  // ── Students ─────────────────────────────────────────────────────────────────
+  const alunosSpark = months.map((m) =>
+    allLessons.filter(
+      (l) => l.scheduledAt >= m.start && l.scheduledAt <= m.end && l.status !== "CANCELLED"
+    ).length
   )
-  const lessonStatus = [
-    { label: "Confirmada", value: mesLessons.filter((l) => l.status === "CONFIRMED").length,  color: "#FB8500" },
-    { label: "Realizada",  value: mesLessons.filter((l) => l.status === "COMPLETED").length,  color: "#219EBC" },
-    { label: "Cancelada",  value: mesLessons.filter((l) => l.status === "CANCELLED").length,  color: "#ef4444" },
-    { label: "Faltou",     value: mesLessons.filter((l) => l.status === "MISSED").length,     color: "#f97316" },
-    { label: "Agendada",   value: mesLessons.filter((l) => l.status === "SCHEDULED").length,  color: "#8b5cf6" },
-  ].filter((d) => d.value > 0)
 
-  const receitaTotal = payments.filter((p) => p.status === "PAID").reduce((s, p) => s + Number(p.amount), 0)
-  const aReceber     = payments.filter((p) => p.status === "PENDING").reduce((s, p) => s + Number(p.amount), 0)
+  // ── Overdue ─────────────────────────────────────────────────────────────────
+  const inadimplenciaTotal  = overduePayments.reduce((s, p) => s + Number(p.amount), 0)
+  const inadimplenciaAlunos = new Set(overduePayments.map((p) => p.studentId)).size
+  const inadimplenciaSpark  = months.map((m) =>
+    overduePayments
+      .filter((p) => p.dueDate >= m.start && p.dueDate <= m.end)
+      .reduce((s, p) => s + Number(p.amount), 0)
+  )
+
+  // ── Chart data ───────────────────────────────────────────────────────────────
+  const chartData = months.map((m) => ({ m: m.label, v: sumPaid(m.start, m.end), meta: receitaGoal }))
+
+  // ── Atrasados ────────────────────────────────────────────────────────────────
+  const atrasados = overduePayments.map((p) => ({
+    id:      p.id,
+    aluno:   p.student.name ?? "Aluno",
+    pacote:  p.description ?? "—",
+    valor:   Number(p.amount),
+    dias:    Math.max(0, differenceInDays(now, p.dueDate)),
+    contato: p.student.user?.phone ?? p.student.user?.email ?? "—",
+  }))
+
+  // ── Alertas ─────────────────────────────────────────────────────────────────
+  type AlertTipo = "danger" | "warn" | "info" | "success"
+  const alertas: { tipo: AlertTipo; txt: string; acao?: string; href?: string }[] = []
+
+  if (inadimplenciaAlunos > 0)
+    alertas.push({
+      tipo: "danger",
+      txt:  `${inadimplenciaAlunos} aluno${inadimplenciaAlunos > 1 ? "s" : ""} com pagamento vencido — ${brl(inadimplenciaTotal)} em aberto`,
+      acao: "Ver cobranças",
+      href: "/admin/financeiro/pagamentos?filter=OVERDUE",
+    })
+  if (pendingCount > 0)
+    alertas.push({
+      tipo: "warn",
+      txt:  `${pendingCount} pedido${pendingCount > 1 ? "s" : ""} de aula aguardando confirmação`,
+      acao: "Ver agenda",
+      href: "/admin/agenda",
+    })
+  if (lowPackages > 0)
+    alertas.push({
+      tipo: "warn",
+      txt:  `${lowPackages} aluno${lowPackages > 1 ? "s" : ""} com saldo baixo (≤ 2 aulas restantes)`,
+      acao: "Ver pacotes",
+      href: "/admin/financeiro/pacotes",
+    })
+  if (alertas.length === 0)
+    alertas.push({ tipo: "success", txt: "Tudo em ordem — nenhum alerta no momento" })
+
+  // ── Próximas aulas ───────────────────────────────────────────────────────────
+  const proximas = proximasAulas.map((l) => ({
+    hora:       format(l.scheduledAt, "HH:mm"),
+    aluno:      l.participants[0]?.student.name ?? "Aluno",
+    materia:    l.subject.name,
+    prof:       l.teacher.user.name.split(" ")[0],
+    modo:       (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
+    confirmada: l.status === "CONFIRMED",
+  }))
+
+  const raw = format(now, "MMMM · yyyy", { locale: ptBR })
 
   return {
-    totalAlunos, totalProfessores, totalColaboradores,
-    aulasHoje, pendentes, receitaMes, aulasMes, lessonStatus,
-    receitaTotal, aReceber,
+    receitaMes, receitaGoal, receitaSpark, receitaDeltaNum,
+    aulasMes, aulasGoal, aulasSpark, aulasDeltaNum,
+    alunosAtivos, alunosSpark,
+    inadimplenciaTotal, inadimplenciaAlunos, inadimplenciaSpark,
+    chartData, atrasados, alertas, proximas,
+    periodLabel: raw.charAt(0).toUpperCase() + raw.slice(1),
+    todayLabel:  format(now, "EEE, dd 'de' MMMM", { locale: ptBR }),
   }
 }
 
-export default async function AdminDashboard() {
-  const session = await auth()
-  const d       = await getDashboardData()
-  const hora    = new Date().getHours()
-  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite"
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-  const kpis = [
-    { title: "Alunos",         value: d.totalAlunos,      icon: GraduationCap, color: "text-primary",     bg: "bg-primary/10"   },
-    { title: "Professores",    value: d.totalProfessores, icon: Users,         color: "text-secondary",   bg: "bg-secondary/10" },
-    { title: "Aulas este mês", value: d.aulasHoje,        icon: CalendarCheck, color: "text-green-600",   bg: "bg-green-50"     },
-    { title: "Ag. Pendentes",  value: d.pendentes,        icon: Clock,         color: "text-orange-500",  bg: "bg-orange-50",   alert: d.pendentes > 0 },
-    { title: "Receita Total",  value: brl(d.receitaTotal),icon: TrendingUp,    color: "text-green-600",   bg: "bg-green-50"     },
-    { title: "A Receber",      value: brl(d.aReceber),    icon: DollarSign,    color: "text-primary",     bg: "bg-primary/10"   },
-  ]
+function OpsBtn({
+  href, children, primary = false,
+}: {
+  href: string; children: React.ReactNode; primary?: boolean
+}) {
+  return (
+    <Link
+      href={href}
+      className={cn(
+        "inline-flex items-center rounded-[6px] px-3 py-[6px] text-[12px] font-medium transition-opacity hover:opacity-80",
+        primary
+          ? "text-white"
+          : "border border-border bg-card"
+      )}
+      style={primary ? { background: "var(--primary)", color: "#fff" } : { color: "var(--text)" }}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function KpiCell({
+  label, value, delta, deltaPos, sub, spark, sparkColor, goalProgress,
+}: {
+  label:         string
+  value:         string
+  delta:         string
+  deltaPos:      boolean | null
+  sub:           string
+  spark:         number[]
+  sparkColor:    string
+  goalProgress?: number
+}) {
+  const dCls =
+    deltaPos === null ? "bg-[var(--muted-soft)] text-muted-foreground"   :
+    deltaPos          ? "bg-[var(--success-soft)] text-[var(--success)]" :
+                        "bg-[var(--danger-soft)] text-[var(--danger)]"
 
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="animate-fade-up flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="font-heading text-3xl text-foreground">
-            {saudacao}, {session?.user?.name?.split(" ")[0]}!
-          </h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            {format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-          </p>
+    <div className="flex flex-col gap-1.5 bg-card p-[14px_16px_12px]">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[11px] font-medium uppercase tracking-[0.02em] text-muted-foreground">
+          {label}
+        </span>
+        <span className={cn("inline-flex items-center rounded px-[5px] py-px font-mono text-[10px] font-semibold", dCls)}>
+          {delta}
+        </span>
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <span
+          className="font-mono text-[24px] font-semibold leading-none tracking-[-0.025em]"
+          style={{ fontFeatureSettings: '"tnum"' }}
+        >
+          {value}
+        </span>
+        <Sparkline data={spark} color={sparkColor} width={92} height={26} />
+      </div>
+      <p className="text-[11px] text-muted-foreground">{sub}</p>
+      {goalProgress != null && (
+        <div className="mt-0.5 h-[3px] overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+          <div
+            style={{ width: `${Math.min(100, goalProgress * 100).toFixed(1)}%`, height: "100%", background: sparkColor }}
+          />
         </div>
-        {d.pendentes > 0 && (
-          <LinkButton href="/admin/agenda" variant="outline" size="sm">
-            <AlertCircle className="w-4 h-4 mr-2 text-orange-500" />
-            {d.pendentes} pendente{d.pendentes > 1 ? "s" : ""}
-            <ArrowRight className="w-3 h-3 ml-1" />
-          </LinkButton>
-        )}
-      </div>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        {kpis.map(({ title, value, icon: Icon, color, bg, alert }, i) => (
-          <Card key={title} className="card-lift animate-fade-up"
-            style={{ "--delay": `${i * 60}ms` } as React.CSSProperties}>
-            <CardContent className="p-5 flex items-start justify-between gap-2">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">{title}</p>
-                <p className="text-xl font-bold font-sub mt-1">{value}</p>
-              </div>
-              <div className={`${bg} p-2.5 rounded-xl shrink-0`}>
-                <Icon className={`w-5 h-5 ${color}`} />
-              </div>
-            </CardContent>
-            {alert && <div className="px-5 pb-3"><Badge variant="destructive" className="text-xs">Requer atenção</Badge></div>}
-          </Card>
-        ))}
-      </div>
-
-      {/* Gráficos principais */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="animate-scale-in" style={{ "--delay": "120ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-primary" /> Receita — Últimos 6 Meses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.receitaMes.some((r) => r.value > 0)
-              ? <SimpleAreaChart data={d.receitaMes} valuePrefix="R$ " height={200} />
-              : <EmptyChart label="Nenhum pagamento registrado ainda" />
-            }
-          </CardContent>
-        </Card>
-
-        <Card className="animate-scale-in" style={{ "--delay": "180ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <CalendarCheck className="w-4 h-4 text-primary" /> Aulas — Últimos 6 Meses
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.aulasMes.some((r) => r.value > 0)
-              ? <SimpleBarChart data={d.aulasMes} color="#219EBC" height={200} />
-              : <EmptyChart label="Nenhuma aula registrada ainda" />
-            }
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Status das aulas + distribuição de usuários */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="animate-scale-in" style={{ "--delay": "240ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-primary" /> Status das Aulas (Mês Atual)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {d.lessonStatus.length > 0
-              ? <DonutChart data={d.lessonStatus} height={220} />
-              : <EmptyChart label="Nenhuma aula agendada este mês" />
-            }
-          </CardContent>
-        </Card>
-
-        <Card className="animate-scale-in" style={{ "--delay": "300ms" } as React.CSSProperties}>
-          <CardHeader className="pb-2">
-            <CardTitle className="font-sub text-sm flex items-center gap-2">
-              <Users className="w-4 h-4 text-primary" /> Distribuição de Usuários
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <DonutChart
-              height={220}
-              data={[
-                { label: "Alunos",       value: d.totalAlunos,        color: "#FB8500" },
-                { label: "Professores",  value: d.totalProfessores,   color: "#219EBC" },
-                { label: "Colaboradores",value: d.totalColaboradores, color: "#8b5cf6" },
-              ].filter((d) => d.value > 0)}
-            />
-          </CardContent>
-        </Card>
-      </div>
+      )}
     </div>
   )
 }
 
-function EmptyChart({ label }: { label: string }) {
+const ALERT_COLORS = {
+  danger:  { bg: "var(--danger-soft)",  border: "var(--danger)",  text: "var(--danger)"  },
+  warn:    { bg: "var(--warn-soft)",    border: "var(--warn)",    text: "var(--warn)"    },
+  info:    { bg: "var(--info-soft)",    border: "var(--info)",    text: "var(--info)"    },
+  success: { bg: "var(--success-soft)", border: "var(--success)", text: "var(--success)" },
+} as const
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+function getGreeting(hour: number) {
+  if (hour >= 5 && hour < 12) return "Bom dia"
+  if (hour >= 12 && hour < 18) return "Boa tarde"
+  return "Boa noite"
+}
+
+export default async function AdminOpsPage() {
+  const [d, session] = await Promise.all([getOpsData(), auth()])
+  const { receitaDeltaNum, aulasDeltaNum } = d
+
+  const now       = new Date()
+  const greeting  = getGreeting(now.getHours())
+  const firstName = (session?.user?.name ?? "").split(" ")[0] || "Admin"
+
   return (
-    <div className="h-[200px] flex flex-col items-center justify-center text-center gap-2">
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-xs text-muted-foreground/60">Os gráficos aparecerão conforme os dados forem cadastrados</p>
+    <div className="flex flex-col gap-[18px]">
+
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+            Visão geral · {d.todayLabel}
+          </p>
+          <h1 className="font-sub text-[22px] font-semibold leading-tight tracking-[-0.02em]">
+            {greeting}, {firstName}!
+          </h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Operação · {d.periodLabel}
+          </p>
+        </div>
+        <div className="flex gap-1.5">
+          <OpsBtn href="/admin/relatorios">↗ Relatórios</OpsBtn>
+          <OpsBtn href="/admin/agenda" primary>+ Nova aula</OpsBtn>
+        </div>
+      </div>
+
+      {/* KPI row */}
+      <div
+        className="grid grid-cols-2 overflow-hidden rounded-[10px] border border-border lg:grid-cols-4"
+        style={{ gap: "1px", background: "var(--border)" }}
+      >
+        <KpiCell
+          label="Receita do mês"
+          value={brl(d.receitaMes)}
+          delta={receitaDeltaNum != null ? `${receitaDeltaNum >= 0 ? "+" : ""}${receitaDeltaNum}%` : "novo"}
+          deltaPos={receitaDeltaNum != null ? receitaDeltaNum >= 0 : null}
+          sub={`Meta ${brl(d.receitaGoal)} · ${pct(d.receitaGoal > 0 ? d.receitaMes / d.receitaGoal : 0)}`}
+          spark={d.receitaSpark}
+          sparkColor="var(--primary)"
+          goalProgress={d.receitaGoal > 0 ? d.receitaMes / d.receitaGoal : 0}
+        />
+        <KpiCell
+          label="Aulas realizadas"
+          value={d.aulasMes.toLocaleString("pt-BR")}
+          delta={aulasDeltaNum != null ? `${aulasDeltaNum >= 0 ? "+" : ""}${aulasDeltaNum}%` : "novo"}
+          deltaPos={aulasDeltaNum != null ? aulasDeltaNum >= 0 : null}
+          sub={`Meta ${d.aulasGoal} · ${pct(d.aulasGoal > 0 ? d.aulasMes / d.aulasGoal : 0)}`}
+          spark={d.aulasSpark}
+          sparkColor="var(--info)"
+        />
+        <KpiCell
+          label="Alunos ativos"
+          value={String(d.alunosAtivos)}
+          delta="ativos"
+          deltaPos={null}
+          sub={`${d.inadimplenciaAlunos} inadimplente${d.inadimplenciaAlunos !== 1 ? "s" : ""}`}
+          spark={d.alunosSpark}
+          sparkColor="var(--success)"
+        />
+        <KpiCell
+          label="Inadimplência"
+          value={brl(d.inadimplenciaTotal)}
+          delta={`${d.inadimplenciaAlunos} aluno${d.inadimplenciaAlunos !== 1 ? "s" : ""}`}
+          deltaPos={d.inadimplenciaTotal > 0 ? false : null}
+          sub={`Ticket méd. ${brl(d.inadimplenciaAlunos > 0 ? d.inadimplenciaTotal / d.inadimplenciaAlunos : 0)}`}
+          spark={d.inadimplenciaSpark}
+          sparkColor="var(--danger)"
+        />
+      </div>
+
+      {/* Body */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_380px]">
+
+        {/* Left column */}
+        <div className="flex min-h-0 flex-col gap-4">
+
+          {/* Revenue chart */}
+          <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 p-[12px_14px_8px]">
+              <div>
+                <p className="text-[13px] font-semibold tracking-[-0.01em]">Receita vs. meta</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Últimos 6 meses · linha pontilhada = meta
+                </p>
+              </div>
+              <div className="mt-0.5 flex items-center gap-3.5 text-[11px] text-muted-foreground">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block h-[2px] w-3.5 rounded" style={{ background: "var(--primary)" }} />
+                  Receita
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className="inline-block w-3.5"
+                    style={{ borderTop: "1.5px dashed var(--subtle)", height: 0 }}
+                  />
+                  Meta
+                </span>
+              </div>
+            </div>
+            <div className="px-3 pb-3">
+              <RevenueMetaChart data={d.chartData} />
+            </div>
+          </div>
+
+          {/* Atrasados table */}
+          <div className="flex flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 p-[12px_14px_8px]">
+              <div>
+                <p className="text-[13px] font-semibold tracking-[-0.01em]">Pagamentos atrasados</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {d.atrasados.length} aluno{d.atrasados.length !== 1 ? "s" : ""} · {brl(d.inadimplenciaTotal)} em aberto
+                </p>
+              </div>
+              <Link
+                href="/admin/financeiro/pagamentos?filter=OVERDUE"
+                className="shrink-0 rounded-[6px] border border-border bg-card px-3 py-[5px] text-[12px] font-medium transition-colors hover:bg-[var(--hover)]"
+                style={{ color: "var(--text)" }}
+              >
+                Ver todos
+              </Link>
+            </div>
+
+            {d.atrasados.length === 0 ? (
+              <p className="px-4 pb-5 text-center text-[12.5px] text-muted-foreground">
+                Nenhum pagamento atrasado ✓
+              </p>
+            ) : (
+              <div className="overflow-auto">
+                <table className="w-full border-collapse text-[12.5px]">
+                  <thead>
+                    <tr className="text-left text-[10.5px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
+                      <th className="border-b border-border px-[14px] py-[8px] font-medium">Aluno</th>
+                      <th className="border-b border-border px-[14px] py-[8px] font-medium">Descrição</th>
+                      <th className="border-b border-border px-[14px] py-[8px] text-right font-medium">Valor</th>
+                      <th className="border-b border-border px-[14px] py-[8px] text-right font-medium">Atraso</th>
+                      <th className="border-b border-border px-[14px] py-[8px] font-medium">Contato</th>
+                      <th className="border-b border-border px-[14px] py-[8px] text-right font-medium">Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.atrasados.map((r) => {
+                      const diasStyle =
+                        r.dias >= 15
+                          ? { background: "var(--danger-soft)", color: "var(--danger)" }
+                          : r.dias >= 7
+                          ? { background: "var(--warn-soft)",   color: "var(--warn)"   }
+                          : { background: "var(--hover)",       color: "var(--muted)"  }
+                      return (
+                        <tr key={r.id} className="border-t border-border">
+                          <td className="px-[14px] py-[9px] font-medium">{r.aluno}</td>
+                          <td className="px-[14px] py-[9px] text-muted-foreground">{r.pacote}</td>
+                          <td
+                            className="px-[14px] py-[9px] text-right font-mono"
+                            style={{ fontFeatureSettings: '"tnum"' }}
+                          >
+                            {brl(r.valor)}
+                          </td>
+                          <td className="px-[14px] py-[9px] text-right">
+                            <span
+                              className="inline-flex items-center rounded px-[7px] py-[2px] font-mono text-[11px] font-semibold"
+                              style={diasStyle}
+                            >
+                              {r.dias}d
+                            </span>
+                          </td>
+                          <td className="px-[14px] py-[9px] text-muted-foreground">{r.contato}</td>
+                          <td className="px-[14px] py-[9px] text-right">
+                            <Link
+                              href="/admin/financeiro/pagamentos?filter=OVERDUE"
+                              className="text-[11px] font-medium transition-opacity hover:opacity-70"
+                              style={{ color: "var(--primary)" }}
+                            >
+                              Cobrar →
+                            </Link>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div className="flex min-h-0 flex-col gap-4">
+
+          {/* Alertas */}
+          <div className="overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="p-[12px_14px_8px]">
+              <p className="text-[13px] font-semibold tracking-[-0.01em]">Precisa de atenção</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                {d.alertas.filter((a) => a.tipo !== "success").length > 0
+                  ? `${d.alertas.filter((a) => a.tipo !== "success").length} ite${d.alertas.filter((a) => a.tipo !== "success").length > 1 ? "ns" : "m"}`
+                  : "tudo em ordem"}
+              </p>
+            </div>
+            <div className="flex flex-col gap-[3px] px-[14px] pb-[14px]">
+              {d.alertas.map((a, i) => {
+                const c = ALERT_COLORS[a.tipo]
+                return (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2.5 rounded-[6px] px-3 py-[10px]"
+                    style={{ background: c.bg, borderLeft: `2px solid ${c.border}` }}
+                  >
+                    <span
+                      className="mt-[3px] h-[7px] w-[7px] shrink-0 rounded-full"
+                      style={{ background: c.border }}
+                    />
+                    <span className="flex-1 text-[12.5px] leading-[1.35]" style={{ color: "var(--text)" }}>
+                      {a.txt}
+                    </span>
+                    {a.acao && a.href && (
+                      <Link
+                        href={a.href}
+                        className="shrink-0 whitespace-nowrap text-[11px] font-medium transition-opacity hover:opacity-70"
+                        style={{ color: c.text }}
+                      >
+                        {a.acao} →
+                      </Link>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Próximas aulas */}
+          <div className="flex flex-1 flex-col overflow-hidden rounded-[10px] border border-border bg-card">
+            <div className="flex items-start justify-between gap-3 p-[12px_14px_8px]">
+              <div>
+                <p className="text-[13px] font-semibold tracking-[-0.01em]">Próximas aulas</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">Hoje · {d.todayLabel}</p>
+              </div>
+              <Link
+                href="/admin/agenda"
+                className="text-[11px] text-muted-foreground transition-colors hover:text-[var(--text)]"
+              >
+                Ver agenda →
+              </Link>
+            </div>
+
+            <div className="flex-1 overflow-auto pb-2">
+              {d.proximas.length === 0 ? (
+                <p className="px-4 pb-5 text-center text-[12.5px] text-muted-foreground">
+                  Nenhuma aula agendada para hoje
+                </p>
+              ) : (
+                d.proximas.map((a, i) => (
+                  <div key={i} className="flex items-center gap-3 rounded-[6px] px-4 py-[9px]">
+                    <span
+                      className="w-[42px] shrink-0 font-mono text-[12px] font-semibold"
+                      style={{ color: "var(--text)", fontFeatureSettings: '"tnum"' }}
+                    >
+                      {a.hora}
+                    </span>
+                    <div className="min-w-0 flex-1 leading-[1.3]">
+                      <p className="truncate text-[12.5px] font-medium">{a.aluno}</p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {a.materia} · {a.prof}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      <ModoBadge modo={a.modo} size="sm" />
+                      <span
+                        className="inline-flex items-center rounded px-[6px] py-[2px] font-mono text-[10px]"
+                        style={{
+                          background: a.confirmada ? "var(--success-soft)" : "var(--warn-soft)",
+                          color:      a.confirmada ? "var(--success)"      : "var(--warn)",
+                        }}
+                      >
+                        {a.confirmada ? "✓" : "?"}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

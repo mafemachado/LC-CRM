@@ -19,6 +19,13 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // ── LC semantic variants ──────────────────────────────────────────
+        success: "bg-[var(--success-soft)] text-[var(--success)] border-transparent",
+        accent:  "bg-[var(--accent-soft)]  text-[var(--primary)] border-transparent",
+        warn:    "bg-[var(--warn-soft)]    text-[var(--warn)]    border-transparent",
+        danger:  "bg-[var(--danger-soft)]  text-[var(--danger)]  border-transparent",
+        info:    "bg-[var(--info-soft)]    text-[var(--info)]    border-transparent",
+        muted:   "bg-[var(--muted-soft)]   text-muted-foreground border-transparent",
       },
     },
     defaultVariants: {

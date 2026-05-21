@@ -69,7 +69,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return true
     },
 
-    async jwt({ token, user, account }) {
+    async jwt({ token, user, account, trigger, session }) {
+      if (trigger === "update" && session) {
+        if (session.name  != null) token.name    = session.name
+        if (session.image != null) token.picture = session.image
+        return token
+      }
       if (account?.provider === "google" && user?.email) {
         const dbUser = await prisma.user.findUnique({ where: { email: user.email } })
         if (dbUser) {

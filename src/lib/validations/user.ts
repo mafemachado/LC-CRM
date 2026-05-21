@@ -14,9 +14,15 @@ export const createUserSchema = z.object({
   bio:           z.string().optional(),
   teachingMode:  z.enum(["ONLINE_ONLY", "PRESENCIAL", "HYBRID"]).optional(),
   // Guardian ↔ Student linking
-  guardianId:    z.string().optional().or(z.literal("")),
-  relationship:  z.string().optional(),
-  selfGuardian:  z.string().optional(),
+  guardianId:          z.string().optional().or(z.literal("")),
+  relationship:        z.string().optional(),
+  selfGuardian:        z.string().optional(),
+  // Inline guardian creation
+  guardianMode:        z.enum(["new", "existing", "self", "none"]).optional(),
+  newGuardian_name:    z.string().optional().or(z.literal("")),
+  newGuardian_email:   z.string().email("E-mail do responsável inválido").optional().or(z.literal("")),
+  newGuardian_phone:   z.string().optional().or(z.literal("")),
+  newGuardian_relationship: z.string().optional().or(z.literal("")),
 })
 
 export const updateUserSchema = createUserSchema
