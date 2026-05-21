@@ -25,6 +25,13 @@ async function requireAdmin() {
   return session
 }
 
+async function requireAdminOrCollaborator() {
+  const session = await auth()
+  const role = session?.user?.role
+  if (role !== "ADMIN" && role !== "COLLABORATOR") throw new Error("Sem permissão")
+  return session
+}
+
 async function guardAdminAccount(targetId: string, sessionUserId: string) {
   const target = await prisma.user.findUnique({ where: { id: targetId }, select: { role: true } })
   if (target?.role === "ADMIN" && targetId !== sessionUserId) {
@@ -34,37 +41,51 @@ async function guardAdminAccount(targetId: string, sessionUserId: string) {
 
 // ─── Criar usuário ────────────────────────────────────────────────────────────
 export async function createUserAction(formData: FormData) {
-  await requireAdmin()
+  const session    = await requireAdminOrCollaborator()
+  const callerRole = session!.user.role
 
-  const raw = Object.fromEntries(formData)
+  const raw    = Object.fromEntries(formData)
   const parsed = createUserSchema.safeParse(raw)
   if (!parsed.success) {
     const msg = parsed.error.issues[0]?.message ?? "Dados inválidos"
-    redirect(`/admin/usuarios/novo?error=${encodeURIComponent(msg)}`)
+    const base = callerRole === "COLLABORATOR" ? "/colaborador/usuarios/novo" : "/admin/usuarios/novo"
+    redirect(`${base}?error=${encodeURIComponent(msg)}`)
   }
 
-  const { name, email, password: rawPassword, phone, role, grade, educationLevel, school, hourlyRate, bio, teachingMode, guardianId, relationship, selfGuardian } = parsed.data
+  const {
+    name, email, password: rawPassword, phone, role,
+    grade, educationLevel, school, hourlyRate, bio, teachingMode,
+    guardianId, relationship,
+    guardianMode, newGuardian_name, newGuardian_email, newGuardian_phone, newGuardian_relationship,
+  } = parsed.data
+
+  // Colaboradores não podem criar administradores
+  if (callerRole === "COLLABORATOR" && role === "ADMIN") {
+    const base = "/colaborador/usuarios/novo"
+    redirect(`${base}?error=${encodeURIComponent("Colaboradores não podem criar administradores")}`)
+  }
 
   const emailNorm = email && email.trim() ? email.trim() : undefined
   const phoneNorm = phone ? phone.replace(/\D/g, "") : undefined
+  const errorBase = callerRole === "COLLABORATOR" ? "/colaborador/usuarios/novo" : "/admin/usuarios/novo"
 
   if (emailNorm) {
     const exists = await prisma.user.findUnique({ where: { email: emailNorm } })
-    if (exists) redirect("/admin/usuarios/novo?error=E-mail+já+cadastrado")
+    if (exists) redirect(`${errorBase}?error=E-mail+já+cadastrado`)
   }
   if (phoneNorm) {
     const existsPhone = await prisma.user.findUnique({ where: { phone: phoneNorm } })
-    if (existsPhone) redirect("/admin/usuarios/novo?error=Telefone+já+cadastrado")
+    if (existsPhone) redirect(`${errorBase}?error=Telefone+já+cadastrado`)
   }
 
-  // Alunos: gerar senha automática se não foi fornecida
+  // Alunos: gerar senha automática se não fornecida
   let generatedPassword: string | undefined
   let passwordToHash = rawPassword
   if (role === "STUDENT" && !rawPassword) {
     generatedPassword = generateStudentPassword()
     passwordToHash    = generatedPassword
   }
-  if (!passwordToHash) redirect("/admin/usuarios/novo?error=Senha+obrigatória+para+este+perfil")
+  if (!passwordToHash) redirect(`${errorBase}?error=Senha+obrigatória+para+este+perfil`)
 
   const hashed = await bcrypt.hash(passwordToHash, 12)
 
@@ -74,35 +95,52 @@ export async function createUserAction(formData: FormData) {
     })
 
     if (role === "STUDENT") {
-      const gId = guardianId && guardianId.trim() ? guardianId.trim() : undefined
-      await tx.student.create({
-        data: {
-          userId:        user.id,
-          name:          name,
-          grade:         grade ?? "Não informado",
-          school,
-          educationLevel: educationLevel as EducationLevel | undefined,
-          guardianId:    gId,
-        },
-      })
-      // Aluno adulto que é seu próprio responsável
-      if (selfGuardian === "on") {
-        await tx.guardian.create({
+      let resolvedGuardianId: string | undefined
+
+      if (guardianMode === "new" && newGuardian_name && newGuardian_name.trim()) {
+        // Criar responsável inline
+        const gEmailNorm  = newGuardian_email && newGuardian_email.trim() ? newGuardian_email.trim() : undefined
+        const gPhoneNorm  = newGuardian_phone ? newGuardian_phone.replace(/\D/g, "") : undefined
+        const gPassword   = await bcrypt.hash(generateStudentPassword(), 12)
+        const guardianUser = await tx.user.create({
           data: {
-            userId:       user.id,
-            relationship: "Próprio",
+            name:     newGuardian_name.trim(),
+            email:    gEmailNorm,
+            phone:    gPhoneNorm,
+            password: gPassword,
+            role:     "GUARDIAN",
           },
         })
-        // Atualiza guardianId do student para o guardian recém-criado
-        const newGuardian = await tx.guardian.findUnique({ where: { userId: user.id } })
-        if (newGuardian) {
-          await tx.student.updateMany({
-            where: { userId: user.id },
-            data:  { guardianId: newGuardian.id },
-          })
-        }
+        const guardian = await tx.guardian.create({
+          data: { userId: guardianUser.id, relationship: newGuardian_relationship || null },
+        })
+        resolvedGuardianId = guardian.id
+
+      } else if (guardianMode === "existing") {
+        resolvedGuardianId = guardianId && guardianId.trim() ? guardianId.trim() : undefined
+
+      } else if (guardianMode === "self") {
+        // Cria o student primeiro sem guardian, depois cria guardian e faz o vínculo
+        await tx.student.create({
+          data: { userId: user.id, name, grade: grade ?? "Não informado", school, educationLevel: educationLevel as EducationLevel | undefined },
+        })
+        const selfG = await tx.guardian.create({ data: { userId: user.id, relationship: "Próprio" } })
+        await tx.student.update({ where: { userId: user.id }, data: { guardianId: selfG.id } })
+        return // Encerra a transaction aqui para este caso
       }
+
+      await tx.student.create({
+        data: {
+          userId:         user.id,
+          name,
+          grade:          grade ?? "Não informado",
+          school,
+          educationLevel: educationLevel as EducationLevel | undefined,
+          guardianId:     resolvedGuardianId,
+        },
+      })
     }
+
     if (role === "TEACHER") {
       await tx.teacher.create({
         data: { userId: user.id, hourlyRate: hourlyRate ?? 0, bio, teachingMode: (teachingMode ?? "HYBRID") as TeacherMode },
@@ -115,16 +153,15 @@ export async function createUserAction(formData: FormData) {
     }
   })
 
-  // Enviar e-mail de boas-vindas para alunos com e-mail cadastrado
+  // E-mail de boas-vindas para alunos
   if (role === "STUDENT" && emailNorm && generatedPassword) {
-    try {
-      await sendWelcomeEmail(emailNorm, name, generatedPassword)
-    } catch {
-      // Falha no e-mail não bloqueia o cadastro
-    }
+    try { await sendWelcomeEmail(emailNorm, name, generatedPassword) } catch { /* não bloqueia */ }
   }
 
   revalidatePath("/admin/usuarios")
+  if (callerRole === "COLLABORATOR") {
+    redirect("/colaborador/alunos?success=Usuário+criado+com+sucesso")
+  }
   redirect("/admin/usuarios?success=Usuário+criado+com+sucesso")
 }
 

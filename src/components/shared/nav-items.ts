@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, CalendarDays, DollarSign,
   BarChart3, Settings, BookOpen, ClipboardList,
-  GraduationCap, Wallet, FolderOpen, PenLine, Clock, UserCircle, School,
+  GraduationCap, Wallet, FolderOpen, PenLine, Clock, UserCircle, School, UserPlus,
 } from "lucide-react"
 import type { Role } from "@prisma/client"
 
@@ -22,13 +22,14 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { label: "Meu Perfil",  href: "/admin/perfil",     icon: UserCircle      },
   ],
   COLLABORATOR: [
-    { label: "Dashboard",      href: "/colaborador/dashboard",     icon: LayoutDashboard },
-    { label: "Agenda",         href: "/colaborador/agenda",        icon: CalendarDays    },
-    { label: "Alunos",         href: "/colaborador/alunos",        icon: GraduationCap   },
-    { label: "Professores",    href: "/colaborador/professores",   icon: School          },
-    { label: "Agendamentos",   href: "/colaborador/agendamentos",  icon: ClipboardList   },
-    { label: "Financeiro",     href: "/colaborador/financeiro",    icon: DollarSign      },
-    { label: "Meu Perfil",     href: "/colaborador/perfil",        icon: UserCircle      },
+    { label: "Dashboard",      href: "/colaborador/dashboard",        icon: LayoutDashboard },
+    { label: "Agenda",         href: "/colaborador/agenda",           icon: CalendarDays    },
+    { label: "Alunos",         href: "/colaborador/alunos",           icon: GraduationCap   },
+    { label: "Professores",    href: "/colaborador/professores",      icon: School          },
+    { label: "Novo Usuário",   href: "/colaborador/usuarios/novo",    icon: UserPlus        },
+    { label: "Agendamentos",   href: "/colaborador/agendamentos",     icon: ClipboardList   },
+    { label: "Financeiro",     href: "/colaborador/financeiro",       icon: DollarSign      },
+    { label: "Meu Perfil",     href: "/colaborador/perfil",           icon: UserCircle      },
   ],
   TEACHER: [
     { label: "Dashboard",      href: "/professor/dashboard",      icon: LayoutDashboard },

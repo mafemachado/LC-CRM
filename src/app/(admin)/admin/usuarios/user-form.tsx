@@ -10,14 +10,14 @@ import { Textarea }      from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertCircle, GraduationCap, BookOpen, Users,
-  Briefcase, ShieldCheck, User, School,
+  Briefcase, ShieldCheck, User, School, UserPlus, Link2, UserX,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Role, TeacherMode } from "@prisma/client"
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const ROLES = [
+const ALL_ROLES = [
   {
     value: "STUDENT",      label: "Aluno",
     icon:  GraduationCap,
@@ -51,28 +51,21 @@ const ROLES = [
 ]
 
 const GRADE_GROUPS = [
-  {
-    label: "Ensino Fundamental",
-    grades: ["6º EF", "7º EF", "8º EF", "9º EF"],
-  },
-  {
-    label: "Ensino Médio",
-    grades: ["1º EM", "2º EM", "3º EM"],
-  },
-  {
-    label: "Superior & Outros",
-    grades: ["Vestibular", "ENEM", "Concurso", "Superior"],
-  },
+  { label: "Ensino Fundamental", grades: ["6º EF", "7º EF", "8º EF", "9º EF"] },
+  { label: "Ensino Médio",       grades: ["1º EM", "2º EM", "3º EM"]           },
+  { label: "Superior & Outros",  grades: ["Vestibular", "ENEM", "Concurso", "Superior"] },
 ]
 
-const ADULT_GRADES   = new Set(["Vestibular", "ENEM", "Concurso", "Superior"])
-const DEFAULT_GRADE  = "6º EF"
+const ADULT_GRADES  = new Set(["Vestibular", "ENEM", "Concurso", "Superior"])
+const DEFAULT_GRADE = "6º EF"
 
 const TEACHING_MODES: { value: TeacherMode; label: string; description: string }[] = [
   { value: "PRESENCIAL",  label: "Presencial",          description: "Vem à sede; aulas presenciais e pode dar online de uma sala" },
   { value: "ONLINE_ONLY", label: "Só Online",           description: "Dá aulas apenas online, de casa" },
   { value: "HYBRID",      label: "Presencial e Online", description: "Pode trabalhar de casa ou vir à sede" },
 ]
+
+type GuardianMode = "new" | "existing" | "self" | "none"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,6 +96,7 @@ function Section({ children }: { children: React.ReactNode }) {
 interface UserFormProps {
   action:         (formData: FormData) => void | Promise<void>
   error?:         string
+  canCreateAdmin?: boolean
   defaultValues?: {
     name?: string; email?: string; phone?: string; role?: Role
     grade?: string; school?: string
@@ -115,18 +109,52 @@ interface UserFormProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function UserForm({ action, error, defaultValues, guardians = [], isEdit }: UserFormProps) {
-  const [role,          setRole]          = useState<string>(defaultValues?.role ?? "STUDENT")
-  const [grade,         setGrade]         = useState<string>(defaultValues?.grade ?? DEFAULT_GRADE)
-  const [teachingMode,  setTeachingMode]  = useState<string>(defaultValues?.teachingMode ?? "HYBRID")
-  const [guardianId,    setGuardianId]    = useState<string>(defaultValues?.guardianId ?? "")
-  const [selfGuardian,  setSelfGuardian]  = useState(false)
+export function UserForm({
+  action, error, canCreateAdmin = true,
+  defaultValues, guardians = [], isEdit,
+}: UserFormProps) {
+  const ROLES = canCreateAdmin ? ALL_ROLES : ALL_ROLES.filter((r) => r.value !== "ADMIN")
+
+  const [role,         setRole]         = useState<string>(defaultValues?.role ?? "STUDENT")
+  const [grade,        setGrade]        = useState<string>(defaultValues?.grade ?? DEFAULT_GRADE)
+  const [teachingMode, setTeachingMode] = useState<string>(defaultValues?.teachingMode ?? "HYBRID")
+  const [guardianId,   setGuardianId]   = useState<string>(defaultValues?.guardianId ?? "")
+  const [guardianMode, setGuardianMode] = useState<GuardianMode>("new")
+
   const [hourlyRateDisplay, setHourlyRateDisplay] = useState(
     defaultValues?.hourlyRate != null ? String(defaultValues.hourlyRate).replace(".", ",") : ""
   )
 
-  const activeRoleCfg = ROLES.find((r) => r.value === role)!
+  const activeRoleCfg = ROLES.find((r) => r.value === role) ?? ROLES[0]
   const isAdult       = ADULT_GRADES.has(grade)
+
+  // When switching to adult grade, default to "self" if not editing
+  function handleGradeChange(g: string) {
+    setGrade(g)
+    if (!isEdit) {
+      if (ADULT_GRADES.has(g) && guardianMode === "none") setGuardianMode("self")
+      if (!ADULT_GRADES.has(g) && guardianMode === "self") setGuardianMode("new")
+    }
+  }
+
+  const GUARDIAN_MODES: { value: GuardianMode; label: string; icon: React.ElementType; description: string }[] = [
+    {
+      value: "new",      label: "Criar responsável",  icon: UserPlus,
+      description: "Cadastrar um responsável novo agora",
+    },
+    {
+      value: "existing", label: "Vincular existente", icon: Link2,
+      description: "Selecionar um responsável já cadastrado",
+    },
+    ...(isAdult && !isEdit ? [{
+      value: "self" as GuardianMode, label: "Aluno adulto",  icon: User,
+      description: "Aluno é o próprio responsável",
+    }] : []),
+    {
+      value: "none",     label: "Sem responsável",    icon: UserX,
+      description: "Não vincular responsável agora",
+    },
+  ]
 
   return (
     <form action={action} className="space-y-5 max-w-2xl">
@@ -140,53 +168,55 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
       )}
 
       {/* ── 1. Tipo de perfil ────────────────────────────────────────── */}
-      <Section>
-        <SectionHeader icon={ShieldCheck} title="Tipo de perfil" description="Define as permissões e os dados deste usuário" />
-        <input type="hidden" name="role" value={role} />
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
-          {ROLES.map(({ value, label, icon: Icon, description, color, activeBg, activeBorder }) => {
-            const active = role === value
-            return (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setRole(value)}
-                className={cn(
-                  "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all",
-                  active
-                    ? `${activeBg} ${activeBorder} shadow-sm`
-                    : "border-border bg-background hover:bg-muted/40 hover:border-muted-foreground/30",
-                )}
-              >
-                <div className={cn("rounded-lg p-2", active ? activeBg : "bg-muted")}>
-                  <Icon className={cn("w-4 h-4", active ? color : "text-muted-foreground")} />
-                </div>
-                <div>
-                  <p className={cn("text-sm font-semibold leading-tight", active ? color : "text-foreground")}>
-                    {label}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
-                    {description}
-                  </p>
-                </div>
-              </button>
-            )
-          })}
-        </div>
-      </Section>
+      {!isEdit && (
+        <Section>
+          <SectionHeader icon={ShieldCheck} title="Tipo de perfil" description="Define as permissões e os dados deste usuário" />
+          <input type="hidden" name="role" value={role} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {ROLES.map(({ value, label, icon: Icon, description, color, activeBg, activeBorder }) => {
+              const active = role === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setRole(value)}
+                  className={cn(
+                    "flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-all",
+                    active
+                      ? `${activeBg} ${activeBorder} shadow-sm`
+                      : "border-border bg-background hover:bg-muted/40 hover:border-muted-foreground/30",
+                  )}
+                >
+                  <div className={cn("rounded-lg p-2", active ? activeBg : "bg-muted")}>
+                    <Icon className={cn("w-4 h-4", active ? color : "text-muted-foreground")} />
+                  </div>
+                  <div>
+                    <p className={cn("text-sm font-semibold leading-tight", active ? color : "text-foreground")}>
+                      {label}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                      {description}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </Section>
+      )}
+
+      {isEdit && <input type="hidden" name="role" value={role} />}
 
       {/* ── 2. Informações básicas ───────────────────────────────────── */}
       <Section>
         <SectionHeader icon={User} title="Informações básicas" />
 
         <div className="space-y-4">
-          {/* Nome */}
           <div className="space-y-1.5">
             <Label htmlFor="name">Nome completo *</Label>
             <Input id="name" name="name" defaultValue={defaultValues?.name} placeholder="Ex: João da Silva" required />
           </div>
 
-          {/* Email + Phone */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="email">
@@ -203,7 +233,6 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
             </div>
           </div>
 
-          {/* Senha */}
           {role === "STUDENT" && !isEdit ? (
             <div className="flex items-start gap-2.5 rounded-lg bg-muted/50 px-4 py-3 text-xs text-muted-foreground">
               <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#219EBC]" />
@@ -228,121 +257,173 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
           <SectionHeader
             icon={GraduationCap}
             title="Perfil do Aluno"
-            description="Série, escola e vínculo com o responsável"
+            description="Série, escola e responsável"
           />
           <input type="hidden" name="grade" value={grade} />
 
           {/* Grade chips */}
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-3 block">Série / Nível *</Label>
-              <div className="space-y-3">
-                {GRADE_GROUPS.map(({ label, grades }) => (
-                  <div key={label}>
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
-                      {label}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {grades.map((g) => {
-                        const active = grade === g
-                        return (
-                          <button
-                            key={g}
-                            type="button"
-                            onClick={() => {
-                              setGrade(g)
-                              if (!ADULT_GRADES.has(g)) setSelfGuardian(false)
-                            }}
-                            className={cn(
-                              "rounded-lg border px-3.5 py-1.5 text-sm font-medium transition-all",
-                              active
-                                ? "border-[#FB8500] bg-[#FB8500]/10 text-[#FB8500] shadow-sm"
-                                : "border-border bg-background text-foreground hover:border-[#FB8500]/40 hover:bg-[#FB8500]/5",
-                            )}
-                          >
-                            {g}
-                          </button>
-                        )
-                      })}
-                    </div>
+          <div>
+            <Label className="mb-3 block">Série / Nível *</Label>
+            <div className="space-y-3">
+              {GRADE_GROUPS.map(({ label, grades }) => (
+                <div key={label}>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">
+                    {label}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {grades.map((g) => {
+                      const active = grade === g
+                      return (
+                        <button
+                          key={g} type="button"
+                          onClick={() => handleGradeChange(g)}
+                          className={cn(
+                            "rounded-lg border px-3.5 py-1.5 text-sm font-medium transition-all",
+                            active
+                              ? "border-[#FB8500] bg-[#FB8500]/10 text-[#FB8500] shadow-sm"
+                              : "border-border bg-background text-foreground hover:border-[#FB8500]/40 hover:bg-[#FB8500]/5",
+                          )}
+                        >
+                          {g}
+                        </button>
+                      )
+                    })}
                   </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Escola */}
-            <div className="space-y-1.5">
-              <Label htmlFor="school" className="flex items-center gap-1.5">
-                <School className="w-3.5 h-3.5 text-muted-foreground" />
-                Escola
-                <span className="text-[11px] font-normal text-muted-foreground">(opcional)</span>
-              </Label>
-              <Input id="school" name="school" defaultValue={defaultValues?.school ?? ""} placeholder="Nome da escola" />
-            </div>
-
-            {/* Responsável */}
-            <div className="space-y-1.5">
-              <Label>Responsável</Label>
-              <input type="hidden" name="guardianId" value={selfGuardian ? "" : guardianId} />
-
-              {isAdult && !isEdit ? (
-                <div className="space-y-3">
-                  <label className={cn(
-                    "flex items-start gap-3 rounded-xl border p-4 cursor-pointer transition-all",
-                    selfGuardian
-                      ? "border-[#FB8500] bg-[#FB8500]/5"
-                      : "border-border hover:border-[#FB8500]/40",
-                  )}>
-                    <input
-                      type="checkbox"
-                      checked={selfGuardian}
-                      onChange={(e) => setSelfGuardian(e.target.checked)}
-                      className="mt-0.5"
-                    />
-                    <input type="hidden" name="selfGuardian" value={selfGuardian ? "on" : ""} />
-                    <div>
-                      <p className="text-sm font-medium">Aluno adulto — é o próprio responsável</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Uma conta de responsável será criada automaticamente vinculada a este aluno.
-                      </p>
-                    </div>
-                  </label>
-
-                  {!selfGuardian && (
-                    <Select
-                      value={guardianId}
-                      onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Ou selecionar responsável existente (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Nenhum</SelectItem>
-                        {guardians.map((g) => (
-                          <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
                 </div>
-              ) : (
-                <Select
-                  value={guardianId || "__none__"}
-                  onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecionar responsável (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nenhum</SelectItem>
-                    {guardians.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              ))}
             </div>
           </div>
+
+          {/* Escola */}
+          <div className="space-y-1.5">
+            <Label htmlFor="school" className="flex items-center gap-1.5">
+              <School className="w-3.5 h-3.5 text-muted-foreground" />
+              Escola
+              <span className="text-[11px] font-normal text-muted-foreground">(opcional)</span>
+            </Label>
+            <Input id="school" name="school" defaultValue={defaultValues?.school ?? ""} placeholder="Nome da escola" />
+          </div>
+
+          {/* ── Responsável ── */}
+          {!isEdit && (
+            <div className="space-y-3">
+              <Label>Responsável</Label>
+              <input type="hidden" name="guardianMode" value={guardianMode} />
+
+              {/* Mode selector */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {GUARDIAN_MODES.map(({ value, label, icon: Icon, description }) => {
+                  const active = guardianMode === value
+                  return (
+                    <button
+                      key={value} type="button"
+                      onClick={() => setGuardianMode(value)}
+                      className={cn(
+                        "flex flex-col items-start gap-1.5 rounded-xl border p-3 text-left transition-all text-xs",
+                        active
+                          ? "border-[#FB8500] bg-[#FB8500]/5 shadow-sm"
+                          : "border-border bg-background hover:border-[#FB8500]/30 hover:bg-muted/30",
+                      )}
+                    >
+                      <Icon className={cn("w-4 h-4", active ? "text-[#FB8500]" : "text-muted-foreground")} />
+                      <span className={cn("font-semibold leading-tight", active ? "text-[#FB8500]" : "text-foreground")}>
+                        {label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground leading-snug">{description}</span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Mode content */}
+              {guardianMode === "new" && (
+                <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Dados do novo responsável</p>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newGuardian_name">Nome completo *</Label>
+                    <Input id="newGuardian_name" name="newGuardian_name" placeholder="Ex: Maria da Silva" required />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="newGuardian_phone">Telefone / WhatsApp *</Label>
+                      <Input id="newGuardian_phone" name="newGuardian_phone" placeholder="(11) 99999-9999" required />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="newGuardian_email">
+                        E-mail
+                        <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">(opcional)</span>
+                      </Label>
+                      <Input id="newGuardian_email" name="newGuardian_email" type="email" placeholder="responsavel@email.com" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="newGuardian_relationship">
+                      Parentesco
+                      <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">(opcional)</span>
+                    </Label>
+                    <Input id="newGuardian_relationship" name="newGuardian_relationship" placeholder="Ex: Mãe, Pai, Avó…" />
+                  </div>
+                </div>
+              )}
+
+              {guardianMode === "existing" && (
+                <div>
+                  <input type="hidden" name="guardianId" value={guardianId} />
+                  <Select
+                    value={guardianId || "__none__"}
+                    onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecionar responsável existente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Selecionar…</SelectItem>
+                      {guardians.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {guardianMode === "self" && (
+                <div className="flex items-start gap-2.5 rounded-lg bg-[#FB8500]/5 border border-[#FB8500]/20 px-4 py-3 text-xs text-muted-foreground">
+                  <User className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#FB8500]" />
+                  Uma conta de responsável será criada automaticamente vinculada a este aluno.
+                </div>
+              )}
+
+              {guardianMode === "none" && (
+                <div className="flex items-start gap-2.5 rounded-lg bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+                  <UserX className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  Nenhum responsável vinculado. Pode ser adicionado depois na edição do aluno.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Edit mode: existing guardian select */}
+          {isEdit && (
+            <div className="space-y-1.5">
+              <Label>Responsável</Label>
+              <input type="hidden" name="guardianMode" value="existing" />
+              <input type="hidden" name="guardianId" value={guardianId} />
+              <Select
+                value={guardianId || "__none__"}
+                onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecionar responsável (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Nenhum</SelectItem>
+                  {guardians.map((g) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </Section>
       )}
 
@@ -355,7 +436,6 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
             description="Valor por aula, modalidade e apresentação"
           />
           <div className="space-y-4">
-            {/* Valor por aula */}
             <div className="space-y-1.5 max-w-[180px]">
               <Label htmlFor="hourlyRate">Valor por aula *</Label>
               <div className="relative">
@@ -375,7 +455,6 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
               </div>
             </div>
 
-            {/* Modalidade */}
             <div className="space-y-1.5">
               <Label>Modalidade de trabalho</Label>
               <input type="hidden" name="teachingMode" value={teachingMode} />
@@ -406,7 +485,6 @@ export function UserForm({ action, error, defaultValues, guardians = [], isEdit 
               </div>
             </div>
 
-            {/* Bio */}
             <div className="space-y-1.5">
               <Label htmlFor="bio">Bio / Apresentação</Label>
               <Textarea
