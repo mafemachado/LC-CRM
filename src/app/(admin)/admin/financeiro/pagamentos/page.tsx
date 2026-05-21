@@ -135,7 +135,7 @@ export default async function PagamentosPage({ searchParams }: PagamentosPagePro
                 {payments.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-border">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{p.student.user?.name ?? "Aluno"}</p>
+                      <p className="text-sm font-medium truncate">{p.student.name ?? "Aluno"}</p>
                       <p className="text-xs text-muted-foreground">
                         {p.description ?? "Cobrança"} · Vence {format(p.dueDate, "dd/MM/yyyy", { locale: ptBR })}
                         {p.method && ` · ${p.method}`}

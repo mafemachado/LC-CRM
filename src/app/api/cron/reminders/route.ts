@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       const subject     = lesson.subject.name
 
       for (const p of lesson.participants) {
-        const studentName = p.student.user?.name ?? "Aluno"
+        const studentName = p.student.name ?? "Aluno"
         await Promise.allSettled([
           notifyLessonReminder({
             userId: p.student.userId ?? "", email: p.student.user?.email ?? null,

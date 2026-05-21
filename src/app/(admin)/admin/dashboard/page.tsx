@@ -1,4 +1,5 @@
 import React           from "react"
+import { auth }        from "@/lib/auth"
 import { prisma }      from "@/lib/prisma"
 import { Sparkline }   from "@/components/shared/kpi-card"
 import { RevenueMetaChart } from "@/components/charts/revenue-meta-chart"
@@ -128,7 +129,7 @@ async function getOpsData() {
   // ── Atrasados ────────────────────────────────────────────────────────────────
   const atrasados = overduePayments.map((p) => ({
     id:      p.id,
-    aluno:   p.student.user?.name ?? "Aluno",
+    aluno:   p.student.name ?? "Aluno",
     pacote:  p.description ?? "—",
     valor:   Number(p.amount),
     dias:    Math.max(0, differenceInDays(now, p.dueDate)),
@@ -166,7 +167,7 @@ async function getOpsData() {
   // ── Próximas aulas ───────────────────────────────────────────────────────────
   const proximas = proximasAulas.map((l) => ({
     hora:       format(l.scheduledAt, "HH:mm"),
-    aluno:      l.participants[0]?.student.user?.name ?? "Aluno",
+    aluno:      l.participants[0]?.student.name ?? "Aluno",
     materia:    l.subject.name,
     prof:       l.teacher.user.name.split(" ")[0],
     modo:       (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
@@ -266,9 +267,19 @@ const ALERT_COLORS = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+function getGreeting(hour: number) {
+  if (hour >= 5 && hour < 12) return "Bom dia"
+  if (hour >= 12 && hour < 18) return "Boa tarde"
+  return "Boa noite"
+}
+
 export default async function AdminOpsPage() {
-  const d = await getOpsData()
+  const [d, session] = await Promise.all([getOpsData(), auth()])
   const { receitaDeltaNum, aulasDeltaNum } = d
+
+  const now       = new Date()
+  const greeting  = getGreeting(now.getHours())
+  const firstName = (session?.user?.name ?? "").split(" ")[0] || "Admin"
 
   return (
     <div className="flex flex-col gap-[18px]">
@@ -277,11 +288,14 @@ export default async function AdminOpsPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-            Visão geral
+            Visão geral · {d.todayLabel}
           </p>
           <h1 className="font-sub text-[22px] font-semibold leading-tight tracking-[-0.02em]">
-            Operação · {d.periodLabel}
+            {greeting}, {firstName}!
           </h1>
+          <p className="text-[13px] text-muted-foreground mt-0.5">
+            Operação · {d.periodLabel}
+          </p>
         </div>
         <div className="flex gap-1.5">
           <OpsBtn href="/admin/relatorios">↗ Relatórios</OpsBtn>

@@ -106,7 +106,7 @@ export default async function PacotesPage({ searchParams }: PacotesPageProps) {
                     <div key={pkg.id} className="p-4 rounded-xl border border-border">
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div>
-                          <p className="font-medium text-sm">{pkg.student.user?.name ?? "Aluno"}</p>
+                          <p className="font-medium text-sm">{pkg.student.name ?? "Aluno"}</p>
                           <p className="text-xs text-muted-foreground">{pkg.student.grade}</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">

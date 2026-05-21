@@ -79,7 +79,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
 
     return (
       <div className="relative flex flex-col sm:flex-row sm:items-start gap-4 p-4 rounded-xl border border-border bg-card hover:bg-accent/40 transition-colors cursor-pointer">
-        <Link href={`/colaborador/alunos/${student.id}`} className="absolute inset-0 rounded-xl z-0" aria-label={`Ver perfil de ${student.user?.name ?? "Aluno"}`} />
+        <Link href={`/colaborador/alunos/${student.id}`} className="absolute inset-0 rounded-xl z-0" aria-label={`Ver perfil de ${student.name ?? "Aluno"}`} />
         {/* Info principal */}
         <div className="flex gap-3 flex-1 min-w-0 relative z-10">
           <div className="w-10 h-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -88,7 +88,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
           <div className="min-w-0 flex-1 space-y-1">
             {/* Nome + saldo */}
             <div className="flex flex-wrap items-center gap-2">
-              <p className="font-medium text-sm">{student.user?.name ?? "Aluno"}</p>
+              <p className="font-medium text-sm">{student.name ?? "Aluno"}</p>
               <BalanceBadge remaining={remaining} />
             </div>
 

@@ -100,7 +100,7 @@ export async function requestLessonAction(formData: FormData) {
       teacherId:    teacher.user.id,
       teacherEmail: teacher.user.email ?? "",
       teacherPhone: teacher.user.phone,
-      studentName:  student.user?.name ?? "Aluno",
+      studentName:  student.name ?? "Aluno",
       subject:      subject?.name ?? "–",
       preferredAt:  format(requestDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
     })

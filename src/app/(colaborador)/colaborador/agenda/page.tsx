@@ -43,6 +43,7 @@ function mapToLessonSlot(
     participants: {
       studentId: string
       student: {
+        name: string
         user: { name: string } | null
         guardian: { user: { name: string } } | null
         packages: { remainingLessons: number }[]
@@ -54,7 +55,7 @@ function mapToLessonSlot(
   const d           = l.scheduledAt
   const min         = d.getHours() * 60 + d.getMinutes()
   const first       = l.participants[0]
-  const studentName = first?.student.user?.name ?? "Aluno"
+  const studentName = first?.student.name ?? "Aluno"
   const isGroup     = l.participants.length > 1
   const pkg         = first?.student.packages?.[0]
   const packageStatus: LessonSlot["packageStatus"] =
@@ -74,7 +75,7 @@ function mapToLessonSlot(
     guardianName:  first?.student.guardian?.user.name ?? null,
     isGroupLesson: isGroup,
     groupSize:     isGroup ? l.participants.length : null,
-    groupMates:    l.participants.slice(1).map(p => p.student.user?.name ?? "Aluno"),
+    groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
     packageStatus,
   }
 }
@@ -128,14 +129,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     }),
     getRoomCount(),
     prisma.student.findMany({
-      where: {
-        user:     { active: true },
-        packages: { some: { status: "ACTIVE", remainingLessons: { gt: 0 } } },
-      },
+      where: { user: { active: true } },
       include: {
         user:     true,
         packages: {
-          where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+          where:   { status: "ACTIVE" },
           orderBy: { purchaseDate: "desc" },
           take:    1,
         },
@@ -227,8 +225,8 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
       const guardian = student.guardian
       const time     = format(lesson.scheduledAt, "HH:mm")
       const modality = lesson.modality === "ONLINE" ? "online" : "sede"
-      const studentFirst  = (student.user?.name ?? student.name).split(" ")[0]
-      const guardianName  = guardian?.user.name ?? student.user?.name ?? "Responsável"
+      const studentFirst  = student.name.split(" ")[0]
+      const guardianName  = guardian?.user.name ?? student.name ?? "Responsável"
       const guardianFirst = guardianName.split(" ")[0]
       const teacherFirst  = lesson.teacher.user.name.split(" ")[0]
       const pkg      = student.packages[0]
@@ -279,7 +277,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
         .map(l => {
           const t = format(l.scheduledAt, "HH:mm")
-          const s = (l.participants[0]?.student.user?.name ?? "aluno").split(" ")[0]
+          const s = (l.participants[0]?.student.name ?? "aluno").split(" ")[0]
           return `${t} ${s}`
         })
         .join(" · ")
@@ -318,7 +316,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
       startMin:    r.preferredAt.getHours() * 60 + r.preferredAt.getMinutes(),
       time:        format(r.preferredAt, "HH:mm"),
       date:        format(r.preferredAt, "yyyy-MM-dd"),
-      studentName: r.student.user?.name ?? "Aluno",
+      studentName: r.student.name ?? "Aluno",
       subjectName: r.subject?.name ?? "–",
       modality:    r.modality as "PRESENCIAL" | "ONLINE",
       teacherMode: r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID",

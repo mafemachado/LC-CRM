@@ -610,209 +610,6 @@ function ActionQuickBtn({
   )
 }
 
-// ─── Painel lateral da aula selecionada (view de dia) ────────────────────────
-
-function AgDetailSidePanel({
-  lesson, teacherName, onClose, onRefresh,
-}: {
-  lesson:      LessonSlot
-  teacherName: string
-  onClose:     () => void
-  onRefresh:   () => void
-}) {
-  const [completing,    setCompleting]    = useState(false)
-  const [topicsCovered, setTopicsCovered] = useState("")
-  const [pending, start] = useTransition()
-
-  const modo   = lesson.modality === "ONLINE" ? "online" : "sede"
-  const canAct = lesson.status === "SCHEDULED" || lesson.status === "CONFIRMED"
-  const profOk  = lesson.status === "CONFIRMED" || lesson.status === "COMPLETED"
-  const alunoOk = profOk
-
-  const act = (next: "COMPLETED" | "CANCELLED" | "MISSED") =>
-    start(async () => {
-      try {
-        await updateLessonStatusAction(lesson.id, next,
-          next === "COMPLETED" ? topicsCovered : undefined)
-        toast.success(
-          next === "COMPLETED" ? "Aula concluída" :
-          next === "CANCELLED" ? "Aula cancelada" : "Falta registrada"
-        )
-        onRefresh()
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Erro")
-      }
-    })
-
-  const whatsapp = () =>
-    start(async () => {
-      try {
-        await sendLessonWhatsAppAction(lesson.id)
-        toast.success("WhatsApp enviado")
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Erro")
-      }
-    })
-
-  return (
-    <div
-      className="flex flex-col overflow-y-auto border-l border-border bg-card shrink-0"
-      style={{ width: 340 }}
-    >
-      {/* Header */}
-      <div className="shrink-0 border-b border-border px-4 py-3.5">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-            Aula selecionada
-          </span>
-          <button
-            onClick={onClose}
-            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-          >
-            ×
-          </button>
-        </div>
-        <div className="mt-1 flex items-center gap-2">
-          <span className="text-[16px] font-semibold leading-none">{lesson.studentName}</span>
-          <ModoBadgeDynamic modo={modo} />
-        </div>
-        <p className="mt-1.5 text-[12px] text-muted-foreground">
-          <span className="font-mono" style={{ color: "var(--text-2)" }}>{lesson.time}</span>
-          {" · "}{lesson.subjectName}{" · com "}{teacherName}
-        </p>
-      </div>
-
-      {/* Checklist */}
-      <div className="shrink-0 border-b border-border px-4 py-3.5">
-        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-          Checklist da aula
-        </p>
-        <div className="flex flex-col gap-2">
-          <SidePanelCheckRow
-            label="Pacote pago"
-            state={lesson.packageStatus === "pago" ? "ok" : lesson.packageStatus === "atrasado" ? "err" : "pend"}
-            detail={
-              lesson.packageStatus === "pago"     ? "Pacote ativo com aulas restantes" :
-              lesson.packageStatus === "atrasado" ? "Pacote esgotado ou vencido"       :
-                                                    "Sem pacote ativo"
-            }
-          />
-          <SidePanelCheckRow
-            label="Aluno confirmou presença"
-            state={alunoOk ? "ok" : "pend"}
-            detail={alunoOk ? "Confirmação registrada" : "Aguardando confirmação"}
-          />
-          <SidePanelCheckRow
-            label="Professor confirmou"
-            state={profOk ? "ok" : "pend"}
-            detail={profOk ? `${teacherName} confirmado` : "Aguardando confirmação"}
-          />
-          <SidePanelCheckRow
-            label={lesson.modality === "ONLINE" ? "Link da sala" : "Local da aula"}
-            state="ok"
-            detail={lesson.modality === "ONLINE" ? "Google Meet (link disponível)" : "Aula presencial na sede"}
-            action={lesson.modality === "ONLINE" ? "copiar" : undefined}
-          />
-        </div>
-      </div>
-
-      {/* Ações rápidas */}
-      <div className="shrink-0 border-b border-border px-4 py-3.5">
-        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-          Ações rápidas
-        </p>
-        {canAct && completing ? (
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs font-medium">
-                Tópicos cobertos <span className="text-destructive">*</span>
-              </label>
-              <textarea
-                value={topicsCovered}
-                onChange={e => setTopicsCovered(e.target.value)}
-                placeholder="Ex: Equações do 2º grau..."
-                className="mt-1 w-full resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                rows={3}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setCompleting(false)} disabled={pending}>
-                Voltar
-              </Button>
-              <Button
-                size="sm"
-                className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
-                onClick={() => act("COMPLETED")}
-                disabled={pending || !topicsCovered.trim()}
-              >
-                {pending
-                  ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  : <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-                }
-                Salvar e concluir
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-1.5">
-            <ActionQuickBtn
-              icon={<MessageCircle className="h-3.5 w-3.5" />}
-              label="Mensagem mãe"
-              onClick={whatsapp}
-              disabled={pending}
-            />
-            <ActionQuickBtn
-              icon={<MessageCircle className="h-3.5 w-3.5" />}
-              label="Mensagem prof."
-              onClick={() => toast.info("Em breve")}
-              disabled={pending}
-            />
-            <ActionQuickBtn
-              icon={<Clock className="h-3.5 w-3.5" />}
-              label="Mudar horário"
-              onClick={() => toast.info("Em breve")}
-              disabled={pending}
-            />
-            <ActionQuickBtn
-              icon={<Building2 className="h-3.5 w-3.5" />}
-              label="Mudar sala / modo"
-              onClick={() => toast.info("Em breve")}
-              disabled={pending}
-            />
-            {canAct && (
-              <>
-                <ActionQuickBtn
-                  icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                  label="Marcar realizada"
-                  onClick={() => setCompleting(true)}
-                  disabled={pending}
-                />
-                <ActionQuickBtn
-                  icon={<XCircle className="h-3.5 w-3.5" />}
-                  label="Cancelar aula"
-                  onClick={() => act("CANCELLED")}
-                  disabled={pending}
-                  danger
-                />
-              </>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Histórico de comunicação (stub) */}
-      <div className="flex-1 px-4 py-3.5">
-        <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">
-          Comunicação · hoje
-        </p>
-        <p className="text-xs italic text-muted-foreground">
-          Histórico disponível após integração com WhatsApp / e-mail.
-        </p>
-      </div>
-    </div>
-  )
-}
-
 // Helper lazy para evitar import circular — ModoBadge usa CSS vars da Fase 0
 function ModoBadgeDynamic({ modo }: { modo: "online" | "sede" }) {
   const isOnline = modo === "online"
@@ -1232,12 +1029,14 @@ export function AgendaGrid({
       view === "week"  ? format(addDays(cur, delta * 7), "yyyy-MM-dd") :
                          format(addDays(cur, delta), "yyyy-MM-dd")
     setCurDate(newDate)
+    setSelectedLesson(null)
     pushUrl(newDate, view)
   }
 
   const switchView = (v: ViewMode) => {
     setView(v)
     setHoveredCell(null)
+    setSelectedLesson(null)
     pushUrl(curDate, v)
   }
 
@@ -1873,15 +1672,6 @@ export function AgendaGrid({
 
             </div>
             </div>{/* fim flex-1 overflow-auto */}
-
-            {selectedLesson && (
-              <AgDetailSidePanel
-                lesson={selectedLesson}
-                teacherName={effectiveTeachers.find(t => t.id === selectedLesson.teacherId)?.name ?? ""}
-                onClose={() => setSelectedLesson(null)}
-                onRefresh={() => { setSelectedLesson(null); fetchData(curDate, view) }}
-              />
-            )}
           </div>
         )}
 
@@ -1894,7 +1684,7 @@ export function AgendaGrid({
       </div>
 
       {/* ── Modais ───────────────────────────────────────────── */}
-      {selectedLesson && view !== "day" && (
+      {selectedLesson && (
         <LessonDetailModal
           lesson={selectedLesson}
           teacherName={effectiveTeachers.find(t => t.id === selectedLesson.teacherId)?.name ?? ""}

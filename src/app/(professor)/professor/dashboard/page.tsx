@@ -117,7 +117,7 @@ async function getProfData(email: string) {
       left:    `${((lh - SH) / SPAN) * 100}%`,
       width:   `${((le - lh)  / SPAN) * 100}%`,
       time:    format(l.scheduledAt, "HH:mm"),
-      aluno:   (l.participants[0]?.student.user?.name ?? "Aluno").split(" ")[0],
+      aluno:   (l.participants[0]?.student.name ?? "Aluno").split(" ")[0],
       materia: l.subject.name,
       modo:    (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
       status:  l.status === "COMPLETED" ? "done"
@@ -152,7 +152,7 @@ async function getProfData(email: string) {
     const aulaNum   = stId
       ? allLessons.filter(l => l.participants[0]?.studentId === stId && l.status === "COMPLETED").length + 1
       : 1
-    const stName    = nextLesson.participants[0]?.student.user?.name ?? ""
+    const stName    = nextLesson.participants[0]?.student.name ?? ""
     const initials  = stName.split(" ").filter(Boolean).slice(0, 2).map(s => s[0]).join("").toUpperCase() || "AL"
     const stGrade   = nextLesson.participants[0]?.student.grade ?? "—"
     const endH      = new Date(nextLesson.scheduledAt.getTime() + (nextLesson.duration ?? 60) * 60000)
@@ -178,7 +178,7 @@ async function getProfData(email: string) {
     .filter(l => (l.studentRating ?? 0) > 0 && l.studentFeedback)
     .slice(0, 3)
     .map(l => ({
-      aluno: (l.participants[0]?.student.user?.name ?? "Aluno").split(" ").slice(0, 2).join(" "),
+      aluno: (l.participants[0]?.student.name ?? "Aluno").split(" ").slice(0, 2).join(" "),
       nota:  l.studentRating ?? 5,
       txt:   l.studentFeedback ?? "",
       data:  relAgo(l.scheduledAt, now),
@@ -215,7 +215,7 @@ async function getProfData(email: string) {
     if (!p) continue
     const sid = p.studentId
     if (!studentMap.has(sid)) {
-      const n = p.student.user?.name ?? "Aluno"
+      const n = p.student.name ?? "Aluno"
       studentMap.set(sid, {
         id:       sid,
         name:     n,
@@ -253,7 +253,7 @@ async function getProfData(email: string) {
   const licoes: LicaoRow[] = []
   for (const l of allLessons) {
     for (const hw of l.homework) {
-      const stName = (l.participants[0]?.student.user?.name ?? "Aluno").split(" ").slice(0, 2).join(" ")
+      const stName = (l.participants[0]?.student.name ?? "Aluno").split(" ").slice(0, 2).join(" ")
       licoes.push({
         id:            hw.id,
         titulo:        hw.title,

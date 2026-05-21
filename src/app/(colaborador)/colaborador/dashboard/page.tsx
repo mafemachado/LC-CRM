@@ -145,7 +145,7 @@ async function getColabData(userId?: string) {
 
   for (const r of pendingRequests.slice(0, 3)) {
     const h         = differenceInHours(now, r.requestedAt)
-    const firstName = (r.student.user?.name ?? "Aluno").split(" ")[0]
+    const firstName = (r.student.name ?? "Aluno").split(" ")[0]
     tasks.push({
       txt:   `Responder pedido de ${firstName} — ${r.subject?.name ?? "matéria"} (há ${h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`})`,
       tag:   "agendamento",
@@ -155,7 +155,7 @@ async function getColabData(userId?: string) {
   }
   for (const p of overduePayments.slice(0, 2)) {
     const dias      = differenceInDays(now, p.dueDate)
-    const firstName = (p.student.user?.name ?? "Aluno").split(" ")[0]
+    const firstName = (p.student.name ?? "Aluno").split(" ")[0]
     tasks.push({
       txt:   `Cobrar ${firstName} — ${dias}d em atraso`,
       tag:   "cobrança",
@@ -167,7 +167,7 @@ async function getColabData(userId?: string) {
   // ── Format pending requests for PedidoRow ────────────────────────────────────
   const formattedRequests = pendingRequests.slice(0, 8).map((r) => {
     const ha           = differenceInHours(now, r.requestedAt)
-    const studentName  = r.student.user?.name ?? "Aluno"
+    const studentName  = r.student.name ?? "Aluno"
     const guardianName = r.student.guardian?.user.name
     return {
       id:          r.id,
@@ -188,7 +188,7 @@ async function getColabData(userId?: string) {
   // ── Cobranças individuais (SEM totalizador) ───────────────────────────────────
   const cobrancas = overduePayments.map((p) => ({
     id:      p.id,
-    aluno:   p.student.user?.name ?? "Aluno",
+    aluno:   p.student.name ?? "Aluno",
     pacote:  p.description ?? "—",
     valor:   Number(p.amount),
     dias:    Math.max(0, differenceInDays(now, p.dueDate)),
