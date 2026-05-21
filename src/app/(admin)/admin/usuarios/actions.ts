@@ -150,9 +150,16 @@ export async function createUserAction(formData: FormData) {
       })
     }
     if (role === "GUARDIAN") {
-      await tx.guardian.create({
+      const guardian = await tx.guardian.create({
         data: { userId: user.id, relationship: relationship || null },
       })
+      const studentIds = formData.getAll("studentIds").map(String).filter(Boolean)
+      if (studentIds.length > 0) {
+        await tx.student.updateMany({
+          where: { id: { in: studentIds } },
+          data:  { guardianId: guardian.id },
+        })
+      }
     }
   })
 
@@ -207,11 +214,24 @@ export async function updateUserAction(id: string, formData: FormData) {
       })
     }
     if (role === "GUARDIAN") {
-      await tx.guardian.upsert({
+      const guardian = await tx.guardian.upsert({
         where:  { userId: id },
         update: { relationship: relationship || null },
         create: { userId: id, relationship: relationship || null },
       })
+      const studentIds = formData.getAll("studentIds").map(String).filter(Boolean)
+      // Desvincular alunos que foram desmarcados
+      await tx.student.updateMany({
+        where: { guardianId: guardian.id, id: { notIn: studentIds } },
+        data:  { guardianId: null },
+      })
+      // Vincular alunos selecionados
+      if (studentIds.length > 0) {
+        await tx.student.updateMany({
+          where: { id: { in: studentIds } },
+          data:  { guardianId: guardian.id },
+        })
+      }
     }
   })
 

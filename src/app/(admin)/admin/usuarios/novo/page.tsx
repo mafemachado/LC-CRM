@@ -10,10 +10,17 @@ interface NovoUsuarioPageProps {
 export default async function NovoUsuarioPage({ searchParams }: NovoUsuarioPageProps) {
   const { error } = await searchParams
 
-  const guardians = await prisma.guardian.findMany({
-    include: { user: { select: { name: true } } },
-    orderBy: { user: { name: "asc" } },
-  })
+  const [guardians, studentsWithoutGuardian] = await Promise.all([
+    prisma.guardian.findMany({
+      include: { user: { select: { name: true } } },
+      orderBy: { user: { name: "asc" } },
+    }),
+    prisma.student.findMany({
+      where:   { guardianId: null },
+      select:  { id: true, name: true, grade: true },
+      orderBy: { name: "asc" },
+    }),
+  ])
 
   return (
     <div>
@@ -26,6 +33,7 @@ export default async function NovoUsuarioPage({ searchParams }: NovoUsuarioPageP
         action={createUserAction}
         error={error}
         guardians={guardians.map((g) => ({ id: g.id, name: g.user.name }))}
+        students={studentsWithoutGuardian.map((s) => ({ id: s.id, name: s.name, grade: s.grade }))}
       />
     </div>
   )
