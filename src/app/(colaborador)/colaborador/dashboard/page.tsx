@@ -236,7 +236,7 @@ function ColabKpiCell({
     accent:  { bg: "var(--accent-soft)",  color: "var(--primary)" },
     info:    { bg: "var(--info-soft)",    color: "var(--info)"    },
     warn:    { bg: "var(--warn-soft)",    color: "var(--warn)"    },
-    muted:   { bg: "var(--muted-soft)",   color: "var(--muted)"   },
+    muted:   { bg: "var(--muted-soft)",   color: "var(--subtle)"   },
   }
   const c = C[tagColor]
   return (
@@ -275,7 +275,7 @@ const CELL: Record<string, { bg: string; color: string; sym: string }> = {
   busy:    { bg: "var(--danger-soft)",  color: "var(--danger)",  sym: "■" },
   request: { bg: "var(--accent-soft)",  color: "var(--primary)", sym: "?" },
   free:    { bg: "var(--success-soft)", color: "var(--success)", sym: "·" },
-  none:    { bg: "transparent",         color: "var(--muted)",   sym: ""  },
+  none:    { bg: "transparent",         color: "var(--subtle)",   sym: ""  },
 }
 
 const TAG_COLORS: Record<string, { bg: string; color: string }> = {
@@ -283,7 +283,7 @@ const TAG_COLORS: Record<string, { bg: string; color: string }> = {
   danger:  { bg: "var(--danger-soft)",  color: "var(--danger)"  },
   info:    { bg: "var(--info-soft)",    color: "var(--info)"    },
   success: { bg: "var(--success-soft)", color: "var(--success)" },
-  muted:   { bg: "var(--muted-soft)",   color: "var(--muted)"   },
+  muted:   { bg: "var(--muted-soft)",   color: "var(--subtle)"   },
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -303,9 +303,9 @@ export default async function ColaboradorDashboard() {
         </p>
         <h1 className="font-sub text-[20px] font-semibold leading-snug tracking-[-0.02em]">
           {d.saudacao}, {session?.user?.name?.split(" ")[0]}.{" "}
-          <span style={{ color: "var(--muted)" }}>Você tem</span>{" "}
+          <span style={{ color: "var(--subtle)" }}>Você tem</span>{" "}
           <span style={{ color: "var(--primary)" }}>{d.totalPendentes} itens</span>{" "}
-          <span style={{ color: "var(--muted)" }}>pendentes hoje.</span>
+          <span style={{ color: "var(--subtle)" }}>pendentes hoje.</span>
         </h1>
       </div>
 
@@ -427,7 +427,7 @@ export default async function ColaboradorDashboard() {
                     <div
                       key={h}
                       className="text-center font-mono text-[10px]"
-                      style={{ color: "var(--muted)" }}
+                      style={{ color: "var(--subtle)" }}
                     >
                       {String(h).padStart(2, "0")}h
                     </div>
@@ -526,7 +526,7 @@ export default async function ColaboradorDashboard() {
                         ? { background: "var(--danger-soft)", color: "var(--danger)" }
                         : r.dias >= 7
                         ? { background: "var(--warn-soft)",   color: "var(--warn)"   }
-                        : { background: "var(--hover)",       color: "var(--muted)"  }
+                        : { background: "var(--hover)",       color: "var(--subtle)"  }
                     return (
                       <tr key={r.id} className="border-t border-border">
                         <td className="px-[14px] py-[9px] font-medium">{r.aluno}</td>
@@ -606,7 +606,7 @@ export default async function ColaboradorDashboard() {
                     <span
                       className="flex-1 text-[12px] leading-snug"
                       style={{
-                        color:          t.done ? "var(--muted)" : "var(--text)",
+                        color:          t.done ? "var(--subtle)" : "var(--text)",
                         textDecoration: t.done ? "line-through" : "none",
                       }}
                     >

@@ -45,7 +45,7 @@ export function PedidoRow({
   const tagStyle =
     tag === "novo"   ? { background: "var(--accent-soft)", color: "var(--primary)" } :
     tag === "antigo" ? { background: "var(--danger-soft)", color: "var(--danger)"  } :
-                       { background: "var(--hover)",       color: "var(--muted)"   }
+                       { background: "var(--hover)",       color: "var(--subtle)"   }
 
   function handleApprove() {
     startTransition(async () => {

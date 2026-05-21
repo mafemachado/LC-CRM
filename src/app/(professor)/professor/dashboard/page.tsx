@@ -202,7 +202,7 @@ async function getProfData(email: string) {
   const ganhosBreakdown = Array.from(subjectBreak.values())
     .sort((a, b) => b.aulas - a.aulas)
     .slice(0, 4)
-    .map((s, i) => ({ ...s, valor: s.aulas * rate, color: BREAKDOWN_COLORS[i] ?? "var(--muted)" }))
+    .map((s, i) => ({ ...s, valor: s.aulas * rate, color: BREAKDOWN_COLORS[i] ?? "var(--subtle)" }))
 
   const diasAtePagamento = Math.max(1, differenceInDays(endOfMonth(now), now))
 
@@ -362,7 +362,7 @@ export default async function ProfessorDashboard() {
               </p>
               <p
                 className="mt-[2px] text-[10.5px]"
-                style={{ color: subPos === true ? "var(--success)" : subPos === false ? "var(--danger)" : "var(--muted)" }}
+                style={{ color: subPos === true ? "var(--success)" : subPos === false ? "var(--danger)" : "var(--subtle)" }}
               >
                 {sub}
               </p>
@@ -404,7 +404,7 @@ export default async function ProfessorDashboard() {
                   />
                   <div
                     className="absolute font-mono text-[10px]"
-                    style={{ left, top: 0, transform: "translateX(-50%)", color: "var(--muted)" }}
+                    style={{ left, top: 0, transform: "translateX(-50%)", color: "var(--subtle)" }}
                   >
                     {String(h).padStart(2, "0")}h
                   </div>
@@ -469,7 +469,7 @@ export default async function ProfessorDashboard() {
                   </div>
                   <div
                     className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px]"
-                    style={{ color: "var(--muted)" }}
+                    style={{ color: "var(--subtle)" }}
                   >
                     {item.time} · {item.materia}
                   </div>
@@ -544,7 +544,7 @@ export default async function ProfessorDashboard() {
                       {d.hero.aulaNum}ª aula
                     </span>
                   </div>
-                  <p className="mb-3 text-[12px]" style={{ color: "var(--muted)" }}>
+                  <p className="mb-3 text-[12px]" style={{ color: "var(--subtle)" }}>
                     Plano:{" "}
                     <span style={{ color: "var(--text-2)" }}>{d.hero.topicos}</span>
                   </p>

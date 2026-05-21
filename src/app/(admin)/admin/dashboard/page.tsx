@@ -423,7 +423,7 @@ export default async function AdminOpsPage() {
                           ? { background: "var(--danger-soft)", color: "var(--danger)" }
                           : r.dias >= 7
                           ? { background: "var(--warn-soft)",   color: "var(--warn)"   }
-                          : { background: "var(--hover)",       color: "var(--muted)"  }
+                          : { background: "var(--hover)",       color: "var(--subtle)"  }
                       return (
                         <tr key={r.id} className="border-t border-border">
                           <td className="px-[14px] py-[9px] font-medium">{r.aluno}</td>
