@@ -38,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           } else {
             const normalized = input.replace(/\D/g, "")
             if (normalized.length < 8) return null
-            user = await prisma.user.findUnique({
+            user = await prisma.user.findFirst({
               where: { phone: normalized, active: true },
             })
           }
