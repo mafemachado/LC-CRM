@@ -707,11 +707,13 @@ function PendingApprovalModal({
   const canSetPresencial   = req.teacherMode !== "ONLINE_ONLY"
   const showLocationToggle = modality === "ONLINE" && canSetPresencial
 
-  const hasConflict = lessons.some(l => {
+  // Acha a aula que conflita (não apenas verifica se existe)
+  const conflictingLesson = lessons.find(l => {
     if (l.teacherId !== req.teacherId) return false
     if (l.status === "CANCELLED" || l.status === "MISSED") return false
     return l.startMin < req.startMin + 60 && l.startMin + l.duration > req.startMin
   })
+  const hasConflict = !!conflictingLesson
 
   const approve = () => start(async () => {
     try {
@@ -739,45 +741,40 @@ function PendingApprovalModal({
         <DialogHeader>
           <div className="flex items-center gap-2 flex-wrap">
             <DialogTitle>Solicitação Pendente</DialogTitle>
-            <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+            <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-800 border border-orange-200">
               Aguardando aprovação
             </span>
           </div>
         </DialogHeader>
 
         <div className="space-y-4">
-          {hasConflict && (
-            <div className="flex items-center gap-2 text-xs text-destructive bg-destructive/10 px-3 py-2 rounded-lg">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span><strong>Conflito:</strong> o professor já tem uma aula confirmada neste horário.</span>
-            </div>
-          )}
 
-          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm rounded-lg bg-muted/40 px-4 py-3">
+          {/* ── Info da solicitação ──────────────────────────── */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 rounded-lg bg-muted/40 px-4 py-3">
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Aluno</p>
-              <p className="font-medium">{req.studentName}</p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Aluno</p>
+              <p className="font-semibold text-[13px] leading-snug">{req.studentName}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Matéria</p>
-              <p className="font-medium">{req.subjectName}</p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Matéria</p>
+              <p className="font-semibold text-[13px] leading-snug">{req.subjectName}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Professor</p>
-              <p className="font-medium">{teacherName}</p>
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Professor</p>
+              <p className="font-semibold text-[13px] leading-snug">{teacherName}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Horário solicitado</p>
-              <p className="font-medium flex items-center gap-1">
-                <Clock className="w-3 h-3" /> {req.time}
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Horário solicitado</p>
+              <p className="font-semibold text-[13px] leading-snug flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> {req.time}
               </p>
             </div>
-            <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-0.5">Pedido pelo aluno</p>
-              <p className="font-medium flex items-center gap-1">
+            <div className="col-span-2">
+              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Pedido pelo aluno</p>
+              <p className="font-semibold text-[13px] leading-snug flex items-center gap-1.5">
                 {req.modality === "ONLINE"
-                  ? <><Wifi    className="w-3 h-3 text-blue-500"  /> Online</>
-                  : <><MapPin  className="w-3 h-3 text-green-600" /> Presencial</>
+                  ? <><Wifi   className="w-3.5 h-3.5 text-blue-500 shrink-0"  /> Online</>
+                  : <><MapPin className="w-3.5 h-3.5 text-green-600 shrink-0" /> Presencial</>
                 }
               </p>
             </div>
@@ -789,60 +786,91 @@ function PendingApprovalModal({
             </p>
           )}
 
-          <hr className="border-border" />
-
-          <div className="space-y-3">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Confirmar modalidade</p>
-
-            {canSetPresencial ? (
-              <div className="flex rounded-lg border border-border overflow-hidden">
-                <button type="button" onClick={() => setModality("PRESENCIAL")} disabled={pending}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
-                    modality === "PRESENCIAL" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <MapPin className="w-3.5 h-3.5" /> Presencial
-                </button>
-                <button type="button" onClick={() => setModality("ONLINE")} disabled={pending}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
-                    modality === "ONLINE" ? "bg-brand-blue text-white" : "text-muted-foreground hover:bg-muted/50"
-                  }`}
-                >
-                  <Wifi className="w-3.5 h-3.5" /> Online
-                </button>
+          {/* ── Disponibilidade do horário ───────────────────── */}
+          {hasConflict ? (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 space-y-1.5">
+              <div className="flex items-center gap-2 text-destructive font-semibold text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                Horário já ocupado — não é possível aprovar
               </div>
-            ) : (
-              <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
-                <Wifi className="w-4 h-4" /> Online (professor só atende remotamente)
-              </div>
-            )}
+              <p className="text-xs text-muted-foreground pl-6">
+                <span className="font-medium text-foreground">{conflictingLesson!.studentName}</span>
+                {" · "}{conflictingLesson!.subjectName}
+                {" · "}
+                <span className={`font-semibold ${
+                  conflictingLesson!.status === "CONFIRMED" ? "text-[#219EBC]" :
+                  conflictingLesson!.status === "COMPLETED" ? "text-slate-500" : "text-amber-600"
+                }`}>
+                  {STATUS_LABEL[conflictingLesson!.status]}
+                </span>
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2.5 rounded-lg">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              Horário disponível — nenhuma aula confirmada neste slot
+            </div>
+          )}
 
-            {showLocationToggle && (
-              <div className="space-y-1">
-                <p className="text-xs text-muted-foreground">Local do professor na aula online</p>
-                <div className="flex rounded-lg border border-border overflow-hidden">
-                  <button type="button" onClick={() => setTeacherOnsite(false)} disabled={pending}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
-                      !teacherOnsite ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    <Home className="w-3.5 h-3.5" /> Em casa
-                  </button>
-                  <button type="button" onClick={() => setTeacherOnsite(true)} disabled={pending}
-                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
-                      teacherOnsite ? "bg-amber-100 text-amber-800 font-medium" : "text-muted-foreground hover:bg-muted/50"
-                    }`}
-                  >
-                    <Building2 className="w-3.5 h-3.5" /> Na sede
-                  </button>
-                </div>
-                {teacherOnsite && (
-                  <p className="text-[10px] text-muted-foreground">Ocupará uma sala na sede.</p>
+          {/* ── Confirmar modalidade (oculto se há conflito) ─── */}
+          {!hasConflict && (
+            <>
+              <hr className="border-border" />
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Confirmar modalidade</p>
+
+                {canSetPresencial ? (
+                  <div className="flex rounded-lg border border-border overflow-hidden">
+                    <button type="button" onClick={() => setModality("PRESENCIAL")} disabled={pending}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
+                        modality === "PRESENCIAL" ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <MapPin className="w-3.5 h-3.5" /> Presencial
+                    </button>
+                    <button type="button" onClick={() => setModality("ONLINE")} disabled={pending}
+                      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors ${
+                        modality === "ONLINE" ? "bg-brand-blue text-white" : "text-muted-foreground hover:bg-muted/50"
+                      }`}
+                    >
+                      <Wifi className="w-3.5 h-3.5" /> Online
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-700">
+                    <Wifi className="w-4 h-4" /> Online (professor só atende remotamente)
+                  </div>
+                )}
+
+                {showLocationToggle && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Local do professor na aula online</p>
+                    <div className="flex rounded-lg border border-border overflow-hidden">
+                      <button type="button" onClick={() => setTeacherOnsite(false)} disabled={pending}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
+                          !teacherOnsite ? "bg-muted text-foreground font-medium" : "text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <Home className="w-3.5 h-3.5" /> Em casa
+                      </button>
+                      <button type="button" onClick={() => setTeacherOnsite(true)} disabled={pending}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm transition-colors ${
+                          teacherOnsite ? "bg-amber-100 text-amber-800 font-medium" : "text-muted-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <Building2 className="w-3.5 h-3.5" /> Na sede
+                      </button>
+                    </div>
+                    {teacherOnsite && (
+                      <p className="text-[11px] text-muted-foreground">Ocupará uma sala na sede.</p>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            </>
+          )}
 
+          {/* ── Ações ────────────────────────────────────────── */}
           <div className="flex gap-2 pt-1">
             <Button variant="outline"
               className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/10"
@@ -851,7 +879,12 @@ function PendingApprovalModal({
               {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <XCircle className="w-3.5 h-3.5 mr-1" />}
               Recusar
             </Button>
-            <Button className="flex-1" onClick={approve} disabled={pending}>
+            <Button
+              className="flex-1"
+              onClick={approve}
+              disabled={pending || hasConflict}
+              title={hasConflict ? "Não é possível aprovar — professor já tem aula neste horário" : undefined}
+            >
               {pending ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <CheckCircle2 className="w-3.5 h-3.5 mr-1" />}
               Aprovar
             </Button>
