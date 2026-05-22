@@ -27,6 +27,12 @@ function pastDate(monthsAgo: number, dayOffset = 0, hour = 10) {
   return setMinutes(setHours(d, hour), 0)
 }
 
+function todayAt(hour: number, minute = 0) {
+  const d = new Date()
+  d.setHours(hour, minute, 0, 0)
+  return d
+}
+
 function gerarAulasMes(
   studentId: string,
   teacherId: string,
@@ -595,6 +601,84 @@ async function main() {
     ],
   })
   console.log("✅ Notificações")
+
+  // ─── Aulas confirmadas para HOJE ─────────────────────────────────────────
+  const aulasDeHoje = [
+    { studentId: "student-2",  teacherId: "teacher-2", subjectId: "sub-por",
+      scheduledAt: todayAt(9),      modality: LessonModality.ONLINE,     teacherOnsite: false },
+    { studentId: "student-4",  teacherId: "teacher-4", subjectId: "sub-mat",
+      scheduledAt: todayAt(10, 30), modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
+    { studentId: "student-5",  teacherId: "teacher-1", subjectId: "sub-fis",
+      scheduledAt: todayAt(14),     modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
+    { studentId: "student-10", teacherId: "teacher-5", subjectId: "sub-ing",
+      scheduledAt: todayAt(16),     modality: LessonModality.ONLINE,     teacherOnsite: false },
+  ]
+  for (const a of aulasDeHoje) {
+    const { studentId, ...lessonData } = a
+    await prisma.lesson.create({
+      data: { ...lessonData, status: LessonStatus.CONFIRMED, participants: { create: { studentId } } },
+    })
+  }
+  console.log(`✅ ${aulasDeHoje.length} aulas confirmadas para hoje`)
+
+  // ─── Solicitações adicionais ──────────────────────────────────────────────
+  await prisma.lessonRequest.createMany({
+    data: [
+      {
+        studentId: "student-3", teacherId: "teacher-3", subjectId: "sub-qui",
+        modality: LessonModality.PRESENCIAL, preferredAt: addHours(now, 24),
+        status: RequestStatus.PENDING, reason: "Prova de Química na semana que vem",
+      },
+      {
+        studentId: "student-6", teacherId: "teacher-6", subjectId: "sub-fis",
+        modality: LessonModality.ONLINE, preferredAt: addHours(now, 30),
+        status: RequestStatus.PENDING, reason: null,
+      },
+      {
+        studentId: "student-1", teacherId: "teacher-1", subjectId: "sub-mat",
+        modality: LessonModality.PRESENCIAL, preferredAt: addHours(now, 48),
+        status: RequestStatus.PENDING, reason: "Dificuldade com equações do 2º grau",
+      },
+      {
+        studentId: "student-8", teacherId: "teacher-3", subjectId: "sub-bio",
+        modality: LessonModality.PRESENCIAL, preferredAt: addHours(now, 56),
+        status: RequestStatus.PENDING, reason: null,
+      },
+    ],
+  })
+  console.log("✅ 4 solicitações adicionais pendentes")
+
+  // ─── Notificações extras para o colaborador ───────────────────────────────
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: "user-colab1", type: "LESSON_REQUEST", read: false,
+        title: "Novo pedido — Gabriel Souza",
+        message: "Gabriel solicitou aula de Química com Fernanda para amanhã (presencial).",
+      },
+      {
+        userId: "user-colab1", type: "LESSON_REQUEST", read: false,
+        title: "Novo pedido — Lucas Alves",
+        message: "Lucas quer aula de Matemática com Ana depois de amanhã.",
+      },
+      {
+        userId: "user-colab1", type: "PAYMENT_OVERDUE", read: false,
+        title: "Cobrança urgente — Thiago Barbosa",
+        message: "Pacote de Thiago está há 41 dias sem pagamento (R$ 900).",
+      },
+      {
+        userId: "user-colab1", type: "PAYMENT_OVERDUE", read: false,
+        title: "Cobrança urgente — Vinícius Rocha",
+        message: "Pacote de Vinícius está há 41 dias sem pagamento (R$ 900).",
+      },
+      {
+        userId: "user-colab1", type: "LESSON_CONFIRMED", read: true,
+        title: "Agenda do dia",
+        message: "4 aulas confirmadas para hoje: Carlos (9h), Marcos (10h30), Ana (14h), Patrícia (16h).",
+      },
+    ],
+  })
+  console.log("✅ 5 notificações extras para colaborador")
 
   // ─── Resumo ────────────────────────────────────────────────────────────────
   const totalAulasRealizadas = todasAulas.filter((a) => a.status === LessonStatus.COMPLETED).length
