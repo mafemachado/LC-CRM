@@ -129,7 +129,7 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
             <div className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">
-                Próx: {format(new Date(nextLesson.scheduledAt), "dd/MM HH:mm", { locale: ptBR })} · {nextLesson.subject.name}
+                Próx: {format(new Date(nextLesson.scheduledAt), "dd/MM HH:mm", { locale: ptBR })} · {nextLesson.subject?.name ?? "–"}
               </p>
             </div>
           )}
@@ -185,7 +185,7 @@ export function StudentsBoard({
     return students.filter(s => {
       if (gradeFilter !== "todos" && s.grade !== gradeFilter) return false
       if (subjectFilter !== "todos") {
-        const subj = s.participations[0]?.lesson.subject.name
+        const subj = s.participations[0]?.lesson.subject?.name
         if (subj !== subjectFilter) return false
       }
       if (q) {

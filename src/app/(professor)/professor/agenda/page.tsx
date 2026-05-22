@@ -51,7 +51,7 @@ export default async function ProfessorAgendaPage() {
     meetingLink: l.meetingLink ?? null,
     location:    l.location   ?? null,
     student:     { user: { name: l.participants[0]?.student.name ?? "Aluno" } },
-    subject:     { name: l.subject.name },
+    subject:     { name: l.subject?.name ?? "–" },
   }))
 
   // Derive base URL for ICS link

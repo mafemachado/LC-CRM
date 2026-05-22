@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     for (const lesson of lessons) {
       const scheduledAt = fmt(lesson.scheduledAt)
       const teacherName = lesson.teacher.user.name
-      const subject     = lesson.subject.name
+      const subject     = lesson.subject?.name ?? "–"
 
       for (const p of lesson.participants) {
         const studentName = p.student.name ?? "Aluno"

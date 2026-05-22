@@ -118,7 +118,7 @@ async function getProfData(email: string) {
       width:   `${((le - lh)  / SPAN) * 100}%`,
       time:    format(l.scheduledAt, "HH:mm"),
       aluno:   (l.participants[0]?.student.name ?? "Aluno").split(" ")[0],
-      materia: l.subject.name,
+      materia: l.subject?.name ?? "–",
       modo:    (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
       status:  l.status === "COMPLETED" ? "done"
              : isNext                   ? "next"
@@ -161,12 +161,12 @@ async function getProfData(email: string) {
       lessonId:     nextLesson.id,
       hora:         format(nextLesson.scheduledAt, "HH:mm"),
       horaFim:      format(endH, "HH:mm"),
-      subjectName:  nextLesson.subject.name,
+      subjectName:  nextLesson.subject?.name ?? "–",
       studentName:  stName,
       studentGrade: stGrade,
       initials,
       aulaNum,
-      topicos:      nextLesson.topicsCovered ?? nextLesson.subject.name,
+      topicos:      nextLesson.topicsCovered ?? nextLesson.subject?.name ?? "–",
       modality:     nextLesson.modality as "PRESENCIAL" | "ONLINE",
       meetingLink:  nextLesson.meetingLink ?? null,
       minutesAte:   minutesUntil ?? 0,
@@ -223,7 +223,7 @@ async function getProfData(email: string) {
         grade:    p.student.grade ?? "—",
         aulas:    0,
         lastAula: "—",
-        content:  l.subject.name,
+        content:  l.subject?.name ?? "–",
         modo:     l.modality === "PRESENCIAL" ? "sede" : "online",
         tag:      "Em dia",
         tagColor: "success",
@@ -234,7 +234,7 @@ async function getProfData(email: string) {
     if (["COMPLETED","SCHEDULED","CONFIRMED"].includes(l.status)) s.aulas++
     if (l.scheduledAt > s._lastDate || s.aulas === 1) {
       s._lastDate = l.scheduledAt
-      s.content   = l.topicsCovered ?? l.subject.name
+      s.content   = l.topicsCovered ?? l.subject?.name ?? "–"
       s.modo      = l.modality === "PRESENCIAL" ? "sede" : "online"
     }
     const pkg = p.student.packages?.[0]

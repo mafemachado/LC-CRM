@@ -285,7 +285,7 @@ export async function sendConfirmationsBatchAction(items: {
         phone:   guardian?.user.phone   ?? student?.user?.phone   ?? undefined,
         email:   guardian?.user.email   ?? student?.user?.email   ?? undefined,
         data: {
-          "Matéria":  lesson.subject.name,
+          "Matéria":  lesson.subject?.name ?? "–",
           "Horário":  format(lesson.scheduledAt, "HH:mm"),
         },
       })
@@ -298,7 +298,7 @@ export async function sendConfirmationsBatchAction(items: {
         phone:   lesson.teacher.user.phone ?? undefined,
         email:   lesson.teacher.user.email ?? undefined,
         data: {
-          "Matéria":  lesson.subject.name,
+          "Matéria":  lesson.subject?.name ?? "–",
           "Horário":  format(lesson.scheduledAt, "HH:mm"),
         },
       })
@@ -340,12 +340,12 @@ export async function sendConfirmationToGuardianAction(lessonId: string) {
       userId:  guardian.userId,
       type:    "LESSON_CONFIRMED",
       title:   "Confirmação de aula",
-      message: `A aula de ${lesson.subject.name} de ${student.name} com ${lesson.teacher.user.name} está confirmada para ${scheduledAt}.`,
+      message: `A aula de ${lesson.subject?.name ?? "–"} de ${student.name} com ${lesson.teacher.user.name} está confirmada para ${scheduledAt}.`,
       email:   guardian.user?.email ?? undefined,
       phone:   guardian.user?.phone ?? undefined,
       data: {
         "Aluno":      student.name,
-        "Matéria":    lesson.subject.name,
+        "Matéria":    lesson.subject?.name ?? "–",
         "Professor":  lesson.teacher.user.name,
         "Data/Hora":  scheduledAt,
         "Modalidade": lesson.modality === "ONLINE" ? "Online" : "Presencial",
@@ -374,11 +374,11 @@ export async function sendConfirmationToTeacherAction(lessonId: string) {
     userId:  lesson.teacher.userId,
     type:    "LESSON_CONFIRMED",
     title:   "Confirmação de aula",
-    message: `Sua aula de ${lesson.subject.name} está confirmada para ${scheduledAt}.`,
+    message: `Sua aula de ${lesson.subject?.name ?? "–"} está confirmada para ${scheduledAt}.`,
     email:   lesson.teacher.user.email ?? undefined,
     phone:   lesson.teacher.user.phone ?? undefined,
     data: {
-      "Matéria":    lesson.subject.name,
+      "Matéria":    lesson.subject?.name ?? "–",
       "Data/Hora":  scheduledAt,
       "Modalidade": lesson.modality === "ONLINE" ? "Online" : "Presencial",
     },

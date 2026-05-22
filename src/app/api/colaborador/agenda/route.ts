@@ -20,6 +20,7 @@ const lessonInclude = {
     },
   },
   subject: true,
+  teacher: { include: { user: true } },
 } as const
 
 const requestInclude = {
@@ -32,10 +33,11 @@ type RawLesson  = Awaited<ReturnType<typeof prisma.lesson.findMany<{ include: ty
 type RawRequest = Awaited<ReturnType<typeof prisma.lessonRequest.findMany<{ include: typeof requestInclude }>>>[number]
 
 function mapLesson(l: RawLesson) {
-  const d       = l.scheduledAt
-  const min     = d.getHours() * 60 + d.getMinutes()
-  const first   = l.participants[0]
-  const isGroup = l.participants.length > 1
+  const d         = l.scheduledAt
+  const min       = d.getHours() * 60 + d.getMinutes()
+  const first     = l.participants[0]
+  const isGroup   = l.participants.length > 1 || l.lessonType === "GROUP"
+  const lessonType = l.lessonType as string
   return {
     id:            l.id,
     teacherId:     l.teacherId,
@@ -45,13 +47,35 @@ function mapLesson(l: RawLesson) {
     modality:      l.modality,
     teacherOnsite: l.teacherOnsite,
     time:          format(d, "HH:mm"),
-    studentName:   first?.student.name ?? "Aluno",
-    subjectName:   l.subject.name,
+    studentName:   first?.student.name ?? (lessonType === "COMPROMISSO" ? "" : "Aluno"),
+    subjectName:   l.subject?.name ?? "–",
     guardianName:  first?.student.guardian?.user.name ?? null,
     date:          format(d, "yyyy-MM-dd"),
     isGroupLesson: isGroup,
     groupSize:     isGroup ? l.participants.length : null,
     groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
+    lessonType:    lessonType,
+    title:         l.title ?? null,
+    capacity:      l.capacity ?? null,
+  }
+}
+
+function mapAulaoCard(l: RawLesson & { teacher: { user: { name: string } } }) {
+  const d       = l.scheduledAt
+  const endTime = new Date(d.getTime() + (l.duration ?? 90) * 60_000)
+  return {
+    id:          l.id,
+    lessonType:  l.lessonType === "AULAO" ? "AULAO" : "GROUP",
+    title:       l.title ?? l.subject?.name ?? "–",
+    teacherName: l.teacher.user.name,
+    teacherId:   l.teacherId,
+    subjectName: l.subject?.name ?? "–",
+    time:        format(d,       "HH:mm"),
+    endTime:     format(endTime, "HH:mm"),
+    enrolled:    l.participants.length,
+    capacity:    l.capacity ?? null,
+    status:      l.status,
+    modality:    l.modality,
   }
 }
 
@@ -129,10 +153,18 @@ export async function GET(req: NextRequest) {
       : Promise.resolve([] as RawRequest[]),
   ])
 
+  const mappedLessons = lessons.map(mapLesson)
+  const auloes = view === "day"
+    ? lessons
+        .filter(l => l.lessonType === "AULAO" || l.lessonType === "GROUP" || l.participants.length > 1)
+        .map(l => mapAulaoCard(l as Parameters<typeof mapAulaoCard>[0]))
+    : []
+
   return NextResponse.json({
-    lessons:             lessons.map(mapLesson),
+    lessons:             mappedLessons,
     extraLessons:        extraLessons.map(mapLesson),
     pendingRequests:     pendingRequests.map(mapPendingRequest),
     weekPendingRequests: weekPendingRequests.map(mapPendingRequest),
+    auloes,
   })
 }

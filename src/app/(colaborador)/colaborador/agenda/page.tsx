@@ -5,7 +5,7 @@ import type { ConfirmacaoItem } from "@/components/shared/day-starter-banner"
 import { AgendaGrid }         from "./agenda-grid"
 import { AgendaLegend }       from "./agenda-legend"
 import type {
-  TeacherCol, LessonSlot, AvailSlot, StudentOption,
+  TeacherCol, LessonSlot, AulaoCard, AvailSlot, StudentOption,
   WeekLessonSlot, ViewMode, PendingRequestSlot,
 } from "./agenda-grid"
 
@@ -13,7 +13,7 @@ import { getRoomCount }  from "@/lib/config"
 import type { Availability } from "@/lib/availability"
 import {
   format, startOfDay, endOfDay, parseISO, isValid, getDay,
-  startOfWeek, endOfWeek, startOfMonth, endOfMonth,
+  startOfWeek, endOfWeek, startOfMonth, endOfMonth, addMinutes,
 } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -41,6 +41,9 @@ function mapToLessonSlot(
     status: string
     modality: string
     teacherOnsite: boolean
+    lessonType: string
+    title: string | null
+    capacity: number | null
     participants: {
       studentId: string
       student: {
@@ -50,16 +53,19 @@ function mapToLessonSlot(
         packages: { remainingLessons: number }[]
       }
     }[]
-    subject: { name: string }
+    subject: { name: string } | null
   },
 ): LessonSlot {
-  const d           = l.scheduledAt
-  const min         = d.getHours() * 60 + d.getMinutes()
-  const first       = l.participants[0]
-  const studentName = first?.student.name ?? "Aluno"
-  const isGroup     = l.participants.length > 1
+  const d          = l.scheduledAt
+  const min        = d.getHours() * 60 + d.getMinutes()
+  const first      = l.participants[0]
+  const lessonType = l.lessonType as LessonSlot["lessonType"]
+  const isSpecial  = lessonType === "AULAO" || lessonType === "COMPROMISSO"
+  const studentName = first?.student.name ?? (isSpecial ? "" : "Aluno")
+  const isGroup     = l.participants.length > 1 || lessonType === "GROUP"
   const pkg         = first?.student.packages?.[0]
   const packageStatus: LessonSlot["packageStatus"] =
+    isSpecial                  ? "pago"     :
     !pkg                       ? "pendente" :
     pkg.remainingLessons > 0   ? "pago"     : "atrasado"
   return {
@@ -72,12 +78,15 @@ function mapToLessonSlot(
     teacherOnsite: l.teacherOnsite,
     time:          format(d, "HH:mm"),
     studentName,
-    subjectName:   l.subject.name,
+    subjectName:   l.subject?.name ?? "–",
     guardianName:  first?.student.guardian?.user.name ?? null,
     isGroupLesson: isGroup,
     groupSize:     isGroup ? l.participants.length : null,
     groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
     packageStatus,
+    lessonType,
+    title:         l.title ?? null,
+    capacity:      l.capacity ?? null,
   }
 }
 
@@ -209,6 +218,30 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
   const lessonSlots: LessonSlot[]  = lessons.map(l => mapToLessonSlot(l))
   const scheduledCount             = lessonSlots.filter(l => l.status === "SCHEDULED").length
 
+  const aulaoCards: AulaoCard[] = lessons
+    .filter(l =>
+      l.lessonType === "AULAO" ||
+      l.lessonType === "GROUP" ||
+      l.participants.length > 1
+    )
+    .map(l => {
+      const endDt = addMinutes(l.scheduledAt, l.duration ?? 90)
+      return {
+        id:          l.id,
+        lessonType:  (l.lessonType === "AULAO" ? "AULAO" : "GROUP") as "AULAO" | "GROUP",
+        title:       l.title ?? l.subject?.name ?? "–",
+        teacherName: l.teacher.user.name,
+        teacherId:   l.teacherId,
+        subjectName: l.subject?.name ?? "–",
+        time:        format(l.scheduledAt, "HH:mm"),
+        endTime:     format(endDt,         "HH:mm"),
+        enrolled:    l.participants.length,
+        capacity:    l.capacity ?? null,
+        status:      l.status,
+        modality:    l.modality as "PRESENCIAL" | "ONLINE",
+      }
+    })
+
   // ── Itens para o modal de confirmações ────────────────────────────────────
   const scheduledLessons = lessons.filter(l => l.status === "SCHEDULED")
 
@@ -240,7 +273,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         recipientRole: `resp. de ${studentFirst}`,
         recipientPhone: phone,
         recipientEmail: email,
-        aula:          `hoje ${time} · ${lesson.subject.name} · ${modality}`,
+        aula:          `hoje ${time} · ${lesson.subject?.name ?? "–"} · ${modality}`,
         via:           phone ? "WhatsApp" : "E-mail",
         preview:       `Boa tarde, ${guardianFirst}! 💜 Confirmando a aula do(a) ${studentFirst} hoje às ${time} com ${teacherFirst} (${modality}).`,
       })
@@ -255,7 +288,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
           recipientRole: `pacote · ${studentFirst}`,
           recipientPhone: phone,
           recipientEmail: email,
-          aula:          `hoje ${time} · ${studentFirst} · ${lesson.subject.name}`,
+          aula:          `hoje ${time} · ${studentFirst} · ${lesson.subject?.name ?? "–"}`,
           via:           phone ? "WhatsApp" : "E-mail",
           preview:       `${guardianFirst}, o pacote do(a) ${studentFirst} está vencido. Pode regularizar antes da aula de hoje (${time})?`,
         })
@@ -285,7 +318,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         lessonId:      tLessons[0].id,
         tipo:          "professor",
         recipientName: teacher.user.name,
-        recipientRole: tLessons[0].subject.name,
+        recipientRole: tLessons[0].subject?.name ?? "–",
         recipientPhone: teacher.user.phone ?? null,
         recipientEmail: teacher.user.email ?? null,
         aula:          aulaList,
@@ -350,6 +383,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         date={dateStr}
         teachers={teacherCols}
         lessons={lessonSlots}
+        auloes={aulaoCards}
         roomCount={roomCount}
         students={students}
         allStudents={allStudents}

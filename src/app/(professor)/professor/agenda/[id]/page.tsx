@@ -13,7 +13,7 @@ import { CalendarDays, User, BookOpen, Monitor, MapPin, PenLine, CheckCircle2, C
 function buildGoogleCalendarUrl(lesson: {
   scheduledAt:  Date
   duration:     number
-  subject:      { name: string }
+  subject:      { name: string } | null
   participants: { student: { name: string; user: { name: string } | null } }[]
   modality:     string
   meetingLink:  string | null
@@ -23,11 +23,12 @@ function buildGoogleCalendarUrl(lesson: {
   const end        = new Date(start.getTime() + lesson.duration * 60_000)
   const fmt        = (d: Date) => d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
   const firstName  = lesson.participants[0]?.student.name ?? "Aluno"
-  const title      = `Aula de ${lesson.subject.name} com ${firstName}`
+  const subjectN   = lesson.subject?.name ?? "–"
+  const title      = `Aula de ${subjectN} com ${firstName}`
   const loc        = lesson.modality === "ONLINE"
     ? (lesson.meetingLink ?? "Online")
     : (lesson.location    ?? "Presencial")
-  const details    = `Matéria: ${lesson.subject.name}\nAluno: ${firstName}\nModalidade: ${lesson.modality === "ONLINE" ? "Online" : "Presencial"}`
+  const details    = `Matéria: ${subjectN}\nAluno: ${firstName}\nModalidade: ${lesson.modality === "ONLINE" ? "Online" : "Presencial"}`
 
   const p = new URLSearchParams({
     action:  "TEMPLATE",
@@ -74,7 +75,7 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
           <div className="grid grid-cols-2 gap-4 text-sm">
             {[
               { icon: User,        label: "Aluno",       value: lesson.participants[0]?.student.name ?? "Aluno" },
-              { icon: BookOpen,    label: "Matéria",     value: lesson.subject.name       },
+              { icon: BookOpen,    label: "Matéria",     value: lesson.subject?.name ?? "–" },
               { icon: CalendarDays,label: "Data/Hora",   value: format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) },
               { icon: lesson.modality === "ONLINE" ? Monitor : MapPin, label: "Modalidade", value: lesson.modality === "ONLINE" ? "Online" : "Presencial" },
             ].map(({ icon: Icon, label, value }) => (

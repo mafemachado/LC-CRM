@@ -11,6 +11,7 @@ import {
   ChevronLeft, ChevronRight, CalendarDays, CalendarRange, LayoutGrid,
   CheckCircle2, XCircle, UserX, MessageCircle,
   Loader2, Wifi, MapPin, Clock, Plus, Building2, Home, AlertCircle, Users,
+  CreditCard, User, GraduationCap, type LucideIcon,
 } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
 import {
@@ -27,7 +28,10 @@ import { toast }                   from "sonner"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
-import { CreateGroupLessonDialog } from "@/components/shared/create-group-lesson-dialog"
+import { CreateGroupLessonDialog }  from "@/components/shared/create-group-lesson-dialog"
+import { CreateAulaoDialog }        from "@/components/shared/create-aulao-dialog"
+import { CreateCommitmentDialog }   from "@/components/shared/create-commitment-dialog"
+import { AuloesSection }            from "./auloes-section"
 
 // ─── Constantes de layout ────────────────────────────────────────────────────
 
@@ -92,10 +96,28 @@ export interface LessonSlot {
   groupSize:     number | null
   groupMates:    string[]
   packageStatus: "pago" | "pendente" | "atrasado"
+  lessonType:    "INDIVIDUAL" | "GROUP" | "AULAO" | "COMPROMISSO"
+  title:         string | null
+  capacity:      number | null
 }
 
 export interface WeekLessonSlot extends LessonSlot {
   date: string // "yyyy-MM-dd"
+}
+
+export interface AulaoCard {
+  id:          string
+  lessonType:  "AULAO" | "GROUP"
+  title:       string | null
+  teacherName: string
+  teacherId:   string
+  subjectName: string
+  time:        string
+  endTime:     string
+  enrolled:    number
+  capacity:    number | null
+  status:      string
+  modality:    "PRESENCIAL" | "ONLINE"
 }
 
 export interface PendingRequestSlot {
@@ -588,24 +610,24 @@ function QuickScheduleModal({
 
 type PillState = "ok" | "pend" | "atrasado"
 
-function ConfirmPill({ label, state }: { label: string; state: PillState }) {
-  const cfg: Record<PillState, { bg: string; color: string; ch: string }> = {
-    ok:       { bg: "var(--success-soft)", color: "var(--success)", ch: "✓" },
-    pend:     { bg: "var(--warn-soft)",    color: "var(--warn)",    ch: "?" },
-    atrasado: { bg: "var(--danger-soft)",  color: "var(--danger)",  ch: "!" },
+function ConfirmPill({ icon: Icon, state }: { icon: LucideIcon; state: PillState }) {
+  const cfg: Record<PillState, { bg: string; color: string; symbol: string }> = {
+    ok:       { bg: "var(--success-soft)", color: "var(--success)", symbol: "✓" },
+    pend:     { bg: "var(--warn-soft)",    color: "var(--warn)",    symbol: "–" },
+    atrasado: { bg: "var(--danger-soft)",  color: "var(--danger)",  symbol: "!" },
   }
-  const { bg, color, ch } = cfg[state]
+  const { bg, color, symbol } = cfg[state]
   return (
     <span
       style={{
         flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center",
-        gap: 2, padding: "1px 3px", borderRadius: 2,
+        gap: 2, padding: "2px 4px", borderRadius: 3,
         background: bg, color,
-        fontFamily: "var(--font-mono)", fontSize: 8, fontWeight: 700,
-        whiteSpace: "nowrap", overflow: "hidden",
+        fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden",
       }}
     >
-      {ch} {label}
+      <Icon size={9} />
+      <span style={{ fontSize: 9, lineHeight: 1 }}>{symbol}</span>
     </span>
   )
 }
@@ -640,8 +662,57 @@ function LessonBlock({
   lesson:   LessonSlot
   onSelect: (l: LessonSlot) => void
 }) {
-  const { bg, text, border } = STATUS_STYLE[lesson.status]
   const height = Math.max(px(lesson.duration), 32)
+
+  // ── COMPROMISSO: bloco cinza simplificado ─────────────────────────────────
+  if (lesson.lessonType === "COMPROMISSO") {
+    return (
+      <div
+        data-lesson="true"
+        onClick={() => onSelect(lesson)}
+        style={{ top: px(lesson.startMin - START * 60), height, left: 3, right: 3 }}
+        className="absolute rounded-lg border border-dashed border-slate-300 bg-slate-100 text-slate-500 overflow-hidden select-none cursor-pointer transition-opacity hover:opacity-85 active:opacity-70"
+      >
+        <div className="flex h-full flex-col px-1.5 pt-1">
+          <p className="text-[11px] font-bold leading-tight">{lesson.time}</p>
+          <p className="text-[11px] font-medium leading-tight truncate mt-0.5">{lesson.title ?? "Compromisso"}</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── AULÃO: fundo violeta ──────────────────────────────────────────────────
+  if (lesson.lessonType === "AULAO") {
+    const enrolled  = lesson.groupSize ?? 0
+    const capacity  = lesson.capacity
+    const countStr  = capacity ? `${enrolled}/${capacity}` : String(enrolled)
+    return (
+      <div
+        data-lesson="true"
+        onClick={() => onSelect(lesson)}
+        style={{ top: px(lesson.startMin - START * 60), height, left: 3, right: 3 }}
+        className="absolute rounded-lg border border-violet-500/80 bg-violet-500 text-white overflow-hidden select-none cursor-pointer transition-opacity hover:opacity-85 active:opacity-70"
+      >
+        <div className="flex h-full flex-col justify-between px-1.5 pt-1 pb-0.5">
+          <div>
+            <div className="flex items-center gap-1">
+              <p className="text-[11px] font-bold leading-tight">{lesson.time}</p>
+              <span className="text-[9px] font-bold uppercase px-1 py-0.5 rounded bg-white/20">aulão</span>
+            </div>
+            <p className="text-[11px] font-semibold leading-tight truncate mt-0.5">{lesson.title ?? lesson.subjectName}</p>
+          </div>
+          {height >= 52 && (
+            <p className="text-[10px] leading-tight opacity-90">
+              <Users className="inline w-2.5 h-2.5 mr-0.5" />{countStr}
+            </p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // ── INDIVIDUAL / GROUP: renderização padrão ───────────────────────────────
+  const { bg, text, border } = STATUS_STYLE[lesson.status]
   const modo = lesson.modality === "ONLINE" ? "online" : "sede"
 
   const pkgState: PillState =
@@ -675,9 +746,9 @@ function LessonBlock({
         </div>
         {height >= 64 && (
           <div className="flex gap-[3px] mt-1">
-            <ConfirmPill label="Pct"  state={pkgState}   />
-            <ConfirmPill label="Alu"  state={alunoState} />
-            <ConfirmPill label="Prof" state={profState}   />
+            <ConfirmPill icon={CreditCard}    state={pkgState}   />
+            <ConfirmPill icon={User}          state={alunoState} />
+            <ConfirmPill icon={GraduationCap} state={profState}  />
           </div>
         )}
       </div>
@@ -951,6 +1022,7 @@ interface AgendaGridProps {
   date:                  string
   teachers:              TeacherCol[]
   lessons:               LessonSlot[]
+  auloes?:               AulaoCard[]
   roomCount?:            number
   students?:             StudentOption[]
   allStudents?:          { id: string; name: string }[]
@@ -963,7 +1035,8 @@ interface AgendaGridProps {
 }
 
 export function AgendaGrid({
-  date, teachers, lessons: initialLessons, roomCount = 3, students, allStudents,
+  date, teachers, lessons: initialLessons, auloes: initialAuloes = [], roomCount = 3,
+  students, allStudents,
   weekLessons: initialWeekLessons, monthLessons: initialMonthLessons, initialView = "day",
   pendingRequests: initialPending, weekPendingRequests: initialWeekPending,
   scheduledCount: _scheduledCount = 0,
@@ -1018,7 +1091,10 @@ export function AgendaGrid({
     teacherName: string
     time:        string
   } | null>(null)
-  const [showGroupDialog, setShowGroupDialog] = useState(false)
+  const [auloes,           setAuloes]           = useState<AulaoCard[]>(initialAuloes)
+  const [showGroupDialog,  setShowGroupDialog]  = useState(false)
+  const [showAulaoDialog,  setShowAulaoDialog]  = useState(false)
+  const [showCommitmentDialog, setShowCommitmentDialog] = useState(false)
   const [hoveredCell, setHoveredCell] = useState<{
     teacherId: string
     timeMin:   number
@@ -1036,6 +1112,7 @@ export function AgendaGrid({
       if (!res.ok) return
       const data = await res.json()
       setLessons(data.lessons)
+      setAuloes(v === "day" ? (data.auloes ?? []) : auloes)
       setWeekLessons(v === "week"  ? data.extraLessons : [])
       setMonthLessons(v === "month" ? data.extraLessons : [])
       setPendingRequests(data.pendingRequests ?? [])
@@ -1306,6 +1383,15 @@ export function AgendaGrid({
             </div>
           </div>
         </div>
+
+        {/* ── AULÕES E GRUPOS (somente view dia) ─────────── */}
+        {view === "day" && auloes.length > 0 && (
+          <AuloesSection
+            auloes={auloes}
+            onNewAulao={() => setShowAulaoDialog(true)}
+            onNewCommitment={() => setShowCommitmentDialog(true)}
+          />
+        )}
 
         {/* ── VISUALIZAÇÃO: MÊS ───────────────────────────── */}
         {view === "month" && (
@@ -1785,6 +1871,28 @@ export function AgendaGrid({
             teachingMode: t.teachingMode,
             subjects:     t.subjects ?? [],
           }))}
+          defaultDate={curDate}
+        />
+      )}
+      {showAulaoDialog && (
+        <CreateAulaoDialog
+          open={showAulaoDialog}
+          onClose={() => { setShowAulaoDialog(false); fetchData(curDate, view) }}
+          students={allStudents ?? []}
+          teachers={effectiveTeachers.map(t => ({
+            id:           t.id,
+            name:         t.name,
+            teachingMode: t.teachingMode,
+            subjects:     t.subjects ?? [],
+          }))}
+          defaultDate={curDate}
+        />
+      )}
+      {showCommitmentDialog && (
+        <CreateCommitmentDialog
+          open={showCommitmentDialog}
+          onClose={() => { setShowCommitmentDialog(false); fetchData(curDate, view) }}
+          teachers={effectiveTeachers.map(t => ({ id: t.id, name: t.name }))}
           defaultDate={curDate}
         />
       )}

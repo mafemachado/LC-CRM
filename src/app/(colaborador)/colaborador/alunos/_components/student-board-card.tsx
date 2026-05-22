@@ -125,7 +125,7 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 truncate">
             {student.grade}
-            {nextLesson ? ` · ${nextLesson.subject.name}` : ""}
+            {nextLesson ? ` · ${nextLesson.subject?.name ?? "–"}` : ""}
           </p>
         </div>
       </div>

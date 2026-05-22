@@ -66,7 +66,7 @@ export default async function LicoesPage() {
                     )}
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <BookOpen className="w-3 h-3" /> {h.lesson.subject.name}
+                        <BookOpen className="w-3 h-3" /> {h.lesson.subject?.name ?? "–"}
                       </span>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <User className="w-3 h-3" /> {h.lesson.teacher.user.name}
@@ -103,7 +103,7 @@ export default async function LicoesPage() {
                 <div className="min-w-0">
                   <p className="font-medium text-sm line-through text-muted-foreground">{h.title}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <span className="text-xs text-muted-foreground">{h.lesson.subject.name}</span>
+                    <span className="text-xs text-muted-foreground">{h.lesson.subject?.name ?? "–"}</span>
                     {h.completedAt && (
                       <span className="text-xs text-muted-foreground">
                         Concluída em {format(h.completedAt, "dd/MM/yyyy", { locale: ptBR })}

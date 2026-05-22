@@ -269,7 +269,7 @@ async function getOpsData(periodo: Periodo) {
   const proximas = proximasAulas.map((l) => ({
     hora:       format(l.scheduledAt, "HH:mm"),
     aluno:      l.participants[0]?.student.name ?? "Aluno",
-    materia:    l.subject.name,
+    materia:    l.subject?.name ?? "–",
     prof:       l.teacher.user.name.split(" ")[0],
     modo:       (l.modality === "PRESENCIAL" ? "sede" : "online") as "sede" | "online",
     confirmada: l.status === "CONFIRMED",

@@ -240,7 +240,7 @@ export default async function AlunoDashboard() {
                 </div>
                 <div style={{ lineHeight: 1.3 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>{heroLesson.subject.name}</div>
+                    <div style={{ fontSize: 19, fontWeight: 600, letterSpacing: "-0.02em" }}>{heroLesson.subject?.name ?? "–"}</div>
                     <ModoBadge modo={heroLesson.modality === "ONLINE" ? "online" : "sede"} size="md" />
                   </div>
                   <div style={{ fontSize: 13, color: "var(--subtle)", marginTop: 2 }}>
@@ -344,7 +344,7 @@ export default async function AlunoDashboard() {
                 <div>
                   <div style={{ fontSize: 12, color: "var(--text-2)" }}>Próxima aula</div>
                   <div style={{ fontSize: 10.5, color: "var(--subtle)" }}>
-                    {otherNextLesson ? `${otherNextLesson.subject.name} · ${otherNextLesson.teacher.user.name}` : "—"}
+                    {otherNextLesson ? `${otherNextLesson.subject?.name ?? "–"} · ${otherNextLesson.teacher.user.name}` : "—"}
                   </div>
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 600, fontFamily: "ui-monospace, monospace", letterSpacing: "-0.01em" }}>
@@ -423,7 +423,7 @@ export default async function AlunoDashboard() {
                       </div>
                       <div style={{ lineHeight: 1.3, minWidth: 0 }}>
                         <div style={{ fontSize: 13.5, fontWeight: 500 }}>
-                          {studentName.split(" ")[0]} · <span style={{ color: "var(--text-2)" }}>{l.subject.name}</span>
+                          {studentName.split(" ")[0]} · <span style={{ color: "var(--text-2)" }}>{l.subject?.name ?? "–"}</span>
                         </div>
                         <div style={{ fontSize: 11.5, color: "var(--subtle)" }}>com {l.teacher.user.name}</div>
                       </div>
@@ -522,7 +522,7 @@ export default async function AlunoDashboard() {
                       <div style={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3, flexWrap: "wrap" }}>
                           <span style={{ fontSize: 13, fontWeight: isFirst ? 600 : 500 }}>{l.teacher.user.name}</span>
-                          <span style={{ fontSize: 10.5, color: "var(--subtle)" }}>· {l.subject.name} · {studentFirstName}</span>
+                          <span style={{ fontSize: 10.5, color: "var(--subtle)" }}>· {l.subject?.name ?? "–"} · {studentFirstName}</span>
                           <span style={{ fontSize: 10.5, color: "var(--subtle)", marginLeft: "auto" }}>
                             {format(l.scheduledAt, "dd/MM", { locale: ptBR })}
                           </span>

@@ -256,7 +256,7 @@ export async function updateLessonStatusAction(
         userId:  rid,
         type:    "LESSON_CANCELLED",
         title:   "Aula em grupo cancelada",
-        message: `Sua aula em grupo de ${lesson.subject.name} foi cancelada.`,
+        message: `Sua aula em grupo de ${lesson.subject?.name ?? "–"} foi cancelada.`,
         email,
         phone,
       })
@@ -292,13 +292,13 @@ export async function updateLessonStatusAction(
   }
 
   const cancelMsg = isGroup
-    ? `Sua aula em grupo de ${lesson.subject.name} foi cancelada.`
-    : `Sua aula de ${lesson.subject.name} foi cancelada. O saldo foi devolvido ao seu pacote.`
+    ? `Sua aula em grupo de ${lesson.subject?.name ?? "–"} foi cancelada.`
+    : `Sua aula de ${lesson.subject?.name ?? "–"} foi cancelada. O saldo foi devolvido ao seu pacote.`
 
   const messages: Record<string, { title: string; message: string }> = {
     COMPLETED: {
       title:   "Aula realizada!",
-      message: `Sua aula de ${lesson.subject.name} foi concluída.${topicsCovered ? ` Conteúdo: ${topicsCovered}` : ""}`,
+      message: `Sua aula de ${lesson.subject?.name ?? "–"} foi concluída.${topicsCovered ? ` Conteúdo: ${topicsCovered}` : ""}`,
     },
     CANCELLED: {
       title:   "Aula cancelada",
@@ -306,7 +306,7 @@ export async function updateLessonStatusAction(
     },
     MISSED: {
       title:   "Falta registrada",
-      message: `Você não compareceu à aula de ${lesson.subject.name}. Entre em contato para remarcar.`,
+      message: `Você não compareceu à aula de ${lesson.subject?.name ?? "–"}. Entre em contato para remarcar.`,
     },
   }
   const msg = messages[status]
@@ -599,6 +599,7 @@ export async function createGroupLessonAction(data: {
         duration,
         modality:      data.modality,
         status:        isHistorical ? "COMPLETED" : "CONFIRMED",
+        lessonType:    "GROUP",
         teacherOnsite,
         priceOverride: data.pricePerStudent,
         participants: { create: students.map((s) => ({ studentId: s.id })) },
@@ -634,6 +635,191 @@ export async function createGroupLessonAction(data: {
 
   revalidatePath("/colaborador/agenda")
   revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+}
+
+// ─── Criar Aulão ──────────────────────────────────────────────────────────────
+
+export async function createAulaoAction(data: {
+  teacherId:        string
+  subjectId:        string
+  title:            string
+  date:             string
+  time:             string
+  duration?:        number
+  modality:         "PRESENCIAL" | "ONLINE"
+  capacity?:        number
+  isFree:           boolean
+  pricePerStudent?: number
+  studentIds?:      string[]
+  teacherOnsite?:   boolean
+}) {
+  await requireCollaboratorOrAdmin()
+
+  const duration     = data.duration ?? 90
+  const scheduledAt  = new Date(`${data.date}T${data.time}:00`)
+  const isHistorical = scheduledAt < new Date()
+  const studentIds   = data.studentIds ?? []
+
+  const [teacher, subject] = await Promise.all([
+    prisma.teacher.findUnique({ where: { id: data.teacherId }, include: { user: true } }),
+    prisma.subject.findUnique({ where: { id: data.subjectId } }),
+  ])
+  if (!teacher) throw new Error("Professor não encontrado")
+  if (!subject) throw new Error("Matéria não encontrada")
+
+  let teacherOnsite: boolean
+  if (data.modality === "PRESENCIAL") {
+    teacherOnsite = true
+  } else if (teacher.teachingMode === "ONLINE_ONLY") {
+    teacherOnsite = false
+  } else {
+    teacherOnsite = data.teacherOnsite ?? false
+  }
+
+  const dayStart = startOfDay(scheduledAt)
+  const dayEnd   = endOfDay(scheduledAt)
+
+  if (!isHistorical) {
+    const occupiesRoom = data.modality === "PRESENCIAL" || (data.modality === "ONLINE" && teacherOnsite)
+    if (occupiesRoom) {
+      const roomCount = await getRoomCount()
+      const reqStart  = scheduledAt.getTime()
+      const reqEnd    = reqStart + duration * 60_000
+
+      const roomLessons = await prisma.lesson.findMany({
+        where: {
+          OR: [{ modality: "PRESENCIAL" }, { modality: "ONLINE", teacherOnsite: true }],
+          status:      { in: ["CONFIRMED", "SCHEDULED"] },
+          scheduledAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { scheduledAt: true, duration: true },
+      })
+      const conflicts = roomLessons.filter((l) => {
+        const lStart = l.scheduledAt.getTime()
+        const lEnd   = lStart + (l.duration ?? 60) * 60_000
+        return lStart < reqEnd && lEnd > reqStart
+      })
+      if (conflicts.length >= roomCount) {
+        throw new Error(`Todas as ${roomCount} sala${roomCount !== 1 ? "s" : ""} estão ocupadas neste horário.`)
+      }
+    }
+
+    const teacherLessons = await prisma.lesson.findMany({
+      where: {
+        teacherId:   data.teacherId,
+        status:      { in: ["CONFIRMED", "SCHEDULED"] },
+        scheduledAt: { gte: dayStart, lte: dayEnd },
+      },
+      select: { scheduledAt: true, duration: true },
+    })
+    const reqStart    = scheduledAt.getTime()
+    const reqEnd      = reqStart + duration * 60_000
+    const hasConflict = teacherLessons.some((l) => {
+      const lStart = l.scheduledAt.getTime()
+      const lEnd   = lStart + (l.duration ?? 60) * 60_000
+      return lStart < reqEnd && lEnd > reqStart
+    })
+    if (hasConflict) throw new Error("Professor já tem uma aula neste horário")
+  }
+
+  const students = studentIds.length > 0
+    ? await prisma.student.findMany({ where: { id: { in: studentIds } }, include: { user: true } })
+    : []
+
+  const scheduledAtFmt = format(scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+
+  await prisma.$transaction([
+    prisma.lesson.create({
+      data: {
+        teacherId:     data.teacherId,
+        subjectId:     data.subjectId,
+        scheduledAt,
+        duration,
+        modality:      data.modality,
+        status:        isHistorical ? "COMPLETED" : "CONFIRMED",
+        lessonType:    "AULAO",
+        title:         data.title,
+        capacity:      data.capacity ?? null,
+        teacherOnsite,
+        priceOverride: data.isFree ? 0 : (data.pricePerStudent ?? 0),
+        participants:  studentIds.length > 0
+          ? { create: students.map((s) => ({ studentId: s.id })) }
+          : undefined,
+      },
+    }),
+    ...(!data.isFree && students.length > 0
+      ? students.map((student) =>
+          prisma.payment.create({
+            data: {
+              studentId:   student.id,
+              amount:      data.pricePerStudent!,
+              dueDate:     scheduledAt,
+              description: `Aulão – ${subject.name} – ${data.title} (${scheduledAtFmt})`,
+              status:      "PENDING",
+            },
+          })
+        )
+      : []),
+  ])
+
+  revalidatePath("/colaborador/agenda")
+  revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+}
+
+// ─── Criar Compromisso do Professor ──────────────────────────────────────────
+
+export async function createTeacherCommitmentAction(data: {
+  teacherId: string
+  title:     string
+  date:      string
+  time:      string
+  duration?: number
+}) {
+  await requireCollaboratorOrAdmin()
+
+  const duration    = data.duration ?? 60
+  const scheduledAt = new Date(`${data.date}T${data.time}:00`)
+  const dayStart    = startOfDay(scheduledAt)
+  const dayEnd      = endOfDay(scheduledAt)
+
+  const teacher = await prisma.teacher.findUnique({ where: { id: data.teacherId } })
+  if (!teacher) throw new Error("Professor não encontrado")
+
+  const teacherLessons = await prisma.lesson.findMany({
+    where: {
+      teacherId:   data.teacherId,
+      status:      { in: ["CONFIRMED", "SCHEDULED"] },
+      scheduledAt: { gte: dayStart, lte: dayEnd },
+    },
+    select: { scheduledAt: true, duration: true },
+  })
+  const reqStart    = scheduledAt.getTime()
+  const reqEnd      = reqStart + duration * 60_000
+  const hasConflict = teacherLessons.some((l) => {
+    const lStart = l.scheduledAt.getTime()
+    const lEnd   = lStart + (l.duration ?? 60) * 60_000
+    return lStart < reqEnd && lEnd > reqStart
+  })
+  if (hasConflict) throw new Error("Professor já tem um compromisso neste horário")
+
+  await prisma.lesson.create({
+    data: {
+      teacherId:  data.teacherId,
+      subjectId:  null,
+      scheduledAt,
+      duration,
+      modality:   "PRESENCIAL",
+      status:     "CONFIRMED",
+      lessonType: "COMPROMISSO",
+      title:      data.title,
+    },
+  })
+
+  revalidatePath("/colaborador/agenda")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")
 }

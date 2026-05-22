@@ -396,7 +396,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                 {" · "}
                 {format(nextLesson.scheduledAt, "HH:mm")}
               </p>
-              <p className="text-[11px] text-muted-foreground truncate">{nextLesson.subject.name}</p>
+              <p className="text-[11px] text-muted-foreground truncate">{nextLesson.subject?.name ?? "–"}</p>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Sem aula</p>
@@ -546,7 +546,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                           <td className="py-2 pr-3 text-xs tabular-nums whitespace-nowrap">
                             {format(l.scheduledAt, "dd/MM · HH:mm", { locale: ptBR })}
                           </td>
-                          <td className="py-2 pr-3 text-xs font-medium whitespace-nowrap">{l.subject.name}</td>
+                          <td className="py-2 pr-3 text-xs font-medium whitespace-nowrap">{l.subject?.name ?? "–"}</td>
                           <td className="py-2 pr-3 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
                             {l.teacher?.user.name.split(" ")[0] ?? "—"}
                           </td>

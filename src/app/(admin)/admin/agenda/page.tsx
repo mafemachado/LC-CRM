@@ -98,12 +98,15 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
       teacherOnsite: l.teacherOnsite,
       time:          format(d, "HH:mm"),
       studentName:   first?.student.name ?? "Aluno",
-      subjectName:   l.subject.name,
+      subjectName:   l.subject?.name ?? "–",
       guardianName:  first?.student.guardian?.user.name ?? null,
       isGroupLesson: isGroup,
       groupSize:     isGroup ? l.participants.length : null,
       groupMates:    l.participants.slice(1).map(p => p.student.name ?? "Aluno"),
       packageStatus: "pago" as const,
+      lessonType:    "INDIVIDUAL" as const,
+      title:         null,
+      capacity:      null,
     }
   })
 

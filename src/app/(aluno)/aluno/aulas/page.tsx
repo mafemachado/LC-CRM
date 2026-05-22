@@ -134,7 +134,7 @@ export default async function AulasPage({ searchParams }: AulasPageProps) {
                     {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm">{lesson.subject.name}</p>
+                        <p className="font-medium text-sm">{lesson.subject?.name ?? "–"}</p>
                         <Badge variant={cfg.variant} className="text-xs">{cfg.label}</Badge>
                         {isGroup && (
                           <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">

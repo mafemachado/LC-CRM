@@ -66,6 +66,13 @@ enum TeacherMode {
   HYBRID       // pode trabalhar de casa (online) E vir à sede (presencial/online)
 }
 
+enum LessonType {
+  INDIVIDUAL
+  GROUP
+  AULAO
+  COMPROMISSO
+}
+
 enum EducationLevel {
   EF2        // Fundamental 2 (6º–9º ano)
   EM         // Ensino Médio
@@ -213,14 +220,17 @@ model Lesson {
   id              String         @id @default(cuid())
   teacherId       String
   teacher         Teacher        @relation(fields: [teacherId], references: [id])
-  subjectId       String
-  subject         Subject        @relation(fields: [subjectId], references: [id])
+  subjectId       String?
+  subject         Subject?       @relation(fields: [subjectId], references: [id])
   scheduledAt     DateTime
   duration        Int            @default(60)
   modality        LessonModality @default(PRESENCIAL)
   location        String?
   meetingLink     String?
   status          LessonStatus   @default(SCHEDULED)
+  lessonType      LessonType     @default(INDIVIDUAL)
+  title           String?
+  capacity        Int?
   topicsCovered   String?
   teacherNotes    String?
   studentRating   Int?
