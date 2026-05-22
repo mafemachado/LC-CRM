@@ -154,7 +154,7 @@ export function AgendaLegend() {
               <XCircle className="w-3.5 h-3.5 text-rose-500 mt-0.5 shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-rose-600">Cancelada</p>
-                <p className="text-[11px] text-muted-foreground">Pode ocorrer a partir de "Agendada" ou "Confirmada" — saldo devolvido ao pacote</p>
+                <p className="text-[11px] text-muted-foreground">Pode ocorrer a partir de &ldquo;Agendada&rdquo; ou &ldquo;Confirmada&rdquo; — saldo devolvido ao pacote</p>
               </div>
             </div>
             <div className="flex items-start gap-2">
