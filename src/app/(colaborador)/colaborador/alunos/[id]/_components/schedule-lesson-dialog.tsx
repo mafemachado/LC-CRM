@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useTransition } from "react"
-import { useRouter }               from "next/navigation"
 import { format }                  from "date-fns"
 import { Plus, Loader2, CalendarDays, Wifi, MapPin } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
@@ -30,7 +29,6 @@ interface Props {
 }
 
 export function ScheduleLessonDialog({ studentId, studentName, teachers }: Props) {
-  const router = useRouter()
   const [open, setOpen]         = useState(false)
   const [teacherId, setTeacher] = useState("")
   const [subjectId, setSubject] = useState("")
@@ -68,7 +66,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers }: Props
         await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality })
         toast.success("Aula agendada com sucesso")
         setOpen(false)
-        router.refresh()
+        window.location.reload()
       } catch (e) {
         toast.error(e instanceof Error ? e.message : "Erro ao agendar aula")
       }
