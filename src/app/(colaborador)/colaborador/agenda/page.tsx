@@ -3,6 +3,7 @@ import { PageHeader }         from "@/components/shared/page-header"
 import { DayStarterBanner }   from "@/components/shared/day-starter-banner"
 import type { ConfirmacaoItem } from "@/components/shared/day-starter-banner"
 import { AgendaGrid }         from "./agenda-grid"
+import { AgendaLegend }       from "./agenda-legend"
 import type {
   TeacherCol, LessonSlot, AvailSlot, StudentOption,
   WeekLessonSlot, ViewMode, PendingRequestSlot,
@@ -362,6 +363,7 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         weekPendingRequests={weekPendingRequests}
         scheduledCount={scheduledCount}
       />
+      <AgendaLegend />
     </div>
   )
 }
