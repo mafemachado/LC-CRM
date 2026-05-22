@@ -229,7 +229,7 @@ export function StudentsBoard({
           </SelectContent>
         </Select>
 
-        <Select value={subjectFilter} onValueChange={setSubjectFilter}>
+        <Select value={subjectFilter} onValueChange={(v) => setSubjectFilter(v ?? "todos")}>
           <SelectTrigger className="w-44 h-9">
             <SelectValue placeholder="Matéria" />
           </SelectTrigger>
