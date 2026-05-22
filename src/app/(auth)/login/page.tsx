@@ -65,6 +65,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           transform: translateY(-6px);
           box-shadow: 0 20px 40px rgba(2,48,71,0.13), 0 6px 14px rgba(2,48,71,0.07);
         }
+        .dark .lc-card:hover {
+          box-shadow: 0 20px 40px rgba(0,0,0,0.4), 0 6px 14px rgba(0,0,0,0.25);
+        }
         .lc-quote {
           transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1),
                       box-shadow 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -74,10 +77,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           transform: translateY(-4px);
           box-shadow: 0 16px 36px rgba(2,48,71,0.11), 0 4px 10px rgba(2,48,71,0.06);
         }
+        .dark .lc-quote:hover {
+          box-shadow: 0 16px 36px rgba(0,0,0,0.35), 0 4px 10px rgba(0,0,0,0.2);
+        }
       `}</style>
 
       {/* ─── Painel esquerdo ─────────────────────────────────────────────── */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#FDF8EF] flex-col items-center justify-center p-10">
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden bg-[#FDF8EF] dark:bg-[#0c1929] flex-col items-center justify-center p-10">
 
         {/* Arco laranja — canto superior-esquerdo */}
         <div className="absolute -top-24 -left-24 w-64 h-64 rounded-full bg-[#FB8500] lc-arc" />
@@ -111,7 +117,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
           {/* Título + tagline */}
           <div>
-            <h1 className="font-heading text-4xl text-[#023047] tracking-wide leading-none">
+            <h1 className="font-heading text-4xl text-[#023047] dark:text-gray-100 tracking-wide leading-none">
               LIÇÃO DE CASA
             </h1>
             <p className="font-accent text-lg text-[#FB8500] mt-1">
@@ -120,7 +126,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </div>
 
           {/* Headline */}
-          <p className="font-sub text-[#023047] text-lg font-semibold leading-snug">
+          <p className="font-sub text-[#023047] dark:text-gray-100 text-lg font-semibold leading-snug">
             Sua plataforma completa para uma{" "}
             <span className="text-[#FB8500]">educação</span> que{" "}
             <span className="text-[#FB8500]">transforma.</span>
@@ -129,20 +135,20 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           {/* Feature cards 2×2 */}
           <div className="grid grid-cols-2 gap-3 w-full">
             {FEATURES.map(({ icon: Icon, label, desc, color }) => (
-              <div key={label} className="lc-card bg-white rounded-2xl p-4 shadow-sm text-left">
+              <div key={label} className="lc-card bg-white dark:bg-[#162035] rounded-2xl p-4 shadow-sm text-left">
                 <Icon style={{ color }} className="w-6 h-6 mb-2" />
-                <p className="font-sub font-bold text-[#023047] text-sm leading-tight">{label}</p>
-                <p className="text-xs text-gray-400 mt-0.5 leading-tight">{desc}</p>
+                <p className="font-sub font-bold text-[#023047] dark:text-gray-100 text-sm leading-tight">{label}</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 leading-tight">{desc}</p>
               </div>
             ))}
           </div>
 
           {/* Quote card */}
-          <div className="lc-quote bg-white rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 w-full text-left">
+          <div className="lc-quote bg-white dark:bg-[#162035] rounded-2xl px-4 py-3 shadow-sm flex items-center gap-3 w-full text-left">
             <div className="w-9 h-9 rounded-full bg-[#FB8500]/10 flex items-center justify-center shrink-0">
               <Heart className="w-4 h-4 text-[#FB8500]" fill="#FB8500" />
             </div>
-            <p className="text-sm text-[#023047] font-body leading-snug">
+            <p className="text-sm text-[#023047] dark:text-gray-100 font-body leading-snug">
               Organize, acompanhe e transforme a jornada de{" "}
               <span className="text-[#219EBC] font-semibold">aprendizado</span> de cada aluno.
             </p>
