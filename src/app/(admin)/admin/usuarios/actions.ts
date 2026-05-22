@@ -74,7 +74,7 @@ export async function createUserAction(formData: FormData) {
     if (exists) redirect(`${errorBase}?error=E-mail+já+cadastrado`)
   }
   if (phoneNorm) {
-    const existsPhone = await prisma.user.findUnique({ where: { phone: phoneNorm } })
+    const existsPhone = await prisma.user.findFirst({ where: { phone: phoneNorm } })
     if (existsPhone) redirect(`${errorBase}?error=Telefone+já+cadastrado`)
   }
 
