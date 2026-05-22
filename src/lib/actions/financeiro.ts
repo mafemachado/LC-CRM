@@ -40,6 +40,38 @@ export async function createPackageAction(formData: FormData) {
   redirect("/admin/financeiro/pacotes?success=Pacote+criado+com+sucesso")
 }
 
+// ─── Criar Pacote (colaborador ou admin) ─────────────────────────────────────
+
+export async function createStudentPackageAction(data: {
+  studentId:      string
+  totalLessons:   number
+  pricePerLesson: number
+  expiresInDays?: number
+}) {
+  const session = await auth()
+  if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
+    throw new Error("Sem permissão")
+  }
+  const expiresAt = data.expiresInDays
+    ? new Date(Date.now() + data.expiresInDays * 86_400_000)
+    : null
+
+  await prisma.lessonPackage.create({
+    data: {
+      studentId:        data.studentId,
+      totalLessons:     data.totalLessons,
+      remainingLessons: data.totalLessons,
+      pricePerLesson:   data.pricePerLesson,
+      expiresAt:        expiresAt ?? undefined,
+      status:           "ACTIVE",
+    },
+  })
+  revalidatePath(`/colaborador/alunos/${data.studentId}`)
+  revalidatePath("/colaborador/financeiro")
+  revalidatePath(`/admin/alunos/${data.studentId}`)
+  revalidatePath("/admin/financeiro/pacotes")
+}
+
 // ─── Registrar Pagamento ──────────────────────────────────────────────────────
 const paymentSchema = z.object({
   studentId:   z.string().min(1),

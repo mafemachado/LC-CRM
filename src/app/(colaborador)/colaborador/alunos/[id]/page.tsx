@@ -12,7 +12,9 @@ import {
   CreditCard, ChevronLeft, ChevronRight, Star,
   Tag, FileText, Plus, Check,
 } from "lucide-react"
-import { LessonHeatmap, type HeatmapEntry } from "./_components/lesson-heatmap"
+import { LessonHeatmap, type HeatmapEntry }  from "./_components/lesson-heatmap"
+import { ScheduleLessonDialog }              from "./_components/schedule-lesson-dialog"
+import { PackageDialog }                     from "./_components/package-dialog"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -88,6 +90,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     prevStudent,
     nextStudent,
     totalStudents,
+    teachersRaw,
   ] = await Promise.all([
     prisma.student.findUnique({
       where: { id },
@@ -139,6 +142,15 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
       select: { id: true },
     }),
     prisma.student.count(),
+    prisma.teacher.findMany({
+      where:   { user: { active: true } },
+      select: {
+        id: true,
+        user:     { select: { name: true } },
+        subjects: { select: { subject: { select: { id: true, name: true } } } },
+      },
+      orderBy: { user: { name: "asc" } },
+    }),
   ])
 
   if (!student) notFound()
@@ -159,6 +171,13 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
   const nextLesson = [...recentLessons]
     .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
     .find(l => l.scheduledAt > now && (l.status === "SCHEDULED" || l.status === "CONFIRMED"))
+
+  // Teachers for ScheduleLessonDialog
+  const teachersForDialog = teachersRaw.map(t => ({
+    id:       t.id,
+    name:     t.user.name,
+    subjects: t.subjects.map(s => ({ id: s.subject.id, name: s.subject.name })),
+  }))
 
   // Teachers map from recent 20 lessons
   const teachersMap = new Map<string, { name: string; count: number; lastAt: Date }>()
@@ -286,13 +305,11 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2 shrink-0 items-start">
-            <Link
-              href={`/colaborador/agenda?new=1&studentId=${id}`}
-              className={buttonVariants({ variant: "default", size: "sm" }) + " gap-1.5"}
-            >
-              <Plus className="w-4 h-4" />
-              Marcar aula
-            </Link>
+            <ScheduleLessonDialog
+              studentId={id}
+              studentName={student.name}
+              teachers={teachersForDialog}
+            />
             {whatsappPhone && (
               <a
                 href={`https://wa.me/55${whatsappPhone}`}
@@ -401,17 +418,28 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
         <div className="lg:col-span-2 space-y-4">
 
           {/* Package timeline */}
+          {!activePkg && (
+            <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-6 flex flex-col items-center gap-3 text-center">
+              <BookOpen className="w-8 h-8 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Nenhum pacote ativo</p>
+              <PackageDialog studentId={id} studentName={student.name} mode="novo" />
+            </div>
+          )}
+
           {activePkg && (
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="font-sub text-sm flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                  {packageCode ? `Pacote em curso · #${packageCode}` : "Pacote em curso"}
-                  <Badge className="ml-auto bg-green-100 text-green-700 border-green-200 hover:bg-green-100 text-xs">
-                    <Check className="w-3 h-3 mr-1" />
-                    Pago
-                  </Badge>
-                </CardTitle>
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="font-sub text-sm flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    {packageCode ? `Pacote em curso · #${packageCode}` : "Pacote em curso"}
+                    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 text-xs">
+                      <Check className="w-3 h-3 mr-1" />
+                      Pago
+                    </Badge>
+                  </CardTitle>
+                  <PackageDialog studentId={id} studentName={student.name} mode={activePkg.remainingLessons <= 4 ? "renovar" : "novo"} />
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Comprado em {format(activePkg.purchaseDate, "dd 'de' MMMM", { locale: ptBR })}
                   {" · "}{activePkg.totalLessons} aulas

@@ -130,16 +130,14 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
     }),
     getRoomCount(),
     prisma.student.findMany({
-      where: { user: { active: true } },
       include: {
-        user:     true,
         packages: {
           where:   { status: "ACTIVE" },
           orderBy: { purchaseDate: "desc" },
           take:    1,
         },
       },
-      orderBy: { user: { name: "asc" } },
+      orderBy: { name: "asc" },
     }),
     prisma.lessonRequest.findMany({
       where: { status: "PENDING", preferredAt: { gte: dayStart, lte: endOfDay(dateObj) } },
@@ -150,11 +148,10 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
       },
       orderBy: { preferredAt: "asc" },
     }),
-    // Todos os alunos ativos (para o diálogo de aula em grupo)
+    // Todos os alunos (para o diálogo de aula em grupo)
     prisma.student.findMany({
-      where:   { user: { active: true } },
-      include: { user: true },
-      orderBy: { user: { name: "asc" } },
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
   ])
 
@@ -330,11 +327,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
 
   const students: StudentOption[] = studentsRaw.map(s => ({
     id:               s.id,
-    name:             s.user?.name ?? "Aluno",
+    name:             s.name,
     remainingLessons: s.packages[0]?.remainingLessons ?? 0,
   }))
 
-  const allStudents = allStudentsRaw.map(s => ({ id: s.id, name: s.user?.name ?? "Aluno" }))
+  const allStudents = allStudentsRaw.map(s => ({ id: s.id, name: s.name }))
 
   const weekday = format(dateObj, "EEEE", { locale: ptBR })
 
