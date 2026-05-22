@@ -12,6 +12,17 @@ const now    = new Date()
 
 const PRECO_AULA = 90
 
+const TOPICS_BY_SUBJECT: Record<string, string[]> = {
+  "sub-mat": ["Funções quadráticas","Equações do 2º grau","Logaritmos e exponenciais","Trigonometria — seno e cosseno","Geometria analítica","Matrizes e determinantes","Probabilidade e estatística","Progressões aritméticas"],
+  "sub-por": ["Dissertação argumentativa","Coesão e coerência textual","Funções sintáticas","Análise de texto literário","Crase e pontuação","Redação ENEM — estrutura","Interpretação de texto"],
+  "sub-fis": ["Cinemática — MRU e MRUV","Leis de Newton","Trabalho e energia","Termodinâmica","Eletrostática","Eletrodinâmica — corrente e resistência","Óptica geométrica"],
+  "sub-qui": ["Ácidos e bases — pH e pOH","Reações de oxirredução","Estequiometria","Funções orgânicas","Termoquímica","Cinética química","Equilíbrio químico"],
+  "sub-bio": ["Divisão celular — mitose e meiose","Genética mendeliana","Ecologia — cadeias alimentares","Fisiologia humana","Evolução e seleção natural","Bioquímica — proteínas e enzimas","Botânica — fotossíntese"],
+  "sub-his": ["Revolução Industrial","Segunda Guerra Mundial","Brasil Colônia","Era Vargas","Guerra Fria","Ditadura Militar no Brasil","Movimentos sociais do século XX"],
+  "sub-geo": ["Clima e vegetação no Brasil","Geopolítica mundial","Urbanização e êxodo rural","Cartografia e mapas","Recursos naturais","Globalização e blocos econômicos"],
+  "sub-ing": ["Present Perfect vs Simple Past","Phrasal verbs no cotidiano","Reading comprehension","Essay writing","Conditional sentences","Passive voice","Vocabulary — academic English"],
+}
+
 const TAXAS_PROFESSOR: Record<string, number> = {
   "teacher-1": 65,
   "teacher-2": 60,
@@ -69,7 +80,8 @@ function gerarAulasMes(
       modality, teacherOnsite, status,
       studentRating: rating,
       topicsCovered: status === LessonStatus.COMPLETED
-        ? "Revisão do conteúdo + exercícios práticos" : null,
+        ? (TOPICS_BY_SUBJECT[subjectId] ?? ["Revisão do conteúdo"])[i % (TOPICS_BY_SUBJECT[subjectId]?.length ?? 1)]
+        : null,
     }
   })
 }
@@ -86,6 +98,7 @@ async function main() {
   await prisma.lessonPackage.deleteMany()
   await prisma.teacherSubject.deleteMany()
   await prisma.material.deleteMany()
+  await prisma.studentNote.deleteMany()
   await prisma.student.deleteMany()
   await prisma.guardian.deleteMany()
   await prisma.teacher.deleteMany()
@@ -287,27 +300,27 @@ async function main() {
   // Pedro e Camila são seus próprios responsáveis (guardian-5 e guardian-9)
   const alunosDefs: {
     id: string; name: string; grade: string
-    educationLevel: EducationLevel; guardianId: string; school?: string
+    educationLevel: EducationLevel; guardianId: string; school?: string; tags?: string[]
   }[] = [
-    { id: "student-1",  name: "Lucas Alves",       grade: "9º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-1", school: "E.E. João Paulo II"   },
-    { id: "student-2",  name: "Isabela Ferreira",  grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-2", school: "Colégio São Paulo"    },
-    { id: "student-3",  name: "Gabriel Souza",     grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-3", school: "Colégio São Paulo"    },
-    { id: "student-4",  name: "Maria Clara Lima",  grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-4", school: "E.E. João Paulo II"   },
-    { id: "student-5",  name: "Pedro Henrique",    grade: "Vestibular", educationLevel: EducationLevel.VESTIBULAR, guardianId: "guardian-5"                                  },
-    { id: "student-6",  name: "Larissa Costa",     grade: "8º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-6", school: "Escola Municipal ABC" },
-    { id: "student-7",  name: "Bruno Martins",     grade: "6º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7", school: "Escola Municipal ABC" },
-    { id: "student-8",  name: "Amanda Martins",    grade: "7º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7", school: "Escola Municipal ABC" },  // irmã do Bruno
-    { id: "student-9",  name: "Thiago Barbosa",    grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-8", school: "Colégio São Paulo"    },
-    { id: "student-10", name: "Camila Pereira",    grade: "Superior",   educationLevel: EducationLevel.SUPERIOR,   guardianId: "guardian-9"                                  },
-    { id: "student-11", name: "Vinícius Rocha",    grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-10", school: "Colégio São Paulo"   },
-    { id: "student-12", name: "Letícia Gomes",     grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-11", school: "E.E. João Paulo II"  },
+    { id: "student-1",  name: "Lucas Alves",       grade: "9º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-1",  school: "E.E. João Paulo II",  tags: ["Reforço escolar"]                          },
+    { id: "student-2",  name: "Isabela Ferreira",  grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-2",  school: "Colégio São Paulo",   tags: ["ENEM 2027"]                                 },
+    { id: "student-3",  name: "Gabriel Souza",     grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-3",  school: "Colégio São Paulo",   tags: ["Foco exatas", "Pré-vestibular"]             },
+    { id: "student-4",  name: "Maria Clara Lima",  grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-4",  school: "E.E. João Paulo II",  tags: ["ENEM 2026", "Pagamento Pix"]                },
+    { id: "student-5",  name: "Pedro Henrique",    grade: "Vestibular", educationLevel: EducationLevel.VESTIBULAR, guardianId: "guardian-5",                                  tags: ["FUVEST 2026", "Foco exatas", "Pré-vestibular"]},
+    { id: "student-6",  name: "Larissa Costa",     grade: "8º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-6",  school: "Escola Municipal ABC", tags: []                                           },
+    { id: "student-7",  name: "Bruno Martins",     grade: "6º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7",  school: "Escola Municipal ABC", tags: ["Reforço escolar"]                          },
+    { id: "student-8",  name: "Amanda Martins",    grade: "7º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7",  school: "Escola Municipal ABC", tags: ["Reforço escolar"]                          },
+    { id: "student-9",  name: "Thiago Barbosa",    grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-8",  school: "Colégio São Paulo",   tags: ["Pagamento pendente"]                        },
+    { id: "student-10", name: "Camila Pereira",    grade: "Superior",   educationLevel: EducationLevel.SUPERIOR,   guardianId: "guardian-9",                                  tags: ["Inglês avançado", "Superior"]               },
+    { id: "student-11", name: "Vinícius Rocha",    grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-10", school: "Colégio São Paulo",   tags: ["ENEM 2026", "Pagamento pendente"]           },
+    { id: "student-12", name: "Letícia Gomes",     grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-11", school: "E.E. João Paulo II",  tags: ["ENEM 2026"]                                 },
   ]
 
   for (const s of alunosDefs) {
     await prisma.student.create({
       data: {
         id: s.id, name: s.name, grade: s.grade, educationLevel: s.educationLevel,
-        guardianId: s.guardianId, school: s.school ?? null,
+        guardianId: s.guardianId, school: s.school ?? null, tags: s.tags ?? [],
       },
     })
   }
@@ -700,6 +713,63 @@ async function main() {
     ],
   })
   console.log("✅ 5 notificações extras para colaborador")
+
+  // ─── Aulas Faltadas (MISSED) — para heatmap ter pontos vermelhos ────────────
+  const aulasFaltadas = [
+    ...gerarAulasMes("student-1","teacher-1","sub-mat",2,2,LessonStatus.MISSED,null,T1),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,1,LessonStatus.MISSED,null,T4,[14,15,16,17]),
+    ...gerarAulasMes("student-9","teacher-1","sub-fis",1,2,LessonStatus.MISSED,null,T1),
+    ...gerarAulasMes("student-10","teacher-5","sub-ing",0,1,LessonStatus.MISSED,null,T5),
+  ]
+  for (const aula of aulasFaltadas) {
+    const { studentId, ...lessonData } = aula
+    await prisma.lesson.create({
+      data: { ...lessonData, participants: { create: { studentId } } },
+    })
+  }
+  console.log(`✅ ${aulasFaltadas.length} aulas faltadas (MISSED)`)
+
+  // ─── Notas dos Alunos (StudentNote) ──────────────────────────────────────
+  await prisma.studentNote.createMany({
+    data: [
+      // student-4 (Maria Clara) — 2 notas
+      {
+        studentId: "student-4", authorId: "user-prof1",
+        content: "Maria Clara está evoluindo bem em trigonometria, mas ainda tem dúvidas em logaritmos. Próxima aula focar em exercícios do ENEM.",
+        createdAt: subMonths(now, 0),
+      },
+      {
+        studentId: "student-4", authorId: "user-admin",
+        content: "Mãe pediu para evitar aulas às sextas-feiras. Preferência por horários à tarde.",
+        createdAt: subMonths(now, 1),
+      },
+
+      // student-5 (Pedro) — 2 notas
+      {
+        studentId: "student-5", authorId: "user-prof5",
+        content: "Pedro tem fluência boa no inglês oral mas precisa melhorar writing acadêmico. Recomendo mais exercícios de essay.",
+        createdAt: subMonths(now, 0),
+      },
+      {
+        studentId: "student-5", authorId: "user-colab1",
+        content: "Pedro pediu para encaixar aula extra antes do vestibular. Verificar disponibilidade da Patricia.",
+        createdAt: subMonths(now, 0),
+      },
+
+      // student-10 (Camila) — 2 notas
+      {
+        studentId: "student-10", authorId: "user-prof5",
+        content: "Camila está confiante em funções, mas tem dúvidas em vocabulário técnico de inglês para área de saúde. Próxima aula focar em medical English.",
+        createdAt: addDays(now, -7),
+      },
+      {
+        studentId: "student-10", authorId: "user-admin",
+        content: "Responsável pediu relatório mensal de evolução. Configurar envio automático no dia 25.",
+        createdAt: subMonths(now, 1),
+      },
+    ],
+  })
+  console.log("✅ 6 notas de alunos (StudentNote)")
 
   // ─── Resumo ────────────────────────────────────────────────────────────────
   const totalAulasRealizadas = todasAulas.filter((a) => a.status === LessonStatus.COMPLETED).length
