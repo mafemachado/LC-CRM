@@ -65,7 +65,8 @@ function classify(student: StudentRow): BoardColumn {
   if (!pkg) return "novos"
 
   const remaining = pkg.remainingLessons
-  const isExpired = pkg.expiresAt && pkg.expiresAt < new Date()
+  const expiresAt = pkg.expiresAt ? new Date(pkg.expiresAt) : null
+  const isExpired = expiresAt && expiresAt < new Date()
 
   if (remaining <= 1 || isExpired || pkg.status === "EXHAUSTED") return "atencao"
   if (remaining <= 4) return "renovar"
@@ -120,14 +121,14 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
           {pkg && (
             <p className="text-xs text-muted-foreground">
               Pacote: {pkg.totalLessons} aulas
-              {pkg.expiresAt && ` · vence ${format(pkg.expiresAt, "dd/MM/yyyy", { locale: ptBR })}`}
+              {pkg.expiresAt && ` · vence ${format(new Date(pkg.expiresAt), "dd/MM/yyyy", { locale: ptBR })}`}
             </p>
           )}
           {nextLesson && (
             <div className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3 text-muted-foreground" />
               <p className="text-xs text-muted-foreground">
-                Próx: {format(nextLesson.scheduledAt, "dd/MM HH:mm", { locale: ptBR })} · {nextLesson.subject.name}
+                Próx: {format(new Date(nextLesson.scheduledAt), "dd/MM HH:mm", { locale: ptBR })} · {nextLesson.subject.name}
               </p>
             </div>
           )}

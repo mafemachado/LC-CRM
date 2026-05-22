@@ -39,10 +39,11 @@ function getStatusInfo(pkg: StudentRow["packages"][number] | null) {
 
   const remaining = pkg.remainingLessons
   const now = new Date()
-  const isExpired = pkg.expiresAt && pkg.expiresAt < now
+  const expiresAt = pkg.expiresAt ? new Date(pkg.expiresAt) : null
+  const isExpired = expiresAt && expiresAt < now
 
   if (isExpired) {
-    const days = Math.floor((now.getTime() - pkg.expiresAt!.getTime()) / (86400 * 1000))
+    const days = Math.floor((now.getTime() - expiresAt.getTime()) / (86400 * 1000))
     return { label: `Vencido ${days}d`, cls: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400" }
   }
   if (remaining === 0 || pkg.status === "EXHAUSTED") {
@@ -161,7 +162,7 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
         {nextLesson ? (
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <CalendarDays className="w-3 h-3 shrink-0" />
-            <span>Próx: {format(nextLesson.scheduledAt, "dd/MM HH:mm", { locale: ptBR })}</span>
+            <span>Próx: {format(new Date(nextLesson.scheduledAt), "dd/MM HH:mm", { locale: ptBR })}</span>
           </div>
         ) : (
           <span className="text-xs text-muted-foreground">Sem aula agendada</span>
