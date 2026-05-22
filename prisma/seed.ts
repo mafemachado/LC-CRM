@@ -49,12 +49,12 @@ function gerarAulasMes(
   status: LessonStatus,
   rating: number | null,
   teacherMode: TeacherMode,
+  hours: number[] = [9, 10, 11, 14, 15, 16, 17],
 ): Array<{
   studentId: string; teacherId: string; subjectId: string
   scheduledAt: Date; modality: LessonModality; teacherOnsite: boolean
   status: LessonStatus; studentRating: number | null; topicsCovered: string | null
 }> {
-  const hours = [9, 10, 11, 14, 15, 16, 17]
   return Array.from({ length: quantidade }, (_, i) => {
     const day      = 2 + i * Math.floor(28 / quantidade)
     const hour     = hours[i % hours.length]
@@ -374,12 +374,12 @@ async function main() {
     ...gerarAulasMes("student-3","teacher-3","sub-qui",1,4,LessonStatus.COMPLETED,5,T3),
     ...gerarAulasMes("student-3","teacher-3","sub-qui",0,2,LessonStatus.SCHEDULED,null,T3),
 
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",5,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-geo",4,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",3,6,LessonStatus.COMPLETED,5,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",2,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,5,LessonStatus.COMPLETED,5,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",0,2,LessonStatus.CONFIRMED,null,T4),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",5,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-geo",4,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",3,6,LessonStatus.COMPLETED,5,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",2,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,5,LessonStatus.COMPLETED,5,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",0,2,LessonStatus.CONFIRMED,null,T4,[14,15,16,17,18,19,20]),
 
     ...gerarAulasMes("student-5","teacher-5","sub-ing",5,7,LessonStatus.COMPLETED,5,T5),
     ...gerarAulasMes("student-5","teacher-5","sub-ing",4,7,LessonStatus.COMPLETED,5,T5),
@@ -388,16 +388,16 @@ async function main() {
     ...gerarAulasMes("student-5","teacher-5","sub-ing",1,6,LessonStatus.COMPLETED,5,T5),
     ...gerarAulasMes("student-5","teacher-5","sub-ing",0,2,LessonStatus.SCHEDULED,null,T5),
 
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",4,4,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",3,4,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-mat",2,4,LessonStatus.COMPLETED,3,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",1,3,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",0,1,LessonStatus.SCHEDULED,null,T6),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",4,4,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",3,4,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-mat",2,4,LessonStatus.COMPLETED,3,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",1,3,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",0,1,LessonStatus.SCHEDULED,null,T6,[14,15,16,17,18,19,20]),
 
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",3,4,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",2,4,LessonStatus.COMPLETED,3,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",1,3,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",0,1,LessonStatus.SCHEDULED,null,T4),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",3,4,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",2,4,LessonStatus.COMPLETED,3,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",1,3,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",0,1,LessonStatus.SCHEDULED,null,T4,[14,15,16,17,18,19,20]),
 
     // Amanda (irmã do Bruno — mesmo guardião guardian-7)
     ...gerarAulasMes("student-8","teacher-3","sub-bio",5,5,LessonStatus.COMPLETED,5,T3),
@@ -518,7 +518,7 @@ async function main() {
     data: [
       {
         studentId: "student-7",  teacherId: "teacher-4", subjectId: "sub-mat",
-        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(1, 10), status: RequestStatus.PENDING,
+        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(1, 15), status: RequestStatus.PENDING,
         reason: "Preciso de reforço urgente para prova de sexta",
       },
       {
@@ -614,7 +614,7 @@ async function main() {
     { studentId: "student-2",  teacherId: "teacher-2", subjectId: "sub-por",
       scheduledAt: todayAt(9),      modality: LessonModality.ONLINE,     teacherOnsite: false },
     { studentId: "student-4",  teacherId: "teacher-4", subjectId: "sub-mat",
-      scheduledAt: todayAt(10, 30), modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
+      scheduledAt: todayAt(14, 30), modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
     { studentId: "student-5",  teacherId: "teacher-1", subjectId: "sub-fis",
       scheduledAt: todayAt(14),     modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
     { studentId: "student-10", teacherId: "teacher-5", subjectId: "sub-ing",
@@ -638,7 +638,7 @@ async function main() {
       },
       {
         studentId: "student-6", teacherId: "teacher-6", subjectId: "sub-fis",
-        modality: LessonModality.ONLINE, preferredAt: futureAt(2, 10, 30),
+        modality: LessonModality.ONLINE, preferredAt: futureAt(2, 14, 30),
         status: RequestStatus.PENDING, reason: null,
       },
       {

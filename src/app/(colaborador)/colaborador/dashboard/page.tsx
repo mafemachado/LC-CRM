@@ -2,7 +2,8 @@ import React     from "react"
 import { auth }   from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import Link       from "next/link"
-import { PedidoRow } from "./pedido-row"
+import { PedidoRow }       from "./pedido-row"
+import { DashboardClock }  from "@/components/colaborador/dashboard-clock"
 import {
   format, startOfDay, endOfDay, getDay,
   differenceInHours, differenceInDays,
@@ -320,17 +321,10 @@ export default async function ColaboradorDashboard() {
     <div className="flex flex-col gap-[18px]">
 
       {/* Header */}
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-          {d.dateLabel}
-        </p>
-        <h1 className="font-sub text-[20px] font-semibold leading-snug tracking-[-0.02em]">
-          {d.saudacao}, {session?.user?.name?.split(" ")[0]}.{" "}
-          <span style={{ color: "var(--subtle)" }}>Você tem</span>{" "}
-          <span style={{ color: "var(--primary)" }}>{d.totalPendentes} itens</span>{" "}
-          <span style={{ color: "var(--subtle)" }}>pendentes hoje.</span>
-        </h1>
-      </div>
+      <DashboardClock
+        firstName={session?.user?.name?.split(" ")[0] ?? ""}
+        totalPendentes={d.totalPendentes}
+      />
 
       {/* 4 KPIs */}
       <div
