@@ -76,6 +76,7 @@ function classify(student: StudentRow): BoardColumn {
 // ── List-view row ─────────────────────────────────────────────────────────────
 
 function ListRow({ student, detailBasePath }: { student: StudentRow; detailBasePath: string }) {
+  const displayName  = student.name?.trim() || student.user?.name?.trim() || "Aluno"
   const pkg          = student.packages[0] ?? null
   const remaining    = pkg?.remainingLessons ?? 0
   const nextLesson   = student.participations[0]?.lesson ?? null
@@ -98,7 +99,7 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
 
   return (
     <div className="relative flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border border-border bg-card hover:bg-accent/40 transition-colors">
-      <Link href={detailHref} className="absolute inset-0 rounded-xl z-0" aria-label={`Ver perfil de ${student.name}`} />
+      <Link href={detailHref} className="absolute inset-0 rounded-xl z-0" aria-label={`Ver perfil de ${displayName}`} />
 
       <div className="flex gap-3 flex-1 min-w-0 relative z-10">
         <div className="w-10 h-10 shrink-0 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -106,7 +107,7 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
         </div>
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium text-sm">{student.name}</p>
+            <p className="font-medium text-sm">{displayName}</p>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badgeCls}`}>{badgeLabel}</span>
           </div>
           {guardianUser && (
@@ -188,7 +189,7 @@ export function StudentsBoard({
         if (subj !== subjectFilter) return false
       }
       if (q) {
-        const matchName     = s.name.toLowerCase().includes(q)
+        const matchName     = (s.name?.trim() || s.user?.name || "").toLowerCase().includes(q)
         const matchGuardian = s.guardian?.user.name?.toLowerCase().includes(q) ?? false
         const matchPhone    = (s.user?.phone ?? "").includes(q)
                            || (s.guardian?.user.phone ?? "").includes(q)

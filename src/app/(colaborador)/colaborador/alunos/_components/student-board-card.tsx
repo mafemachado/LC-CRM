@@ -84,6 +84,7 @@ interface StudentBoardCardProps {
 }
 
 export function StudentBoardCard({ student, column, detailBasePath }: StudentBoardCardProps) {
+  const displayName  = student.name?.trim() || student.user?.name?.trim() || "Aluno"
   const pkg          = student.packages[0] ?? null
   const remaining    = pkg?.remainingLessons ?? 0
   const nextLesson   = student.participations[0]?.lesson ?? null
@@ -110,13 +111,13 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
     <div className="rounded-xl border bg-card p-4 flex flex-col gap-3 hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="flex items-start gap-3">
-        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${avatarColor(student.name)}`}>
-          {initials(student.name)}
+        <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${avatarColor(displayName)}`}>
+          {initials(displayName)}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <Link href={detailHref} className="font-semibold text-sm hover:underline leading-tight truncate">
-              {student.name}
+              {displayName}
             </Link>
             <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${status.cls}`}>
               {status.label}
