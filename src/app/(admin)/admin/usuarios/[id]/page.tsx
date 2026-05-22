@@ -21,7 +21,7 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
       where:   { id },
       include: {
         student:  { include: { guardian: true } },
-        guardian: true,
+        guardian: { include: { students: { select: { id: true, name: true, grade: true } } } },
         teacher:  { include: { subjects: true } },
       },
     }),
@@ -38,6 +38,21 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
     ? await prisma.subject.findMany({ orderBy: { name: "asc" } })
     : []
 
+  // Para guardiões: buscar alunos vinculados + alunos sem responsável
+  let guardianStudents: { id: string; name: string; grade: string; linked: boolean }[] = []
+  if (user.role === "GUARDIAN" && user.guardian) {
+    const linkedIds = new Set(user.guardian.students.map((s) => s.id))
+    const unlinked  = await prisma.student.findMany({
+      where:   { guardianId: null },
+      select:  { id: true, name: true, grade: true },
+      orderBy: { name: "asc" },
+    })
+    guardianStudents = [
+      ...user.guardian.students.map((s) => ({ ...s, linked: true })),
+      ...unlinked.filter((s) => !linkedIds.has(s.id)).map((s) => ({ ...s, linked: false })),
+    ].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -53,6 +68,7 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
             error={error}
             isEdit
             guardians={guardians.map((g) => ({ id: g.id, name: g.user.name }))}
+            students={guardianStudents}
             defaultValues={{
               name:          user.name,
               email:         user.email ?? "",

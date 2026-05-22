@@ -2,7 +2,8 @@ import React     from "react"
 import { auth }   from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import Link       from "next/link"
-import { PedidoRow } from "./pedido-row"
+import { PedidoRow }       from "./pedido-row"
+import { DashboardClock }  from "@/components/colaborador/dashboard-clock"
 import {
   format, startOfDay, endOfDay, getDay,
   differenceInHours, differenceInDays,
@@ -84,14 +85,35 @@ async function getColabData(userId?: string) {
     (r) => r.preferredAt >= startOfDay(now) && r.preferredAt <= endOfDay(now)
   )
 
-  const teacherIdsWithData = new Set([
-    ...todayLessons.map((l) => l.teacherId),
-    ...todayRequests.map((r) => r.teacherId),
-  ])
-  const gridTeachers = [
-    ...teachers.filter((t) => teacherIdsWithData.has(t.id)),
-    ...teachers.filter((t) => !teacherIdsWithData.has(t.id)),
-  ].slice(0, 6)
+  // Prioridade: professores já no Lição (têm aula hoje) com dia mais compacto primeiro.
+  // Dia compacto = menor span entre primeira e última aula → professor não fica esperando/sai tarde.
+  // Depois: quem tem disponibilidade mas sem aulas. Por último: sem agenda hoje.
+  function teacherPriority(t: typeof teachers[0]): { tier: number; span: number } {
+    const lessonHours = todayLessons
+      .filter((l) => l.teacherId === t.id && ["SCHEDULED", "CONFIRMED"].includes(l.status))
+      .map((l) => l.scheduledAt.getHours())
+      .sort((a, b) => a - b)
+
+    if (lessonHours.length > 0) {
+      const span = lessonHours[lessonHours.length - 1] - lessonHours[0]
+      return { tier: 2, span }
+    }
+    if (HOURS.some((h) => isAvailableAt(t.availability, h))) {
+      return { tier: 1, span: 0 }
+    }
+    return { tier: 0, span: 0 }
+  }
+
+  const GRID_LIMIT = 6
+  const sortedTeachers = [...teachers].sort((a, b) => {
+    const pa = teacherPriority(a)
+    const pb = teacherPriority(b)
+    if (pb.tier !== pa.tier) return pb.tier - pa.tier
+    // Mesmo tier: span menor aparece primeiro (dia mais compacto)
+    return pa.span - pb.span
+  })
+  const gridTeachers   = sortedTeachers.slice(0, GRID_LIMIT)
+  const hiddenTeachers = Math.max(0, teachers.length - GRID_LIMIT)
 
   type CellStatus = "busy" | "request" | "free" | "none"
   function cellStatus(teacherId: string, hour: number): CellStatus {
@@ -210,8 +232,10 @@ async function getColabData(userId?: string) {
     overdueUrgent,
     unreadCount,
     formattedRequests,
-    gridTeachers:  gridMatrix,
-    hours:         HOURS,
+    gridTeachers:   gridMatrix,
+    hiddenTeachers,
+    totalTeachers:  teachers.length,
+    hours:          HOURS,
     encaixe,
     cobrancas,
     tasks,
@@ -236,7 +260,7 @@ function ColabKpiCell({
     accent:  { bg: "var(--accent-soft)",  color: "var(--primary)" },
     info:    { bg: "var(--info-soft)",    color: "var(--info)"    },
     warn:    { bg: "var(--warn-soft)",    color: "var(--warn)"    },
-    muted:   { bg: "var(--muted-soft)",   color: "var(--muted)"   },
+    muted:   { bg: "var(--muted-soft)",   color: "var(--subtle)"   },
   }
   const c = C[tagColor]
   return (
@@ -275,7 +299,7 @@ const CELL: Record<string, { bg: string; color: string; sym: string }> = {
   busy:    { bg: "var(--danger-soft)",  color: "var(--danger)",  sym: "■" },
   request: { bg: "var(--accent-soft)",  color: "var(--primary)", sym: "?" },
   free:    { bg: "var(--success-soft)", color: "var(--success)", sym: "·" },
-  none:    { bg: "transparent",         color: "var(--muted)",   sym: ""  },
+  none:    { bg: "transparent",         color: "var(--subtle)",   sym: ""  },
 }
 
 const TAG_COLORS: Record<string, { bg: string; color: string }> = {
@@ -283,7 +307,7 @@ const TAG_COLORS: Record<string, { bg: string; color: string }> = {
   danger:  { bg: "var(--danger-soft)",  color: "var(--danger)"  },
   info:    { bg: "var(--info-soft)",    color: "var(--info)"    },
   success: { bg: "var(--success-soft)", color: "var(--success)" },
-  muted:   { bg: "var(--muted-soft)",   color: "var(--muted)"   },
+  muted:   { bg: "var(--muted-soft)",   color: "var(--subtle)"   },
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -297,17 +321,10 @@ export default async function ColaboradorDashboard() {
     <div className="flex flex-col gap-[18px]">
 
       {/* Header */}
-      <div>
-        <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-          {d.dateLabel}
-        </p>
-        <h1 className="font-sub text-[20px] font-semibold leading-snug tracking-[-0.02em]">
-          {d.saudacao}, {session?.user?.name?.split(" ")[0]}.{" "}
-          <span style={{ color: "var(--muted)" }}>Você tem</span>{" "}
-          <span style={{ color: "var(--primary)" }}>{d.totalPendentes} itens</span>{" "}
-          <span style={{ color: "var(--muted)" }}>pendentes hoje.</span>
-        </h1>
-      </div>
+      <DashboardClock
+        firstName={session?.user?.name?.split(" ")[0] ?? ""}
+        totalPendentes={d.totalPendentes}
+      />
 
       {/* 4 KPIs */}
       <div
@@ -389,10 +406,21 @@ export default async function ColaboradorDashboard() {
             <div>
               <p className="text-[13px] font-semibold tracking-[-0.01em]">Disponibilidade hoje</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">
-                Use para confirmar pedidos com encaixe rápido
+                {d.hiddenTeachers > 0
+                  ? `Top ${Math.min(d.totalTeachers, 6)} por relevância · ${d.hiddenTeachers} professor${d.hiddenTeachers !== 1 ? "es" : ""} oculto${d.hiddenTeachers !== 1 ? "s" : ""}`
+                  : "Use para confirmar pedidos com encaixe rápido"}
               </p>
             </div>
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+              {d.hiddenTeachers > 0 && (
+                <Link
+                  href="/colaborador/agenda"
+                  className="shrink-0 font-medium transition-opacity hover:opacity-70"
+                  style={{ color: "var(--primary)" }}
+                >
+                  Ver todos ({d.totalTeachers}) →
+                </Link>
+              )}
               {(["free", "busy", "request"] as const).map((s) => (
                 <span key={s} className="flex items-center gap-1.5">
                   <span
@@ -427,7 +455,7 @@ export default async function ColaboradorDashboard() {
                     <div
                       key={h}
                       className="text-center font-mono text-[10px]"
-                      style={{ color: "var(--muted)" }}
+                      style={{ color: "var(--subtle)" }}
                     >
                       {String(h).padStart(2, "0")}h
                     </div>
@@ -526,7 +554,7 @@ export default async function ColaboradorDashboard() {
                         ? { background: "var(--danger-soft)", color: "var(--danger)" }
                         : r.dias >= 7
                         ? { background: "var(--warn-soft)",   color: "var(--warn)"   }
-                        : { background: "var(--hover)",       color: "var(--muted)"  }
+                        : { background: "var(--hover)",       color: "var(--subtle)"  }
                     return (
                       <tr key={r.id} className="border-t border-border">
                         <td className="px-[14px] py-[9px] font-medium">{r.aluno}</td>
@@ -606,7 +634,7 @@ export default async function ColaboradorDashboard() {
                     <span
                       className="flex-1 text-[12px] leading-snug"
                       style={{
-                        color:          t.done ? "var(--muted)" : "var(--text)",
+                        color:          t.done ? "var(--subtle)" : "var(--text)",
                         textDecoration: t.done ? "line-through" : "none",
                       }}
                     >

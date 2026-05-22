@@ -4,13 +4,24 @@ import {
   TeacherMode, EducationLevel,
 } from "@prisma/client"
 import bcrypt from "bcryptjs"
-import { subMonths, addHours, startOfMonth, setHours, setMinutes } from "date-fns"
+import { subMonths, addHours, addDays, startOfMonth, setHours, setMinutes } from "date-fns"
 
 const prisma = new PrismaClient()
 const hash   = (pwd: string) => bcrypt.hash(pwd, 12)
 const now    = new Date()
 
 const PRECO_AULA = 90
+
+const TOPICS_BY_SUBJECT: Record<string, string[]> = {
+  "sub-mat": ["Funções quadráticas","Equações do 2º grau","Logaritmos e exponenciais","Trigonometria — seno e cosseno","Geometria analítica","Matrizes e determinantes","Probabilidade e estatística","Progressões aritméticas"],
+  "sub-por": ["Dissertação argumentativa","Coesão e coerência textual","Funções sintáticas","Análise de texto literário","Crase e pontuação","Redação ENEM — estrutura","Interpretação de texto"],
+  "sub-fis": ["Cinemática — MRU e MRUV","Leis de Newton","Trabalho e energia","Termodinâmica","Eletrostática","Eletrodinâmica — corrente e resistência","Óptica geométrica"],
+  "sub-qui": ["Ácidos e bases — pH e pOH","Reações de oxirredução","Estequiometria","Funções orgânicas","Termoquímica","Cinética química","Equilíbrio químico"],
+  "sub-bio": ["Divisão celular — mitose e meiose","Genética mendeliana","Ecologia — cadeias alimentares","Fisiologia humana","Evolução e seleção natural","Bioquímica — proteínas e enzimas","Botânica — fotossíntese"],
+  "sub-his": ["Revolução Industrial","Segunda Guerra Mundial","Brasil Colônia","Era Vargas","Guerra Fria","Ditadura Militar no Brasil","Movimentos sociais do século XX"],
+  "sub-geo": ["Clima e vegetação no Brasil","Geopolítica mundial","Urbanização e êxodo rural","Cartografia e mapas","Recursos naturais","Globalização e blocos econômicos"],
+  "sub-ing": ["Present Perfect vs Simple Past","Phrasal verbs no cotidiano","Reading comprehension","Essay writing","Conditional sentences","Passive voice","Vocabulary — academic English"],
+}
 
 const TAXAS_PROFESSOR: Record<string, number> = {
   "teacher-1": 65,
@@ -27,6 +38,19 @@ function pastDate(monthsAgo: number, dayOffset = 0, hour = 10) {
   return setMinutes(setHours(d, hour), 0)
 }
 
+function todayAt(hour: number, minute = 0) {
+  const d = new Date()
+  d.setHours(hour, minute, 0, 0)
+  return d
+}
+
+// Cria data futura em horário de funcionamento (evita horários fora do expediente)
+function futureAt(daysAhead: number, hour: number, minute = 0) {
+  const d = addDays(now, daysAhead)
+  d.setHours(hour, minute, 0, 0)
+  return d
+}
+
 function gerarAulasMes(
   studentId: string,
   teacherId: string,
@@ -36,12 +60,12 @@ function gerarAulasMes(
   status: LessonStatus,
   rating: number | null,
   teacherMode: TeacherMode,
+  hours: number[] = [9, 10, 11, 14, 15, 16, 17],
 ): Array<{
   studentId: string; teacherId: string; subjectId: string
   scheduledAt: Date; modality: LessonModality; teacherOnsite: boolean
   status: LessonStatus; studentRating: number | null; topicsCovered: string | null
 }> {
-  const hours = [9, 10, 11, 14, 15, 16, 17]
   return Array.from({ length: quantidade }, (_, i) => {
     const day      = 2 + i * Math.floor(28 / quantidade)
     const hour     = hours[i % hours.length]
@@ -56,7 +80,8 @@ function gerarAulasMes(
       modality, teacherOnsite, status,
       studentRating: rating,
       topicsCovered: status === LessonStatus.COMPLETED
-        ? "Revisão do conteúdo + exercícios práticos" : null,
+        ? (TOPICS_BY_SUBJECT[subjectId] ?? ["Revisão do conteúdo"])[i % (TOPICS_BY_SUBJECT[subjectId]?.length ?? 1)]
+        : null,
     }
   })
 }
@@ -73,6 +98,7 @@ async function main() {
   await prisma.lessonPackage.deleteMany()
   await prisma.teacherSubject.deleteMany()
   await prisma.material.deleteMany()
+  await prisma.studentNote.deleteMany()
   await prisma.student.deleteMany()
   await prisma.guardian.deleteMany()
   await prisma.teacher.deleteMany()
@@ -274,27 +300,27 @@ async function main() {
   // Pedro e Camila são seus próprios responsáveis (guardian-5 e guardian-9)
   const alunosDefs: {
     id: string; name: string; grade: string
-    educationLevel: EducationLevel; guardianId: string; school?: string
+    educationLevel: EducationLevel; guardianId: string; school?: string; tags?: string[]
   }[] = [
-    { id: "student-1",  name: "Lucas Alves",       grade: "9º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-1", school: "E.E. João Paulo II"   },
-    { id: "student-2",  name: "Isabela Ferreira",  grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-2", school: "Colégio São Paulo"    },
-    { id: "student-3",  name: "Gabriel Souza",     grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-3", school: "Colégio São Paulo"    },
-    { id: "student-4",  name: "Maria Clara Lima",  grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-4", school: "E.E. João Paulo II"   },
-    { id: "student-5",  name: "Pedro Henrique",    grade: "Vestibular", educationLevel: EducationLevel.VESTIBULAR, guardianId: "guardian-5"                                  },
-    { id: "student-6",  name: "Larissa Costa",     grade: "8º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-6", school: "Escola Municipal ABC" },
-    { id: "student-7",  name: "Bruno Martins",     grade: "6º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7", school: "Escola Municipal ABC" },
-    { id: "student-8",  name: "Amanda Martins",    grade: "7º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7", school: "Escola Municipal ABC" },  // irmã do Bruno
-    { id: "student-9",  name: "Thiago Barbosa",    grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-8", school: "Colégio São Paulo"    },
-    { id: "student-10", name: "Camila Pereira",    grade: "Superior",   educationLevel: EducationLevel.SUPERIOR,   guardianId: "guardian-9"                                  },
-    { id: "student-11", name: "Vinícius Rocha",    grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-10", school: "Colégio São Paulo"   },
-    { id: "student-12", name: "Letícia Gomes",     grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-11", school: "E.E. João Paulo II"  },
+    { id: "student-1",  name: "Lucas Alves",       grade: "9º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-1",  school: "E.E. João Paulo II",  tags: ["Reforço escolar"]                          },
+    { id: "student-2",  name: "Isabela Ferreira",  grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-2",  school: "Colégio São Paulo",   tags: ["ENEM 2027"]                                 },
+    { id: "student-3",  name: "Gabriel Souza",     grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-3",  school: "Colégio São Paulo",   tags: ["Foco exatas", "Pré-vestibular"]             },
+    { id: "student-4",  name: "Maria Clara Lima",  grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-4",  school: "E.E. João Paulo II",  tags: ["ENEM 2026", "Pagamento Pix"]                },
+    { id: "student-5",  name: "Pedro Henrique",    grade: "Vestibular", educationLevel: EducationLevel.VESTIBULAR, guardianId: "guardian-5",                                  tags: ["FUVEST 2026", "Foco exatas", "Pré-vestibular"]},
+    { id: "student-6",  name: "Larissa Costa",     grade: "8º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-6",  school: "Escola Municipal ABC", tags: []                                           },
+    { id: "student-7",  name: "Bruno Martins",     grade: "6º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7",  school: "Escola Municipal ABC", tags: ["Reforço escolar"]                          },
+    { id: "student-8",  name: "Amanda Martins",    grade: "7º EF",      educationLevel: EducationLevel.EF2,        guardianId: "guardian-7",  school: "Escola Municipal ABC", tags: ["Reforço escolar"]                          },
+    { id: "student-9",  name: "Thiago Barbosa",    grade: "1º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-8",  school: "Colégio São Paulo",   tags: ["Pagamento pendente"]                        },
+    { id: "student-10", name: "Camila Pereira",    grade: "Superior",   educationLevel: EducationLevel.SUPERIOR,   guardianId: "guardian-9",                                  tags: ["Inglês avançado", "Superior"]               },
+    { id: "student-11", name: "Vinícius Rocha",    grade: "2º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-10", school: "Colégio São Paulo",   tags: ["ENEM 2026", "Pagamento pendente"]           },
+    { id: "student-12", name: "Letícia Gomes",     grade: "3º EM",      educationLevel: EducationLevel.EM,         guardianId: "guardian-11", school: "E.E. João Paulo II",  tags: ["ENEM 2026"]                                 },
   ]
 
   for (const s of alunosDefs) {
     await prisma.student.create({
       data: {
         id: s.id, name: s.name, grade: s.grade, educationLevel: s.educationLevel,
-        guardianId: s.guardianId, school: s.school ?? null,
+        guardianId: s.guardianId, school: s.school ?? null, tags: s.tags ?? [],
       },
     })
   }
@@ -361,12 +387,12 @@ async function main() {
     ...gerarAulasMes("student-3","teacher-3","sub-qui",1,4,LessonStatus.COMPLETED,5,T3),
     ...gerarAulasMes("student-3","teacher-3","sub-qui",0,2,LessonStatus.SCHEDULED,null,T3),
 
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",5,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-geo",4,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",3,6,LessonStatus.COMPLETED,5,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",2,6,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,5,LessonStatus.COMPLETED,5,T4),
-    ...gerarAulasMes("student-4","teacher-4","sub-mat",0,2,LessonStatus.CONFIRMED,null,T4),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",5,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-geo",4,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",3,6,LessonStatus.COMPLETED,5,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",2,6,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,5,LessonStatus.COMPLETED,5,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",0,2,LessonStatus.CONFIRMED,null,T4,[14,15,16,17,18,19,20]),
 
     ...gerarAulasMes("student-5","teacher-5","sub-ing",5,7,LessonStatus.COMPLETED,5,T5),
     ...gerarAulasMes("student-5","teacher-5","sub-ing",4,7,LessonStatus.COMPLETED,5,T5),
@@ -375,16 +401,16 @@ async function main() {
     ...gerarAulasMes("student-5","teacher-5","sub-ing",1,6,LessonStatus.COMPLETED,5,T5),
     ...gerarAulasMes("student-5","teacher-5","sub-ing",0,2,LessonStatus.SCHEDULED,null,T5),
 
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",4,4,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",3,4,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-mat",2,4,LessonStatus.COMPLETED,3,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",1,3,LessonStatus.COMPLETED,4,T6),
-    ...gerarAulasMes("student-6","teacher-6","sub-fis",0,1,LessonStatus.SCHEDULED,null,T6),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",4,4,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",3,4,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-mat",2,4,LessonStatus.COMPLETED,3,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",1,3,LessonStatus.COMPLETED,4,T6,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-6","teacher-6","sub-fis",0,1,LessonStatus.SCHEDULED,null,T6,[14,15,16,17,18,19,20]),
 
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",3,4,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",2,4,LessonStatus.COMPLETED,3,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",1,3,LessonStatus.COMPLETED,4,T4),
-    ...gerarAulasMes("student-7","teacher-4","sub-mat",0,1,LessonStatus.SCHEDULED,null,T4),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",3,4,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",2,4,LessonStatus.COMPLETED,3,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",1,3,LessonStatus.COMPLETED,4,T4,[14,15,16,17,18,19,20]),
+    ...gerarAulasMes("student-7","teacher-4","sub-mat",0,1,LessonStatus.SCHEDULED,null,T4,[14,15,16,17,18,19,20]),
 
     // Amanda (irmã do Bruno — mesmo guardião guardian-7)
     ...gerarAulasMes("student-8","teacher-3","sub-bio",5,5,LessonStatus.COMPLETED,5,T3),
@@ -505,22 +531,22 @@ async function main() {
     data: [
       {
         studentId: "student-7",  teacherId: "teacher-4", subjectId: "sub-mat",
-        modality: LessonModality.PRESENCIAL, preferredAt: addHours(now, 26), status: RequestStatus.PENDING,
+        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(1, 15), status: RequestStatus.PENDING,
         reason: "Preciso de reforço urgente para prova de sexta",
       },
       {
         studentId: "student-9",  teacherId: "teacher-1", subjectId: "sub-fis",
-        modality: LessonModality.ONLINE, preferredAt: addHours(now, 27), status: RequestStatus.PENDING,
+        modality: LessonModality.ONLINE, preferredAt: futureAt(1, 15, 30), status: RequestStatus.PENDING,
         reason: "Prefiro online hoje",
       },
       {
         studentId: "student-11", teacherId: "teacher-3", subjectId: "sub-qui",
-        modality: LessonModality.ONLINE, preferredAt: addHours(now, 50), status: RequestStatus.PENDING,
+        modality: LessonModality.ONLINE, preferredAt: futureAt(2, 9), status: RequestStatus.PENDING,
         reason: "Dificuldade com reações químicas",
       },
       {
         studentId: "student-12", teacherId: "teacher-2", subjectId: "sub-his",
-        modality: LessonModality.ONLINE, preferredAt: addHours(now, 72), status: RequestStatus.PENDING,
+        modality: LessonModality.ONLINE, preferredAt: futureAt(3, 11), status: RequestStatus.PENDING,
         reason: "Revisão para ENEM",
       },
     ],
@@ -575,7 +601,7 @@ async function main() {
   await prisma.lessonRequest.create({
     data: {
       studentId: "student-5", teacherId: "teacher-1", subjectId: "sub-fis",
-      modality: LessonModality.PRESENCIAL, preferredAt: addHours(now, 96), status: RequestStatus.PENDING,
+      modality: LessonModality.PRESENCIAL, preferredAt: futureAt(4, 17), status: RequestStatus.PENDING,
       reason: "Quero fazer aula em grupo com colegas",
       isGroupRequest: true,
       groupNote: "Quero aula com alguém revisando cinemática",
@@ -595,6 +621,155 @@ async function main() {
     ],
   })
   console.log("✅ Notificações")
+
+  // ─── Aulas confirmadas para HOJE ─────────────────────────────────────────
+  const aulasDeHoje = [
+    { studentId: "student-2",  teacherId: "teacher-2", subjectId: "sub-por",
+      scheduledAt: todayAt(9),      modality: LessonModality.ONLINE,     teacherOnsite: false },
+    { studentId: "student-4",  teacherId: "teacher-4", subjectId: "sub-mat",
+      scheduledAt: todayAt(14, 30), modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
+    { studentId: "student-5",  teacherId: "teacher-1", subjectId: "sub-fis",
+      scheduledAt: todayAt(14),     modality: LessonModality.PRESENCIAL,  teacherOnsite: true  },
+    { studentId: "student-10", teacherId: "teacher-5", subjectId: "sub-ing",
+      scheduledAt: todayAt(16),     modality: LessonModality.ONLINE,     teacherOnsite: false },
+  ]
+  for (const a of aulasDeHoje) {
+    const { studentId, ...lessonData } = a
+    await prisma.lesson.create({
+      data: { ...lessonData, status: LessonStatus.CONFIRMED, participants: { create: { studentId } } },
+    })
+  }
+  console.log(`✅ ${aulasDeHoje.length} aulas confirmadas para hoje`)
+
+  // ─── Solicitações adicionais ──────────────────────────────────────────────
+  await prisma.lessonRequest.createMany({
+    data: [
+      {
+        studentId: "student-3", teacherId: "teacher-3", subjectId: "sub-qui",
+        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(1, 14),
+        status: RequestStatus.PENDING, reason: "Prova de Química na semana que vem",
+      },
+      {
+        studentId: "student-6", teacherId: "teacher-6", subjectId: "sub-fis",
+        modality: LessonModality.ONLINE, preferredAt: futureAt(2, 14, 30),
+        status: RequestStatus.PENDING, reason: null,
+      },
+      {
+        studentId: "student-1", teacherId: "teacher-1", subjectId: "sub-mat",
+        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(3, 16),
+        status: RequestStatus.PENDING, reason: "Dificuldade com equações do 2º grau",
+      },
+      {
+        studentId: "student-8", teacherId: "teacher-3", subjectId: "sub-bio",
+        modality: LessonModality.PRESENCIAL, preferredAt: futureAt(4, 9, 30),
+        status: RequestStatus.PENDING, reason: null,
+      },
+    ],
+  })
+  console.log("✅ 4 solicitações adicionais pendentes")
+
+  // ─── Demo de conflito: Bruno solicita Ana às 14h30, mas ela já tem aula às 14h ──
+  await prisma.lessonRequest.create({
+    data: {
+      studentId: "student-7",
+      teacherId: "teacher-1",
+      subjectId: "sub-mat",
+      modality:  LessonModality.PRESENCIAL,
+      preferredAt: todayAt(14, 30),
+      status:    RequestStatus.PENDING,
+      reason:    "Tenho prova amanhã, preciso de ajuda com geometria",
+    },
+  })
+  console.log("✅ 1 solicitação com conflito (Bruno → Ana às 14h30, Pedro já confirmado às 14h)")
+
+  // ─── Notificações extras para o colaborador ───────────────────────────────
+  await prisma.notification.createMany({
+    data: [
+      {
+        userId: "user-colab1", type: "LESSON_REQUEST", read: false,
+        title: "Novo pedido — Gabriel Souza",
+        message: "Gabriel solicitou aula de Química com Fernanda para amanhã (presencial).",
+      },
+      {
+        userId: "user-colab1", type: "LESSON_REQUEST", read: false,
+        title: "Novo pedido — Lucas Alves",
+        message: "Lucas quer aula de Matemática com Ana depois de amanhã.",
+      },
+      {
+        userId: "user-colab1", type: "PAYMENT_OVERDUE", read: false,
+        title: "Cobrança urgente — Thiago Barbosa",
+        message: "Pacote de Thiago está há 41 dias sem pagamento (R$ 900).",
+      },
+      {
+        userId: "user-colab1", type: "PAYMENT_OVERDUE", read: false,
+        title: "Cobrança urgente — Vinícius Rocha",
+        message: "Pacote de Vinícius está há 41 dias sem pagamento (R$ 900).",
+      },
+      {
+        userId: "user-colab1", type: "LESSON_CONFIRMED", read: true,
+        title: "Agenda do dia",
+        message: "4 aulas confirmadas para hoje: Carlos (9h), Marcos (10h30), Ana (14h), Patrícia (16h).",
+      },
+    ],
+  })
+  console.log("✅ 5 notificações extras para colaborador")
+
+  // ─── Aulas Faltadas (MISSED) — para heatmap ter pontos vermelhos ────────────
+  const aulasFaltadas = [
+    ...gerarAulasMes("student-1","teacher-1","sub-mat",2,2,LessonStatus.MISSED,null,T1),
+    ...gerarAulasMes("student-4","teacher-4","sub-mat",1,1,LessonStatus.MISSED,null,T4,[14,15,16,17]),
+    ...gerarAulasMes("student-9","teacher-1","sub-fis",1,2,LessonStatus.MISSED,null,T1),
+    ...gerarAulasMes("student-10","teacher-5","sub-ing",0,1,LessonStatus.MISSED,null,T5),
+  ]
+  for (const aula of aulasFaltadas) {
+    const { studentId, ...lessonData } = aula
+    await prisma.lesson.create({
+      data: { ...lessonData, participants: { create: { studentId } } },
+    })
+  }
+  console.log(`✅ ${aulasFaltadas.length} aulas faltadas (MISSED)`)
+
+  // ─── Notas dos Alunos (StudentNote) ──────────────────────────────────────
+  await prisma.studentNote.createMany({
+    data: [
+      // student-4 (Maria Clara) — 2 notas
+      {
+        studentId: "student-4", authorId: "user-prof1",
+        content: "Maria Clara está evoluindo bem em trigonometria, mas ainda tem dúvidas em logaritmos. Próxima aula focar em exercícios do ENEM.",
+        createdAt: subMonths(now, 0),
+      },
+      {
+        studentId: "student-4", authorId: "user-admin",
+        content: "Mãe pediu para evitar aulas às sextas-feiras. Preferência por horários à tarde.",
+        createdAt: subMonths(now, 1),
+      },
+
+      // student-5 (Pedro) — 2 notas
+      {
+        studentId: "student-5", authorId: "user-prof5",
+        content: "Pedro tem fluência boa no inglês oral mas precisa melhorar writing acadêmico. Recomendo mais exercícios de essay.",
+        createdAt: subMonths(now, 0),
+      },
+      {
+        studentId: "student-5", authorId: "user-colab1",
+        content: "Pedro pediu para encaixar aula extra antes do vestibular. Verificar disponibilidade da Patricia.",
+        createdAt: subMonths(now, 0),
+      },
+
+      // student-10 (Camila) — 2 notas
+      {
+        studentId: "student-10", authorId: "user-prof5",
+        content: "Camila está confiante em funções, mas tem dúvidas em vocabulário técnico de inglês para área de saúde. Próxima aula focar em medical English.",
+        createdAt: addDays(now, -7),
+      },
+      {
+        studentId: "student-10", authorId: "user-admin",
+        content: "Responsável pediu relatório mensal de evolução. Configurar envio automático no dia 25.",
+        createdAt: subMonths(now, 1),
+      },
+    ],
+  })
+  console.log("✅ 6 notas de alunos (StudentNote)")
 
   // ─── Resumo ────────────────────────────────────────────────────────────────
   const totalAulasRealizadas = todasAulas.filter((a) => a.status === LessonStatus.COMPLETED).length

@@ -10,7 +10,7 @@ import { Textarea }      from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertCircle, GraduationCap, BookOpen, Users,
-  Briefcase, ShieldCheck, User, School, UserPlus, Link2, UserX,
+  Briefcase, ShieldCheck, User, School, UserPlus, Link2, UserX, Search,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { Role, TeacherMode } from "@prisma/client"
@@ -104,6 +104,7 @@ interface UserFormProps {
     guardianId?: string; relationship?: string
   }
   guardians?: { id: string; name: string }[]
+  students?:  { id: string; name: string; grade: string; linked?: boolean }[]
   isEdit?: boolean
 }
 
@@ -111,7 +112,7 @@ interface UserFormProps {
 
 export function UserForm({
   action, error, canCreateAdmin = true,
-  defaultValues, guardians = [], isEdit,
+  defaultValues, guardians = [], students = [], isEdit,
 }: UserFormProps) {
   const ROLES = canCreateAdmin ? ALL_ROLES : ALL_ROLES.filter((r) => r.value !== "ADMIN")
 
@@ -120,6 +121,10 @@ export function UserForm({
   const [teachingMode, setTeachingMode] = useState<string>(defaultValues?.teachingMode ?? "HYBRID")
   const [guardianId,   setGuardianId]   = useState<string>(defaultValues?.guardianId ?? "")
   const [guardianMode, setGuardianMode] = useState<GuardianMode>("new")
+  const [studentSearch,       setStudentSearch]       = useState("")
+  const [selectedStudentIds,  setSelectedStudentIds]  = useState<Set<string>>(
+    new Set(students.filter((s) => s.linked).map((s) => s.id))
+  )
 
   const [hourlyRateDisplay, setHourlyRateDisplay] = useState(
     defaultValues?.hourlyRate != null ? String(defaultValues.hourlyRate).replace(".", ",") : ""
@@ -374,7 +379,11 @@ export function UserForm({
                     onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecionar responsável existente" />
+                      <SelectValue>
+                        {guardianId
+                          ? (guardians.find((g) => g.id === guardianId)?.name ?? "Responsável selecionado")
+                          : "Selecionar…"}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Selecionar…</SelectItem>
@@ -413,7 +422,11 @@ export function UserForm({
                 onValueChange={(v) => setGuardianId(v === "__none__" ? "" : (v ?? ""))}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecionar responsável (opcional)" />
+                  <SelectValue>
+                    {guardianId
+                      ? (guardians.find((g) => g.id === guardianId)?.name ?? "Responsável selecionado")
+                      : "Nenhum"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Nenhum</SelectItem>
@@ -505,13 +518,81 @@ export function UserForm({
             title="Dados do Responsável"
             description="Parentesco com o(s) aluno(s) que representa"
           />
-          <div className="space-y-1.5">
-            <Label htmlFor="relationship">Parentesco / Relação</Label>
-            <Input
-              id="relationship" name="relationship"
-              defaultValue={defaultValues?.relationship ?? ""}
-              placeholder="Ex: Mãe, Pai, Avó, Próprio…"
-            />
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="relationship">Parentesco / Relação</Label>
+              <Input
+                id="relationship" name="relationship"
+                defaultValue={defaultValues?.relationship ?? ""}
+                placeholder="Ex: Mãe, Pai, Avó, Próprio…"
+              />
+            </div>
+
+            {/* Vinculação de alunos */}
+            {students.length > 0 && (() => {
+              const filtered = students.filter((s) =>
+                s.name.toLowerCase().includes(studentSearch.toLowerCase())
+              )
+              return (
+                <div className="space-y-2">
+                  <Label>Vincular alunos</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Selecione quais alunos este responsável representa
+                  </p>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                    <Input
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                      placeholder="Buscar aluno..."
+                      className="pl-8 h-9 text-sm"
+                    />
+                  </div>
+                  <div className="max-h-52 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                    {filtered.length === 0 ? (
+                      <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                        Nenhum aluno encontrado
+                      </p>
+                    ) : (
+                      filtered.map((student) => {
+                        const checked = selectedStudentIds.has(student.id)
+                        return (
+                          <label
+                            key={student.id}
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors select-none",
+                              checked ? "bg-[#FB8500]/5" : "hover:bg-muted/40",
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              name="studentIds"
+                              value={student.id}
+                              checked={checked}
+                              onChange={(e) => {
+                                const next = new Set(selectedStudentIds)
+                                e.target.checked ? next.add(student.id) : next.delete(student.id)
+                                setSelectedStudentIds(next)
+                              }}
+                              className="accent-[#FB8500] w-4 h-4 shrink-0"
+                            />
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium leading-tight truncate">{student.name}</p>
+                              <p className="text-xs text-muted-foreground">{student.grade}</p>
+                            </div>
+                          </label>
+                        )
+                      })
+                    )}
+                  </div>
+                  {selectedStudentIds.size > 0 && (
+                    <p className="text-xs text-[#FB8500] font-medium">
+                      {selectedStudentIds.size} aluno{selectedStudentIds.size !== 1 ? "s" : ""} selecionado{selectedStudentIds.size !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         </Section>
       )}

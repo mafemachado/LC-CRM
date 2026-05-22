@@ -38,7 +38,7 @@ const TAG_STYLE: Record<string, { bg: string; color: string }> = {
   success: { bg: "var(--success-soft)", color: "var(--success)" },
   warn:    { bg: "var(--warn-soft)",    color: "var(--warn)"    },
   danger:  { bg: "var(--danger-soft)",  color: "var(--danger)"  },
-  muted:   { bg: "var(--muted-soft)",   color: "var(--muted)"   },
+  muted:   { bg: "var(--muted-soft)",   color: "var(--subtle)"   },
 }
 
 const TIPO_STYLE: Record<string, { bg: string; color: string }> = {
@@ -72,13 +72,13 @@ export function MeusAlunos({ alunos, licoes, totalAlunos }: Props) {
               className="inline-flex items-center gap-1.5 rounded-[5px] px-3 py-[5px] text-[12px] font-medium transition-colors"
               style={{
                 background: tab === t ? "var(--card)" : "transparent",
-                color:      tab === t ? "var(--text)"  : "var(--muted)",
+                color:      tab === t ? "var(--text)"  : "var(--subtle)",
                 fontWeight: tab === t ? 600 : 400,
                 boxShadow:  tab === t ? "0 1px 2px rgba(0,0,0,0.05)" : "none",
               }}
             >
               {t === "alunos" ? "Meus alunos" : "Lições & materiais"}
-              <span className="font-mono text-[10px]" style={{ color: "var(--muted)" }}>
+              <span className="font-mono text-[10px]" style={{ color: "var(--subtle)" }}>
                 {t === "alunos" ? totalAlunos : licoes.length}
               </span>
             </button>

@@ -88,11 +88,12 @@ model User {
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  student       Student?
-  guardian      Guardian?
-  teacher       Teacher?
-  notifications Notification[]
-  activityLogs  ActivityLog[]
+  student        Student?
+  guardian       Guardian?
+  teacher        Teacher?
+  notifications  Notification[]
+  activityLogs   ActivityLog[]
+  authoredNotes  StudentNote[]
 
   @@map("users")
 }
@@ -110,11 +111,14 @@ model Student {
   guardianId     String?
   guardian   Guardian? @relation(fields: [guardianId], references: [id])
   notes      String?
+  tags       String[]
+  createdAt  DateTime  @default(now())
 
   packages       LessonPackage[]
   participations LessonParticipant[]
   requests       LessonRequest[]
   payments       Payment[]
+  studentNotes   StudentNote[]
 
   @@map("students")
 }
@@ -128,6 +132,19 @@ model Guardian {
   students Student[]
 
   @@map("guardians")
+}
+
+model StudentNote {
+  id        String   @id @default(cuid())
+  studentId String
+  student   Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+
+  @@index([studentId])
+  @@map("student_notes")
 }
 
 model Teacher {

@@ -1,158 +1,654 @@
 import { prisma }        from "@/lib/prisma"
 import { notFound }      from "next/navigation"
-import { PageHeader }    from "@/components/shared/page-header"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge }         from "@/components/ui/badge"
+import Link             from "next/link"
+import { format, formatDistanceToNow, subDays, differenceInMonths } from "date-fns"
+import { ptBR }         from "date-fns/locale"
 import { buttonVariants } from "@/components/ui/button"
+import { Badge }         from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   GraduationCap, UserRound, Phone, Mail, CalendarDays,
-  BookOpen, MessageCircle, AlertCircle, School, FileText,
-  CreditCard, Clock,
+  BookOpen, MessageCircle, School,
+  CreditCard, ChevronLeft, ChevronRight, Star,
+  Tag, FileText, Plus, Check,
 } from "lucide-react"
-import { format, differenceInYears } from "date-fns"
-import { ptBR } from "date-fns/locale"
+import { LessonHeatmap, type HeatmapEntry }  from "./_components/lesson-heatmap"
+import { ScheduleLessonDialog }              from "./_components/schedule-lesson-dialog"
+import { PackageDialog }                     from "./_components/package-dialog"
 
-function brl(v: number) {
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function brl(v: number | string) {
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
 
-const PAYMENT_CFG = {
-  PENDING: { label: "Pendente",  cls: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-  PAID:    { label: "Pago",      cls: "bg-green-100  text-green-700  border-green-200"  },
-  OVERDUE: { label: "Vencido",   cls: "bg-red-100    text-red-700    border-red-200"    },
+function initials(name: string) {
+  return name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()
 }
 
-const LESSON_STATUS_CFG = {
-  SCHEDULED:  { label: "Agendada",   cls: "bg-blue-100   text-blue-700   border-blue-200"   },
-  CONFIRMED:  { label: "Confirmada", cls: "bg-green-100  text-green-700  border-green-200"  },
-  COMPLETED:  { label: "Concluída",  cls: "bg-gray-100   text-gray-700   border-gray-200"   },
-  CANCELLED:  { label: "Cancelada",  cls: "bg-red-100    text-red-700    border-red-200"    },
+function avatarColor(name: string) {
+  const colors = [
+    "bg-orange-500","bg-blue-500","bg-emerald-500","bg-violet-500",
+    "bg-rose-500","bg-amber-500","bg-cyan-500","bg-indigo-500",
+  ]
+  let hash = 0
+  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff
+  return colors[hash % colors.length]
+}
+
+function StarRating({ rating }: { rating: number | null }) {
+  if (!rating) return <span className="text-xs text-muted-foreground">—</span>
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }, (_, i) => (
+        <Star
+          key={i}
+          className={`w-3 h-3 ${i < rating ? "fill-amber-400 text-amber-400" : "text-muted-foreground/30"}`}
+        />
+      ))}
+    </div>
+  )
+}
+
+const LESSON_STATUS = {
+  SCHEDULED:  { label: "Agendada",   cls: "bg-amber-100 text-amber-700 border-amber-200"    },
+  CONFIRMED:  { label: "Confirmada", cls: "bg-[#219EBC]/10 text-[#219EBC] border-[#219EBC]/30" },
+  COMPLETED:  { label: "Realizada",  cls: "bg-slate-100 text-slate-600 border-slate-200"    },
+  CANCELLED:  { label: "Cancelada",  cls: "bg-red-100 text-red-600 border-red-200"          },
   MISSED:     { label: "Faltou",     cls: "bg-orange-100 text-orange-700 border-orange-200" },
-}
+} as const
+
+const PAYMENT_STATUS = {
+  PAID:    { label: "Paga",      cls: "bg-green-100 text-green-700"  },
+  PENDING: { label: "Pendente",  cls: "bg-yellow-100 text-yellow-700" },
+  OVERDUE: { label: "Vencida",   cls: "bg-red-100 text-red-700"      },
+} as const
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ tab?: string }>
 }
 
-export default async function StudentDetailPage({ params }: Props) {
-  const { id } = await params
+export default async function StudentDetailPage({ params, searchParams }: Props) {
+  const { id }  = await params
+  const { tab } = await searchParams
 
-  const [student, studentLessons] = await Promise.all([
+  // Step 1 — lightweight fetch for cursor-based prev/next
+  const base = await prisma.student.findUnique({ where: { id }, select: { name: true } })
+  if (!base) notFound()
+
+  // Step 2 — all queries in parallel
+  const [
+    student,
+    totalDone,
+    totalMissed,
+    totalInvestedAgg,
+    heatmapLessons,
+    recentLessons,
+    prevStudent,
+    nextStudent,
+    totalStudents,
+    teachersRaw,
+  ] = await Promise.all([
     prisma.student.findUnique({
-      where:   { id },
+      where: { id },
       include: {
         user: true,
         guardian: { include: { user: true } },
-        packages: { orderBy: { purchaseDate: "desc" }, take: 5 },
-        payments:  { orderBy: { dueDate: "desc" },    take: 5 },
+        packages:     { orderBy: { purchaseDate: "asc" } },
+        payments:     { orderBy: { dueDate: "desc" }, take: 10 },
+        studentNotes: { include: { author: true }, orderBy: { createdAt: "desc" }, take: 5 },
       },
     }),
+    prisma.lesson.count({
+      where: { participants: { some: { studentId: id } }, status: "COMPLETED" },
+    }),
+    prisma.lesson.count({
+      where: { participants: { some: { studentId: id } }, status: "MISSED" },
+    }),
+    prisma.payment.aggregate({
+      where: { studentId: id, status: "PAID" },
+      _sum: { amount: true },
+    }),
     prisma.lesson.findMany({
-      where:   { participants: { some: { studentId: id } } },
-      include: { subject: true, teacher: { include: { user: true } } },
+      where: {
+        participants: { some: { studentId: id } },
+        scheduledAt: { gte: subDays(new Date(), 91) },
+      },
+      select: { scheduledAt: true, status: true },
+      orderBy: { scheduledAt: "asc" },
+    }),
+    prisma.lesson.findMany({
+      where: { participants: { some: { studentId: id } } },
+      select: {
+        id: true, scheduledAt: true, status: true,
+        topicsCovered: true, studentRating: true,
+        subject: { select: { name: true } },
+        teacher: { select: { id: true, user: { select: { name: true } } } },
+      },
       orderBy: { scheduledAt: "desc" },
-      take:    10,
+      take: 20,
+    }),
+    prisma.student.findFirst({
+      where: { name: { lt: base.name } },
+      orderBy: { name: "desc" },
+      select: { id: true },
+    }),
+    prisma.student.findFirst({
+      where: { name: { gt: base.name } },
+      orderBy: { name: "asc" },
+      select: { id: true },
+    }),
+    prisma.student.count(),
+    prisma.teacher.findMany({
+      where:   { user: { active: true } },
+      select: {
+        id: true,
+        user:     { select: { name: true } },
+        subjects: { select: { subject: { select: { id: true, name: true } } } },
+      },
+      orderBy: { user: { name: "asc" } },
     }),
   ])
 
   if (!student) notFound()
 
-  const phone        = student.user?.phone?.replace(/\D/g, "")
+  // ─── Computed values ─────────────────────────────────────────────────────
+
+  const activePkg   = student.packages.find(p => p.status === "ACTIVE") ?? null
+  const pkgIndex    = student.packages.findIndex(p => p.status === "ACTIVE")
+  const packageCode = pkgIndex >= 0 ? `PKT-${String(pkgIndex + 1).padStart(3, "0")}` : null
+
+  const frequency   = Math.round(totalDone / Math.max(1, totalDone + totalMissed) * 100)
+  const totalInvested = Number(totalInvestedAgg._sum.amount ?? 0)
+  const createdAt   = student.createdAt
+  const monthsActive = Math.max(1, differenceInMonths(new Date(), createdAt))
+  const ltvProjected  = Math.round(totalInvested / monthsActive * 12)
+
+  const now = new Date()
+  const nextLesson = [...recentLessons]
+    .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
+    .find(l => l.scheduledAt > now && (l.status === "SCHEDULED" || l.status === "CONFIRMED"))
+
+  // Teachers for ScheduleLessonDialog
+  const teachersForDialog = teachersRaw.map(t => ({
+    id:       t.id,
+    name:     t.user.name,
+    subjects: t.subjects.map(s => ({ id: s.subject.id, name: s.subject.name })),
+  }))
+
+  // Teachers map from recent 20 lessons
+  const teachersMap = new Map<string, { name: string; count: number; lastAt: Date }>()
+  for (const l of recentLessons) {
+    const t = l.teacher
+    if (!t) continue
+    const existing = teachersMap.get(t.id)
+    if (existing) {
+      existing.count++
+      if (l.scheduledAt > existing.lastAt) existing.lastAt = l.scheduledAt
+    } else {
+      teachersMap.set(t.id, { name: t.user.name, count: 1, lastAt: l.scheduledAt })
+    }
+  }
+  const teachersList = [...teachersMap.values()].sort((a, b) => b.count - a.count)
+
+  // Heatmap entries
+  const heatmapEntries: HeatmapEntry[] = heatmapLessons.map(l => ({
+    date:   l.scheduledAt.toISOString(),
+    status: l.status,
+  }))
+
+  // Filtered lessons for table
+  const filteredLessons = tab === "realizadas"
+    ? recentLessons.filter(l => l.status === "COMPLETED")
+    : tab === "faltas"
+    ? recentLessons.filter(l => l.status === "MISSED")
+    : recentLessons
+
+  // Contact info
   const guardian     = student.guardian
-  const guardianPhone = guardian?.user.phone?.replace(/\D/g, "")
-  const activePkg    = student.packages.find((p) => p.status === "ACTIVE")
-  const remaining    = activePkg?.remainingLessons ?? 0
-  const upcomingLessons = studentLessons.filter(
-    (l) => l.scheduledAt >= new Date() && ["SCHEDULED", "CONFIRMED"].includes(l.status)
-  )
-  const pastLessons = studentLessons.filter(
-    (l) => l.scheduledAt < new Date() || ["COMPLETED", "CANCELLED", "MISSED"].includes(l.status)
-  )
+  const guardianUser = guardian?.user ?? null
+  const guardianPhone = guardianUser?.phone?.replace(/\D/g, "") ?? null
+  const studentPhone  = student.user?.phone?.replace(/\D/g, "") ?? null
+  const whatsappPhone = guardianPhone ?? studentPhone
+
+  // Student nav position (approximate from cursor — just counts from a count query)
+  // We show ← / → without exact index to avoid the full-table-scan
+  const BASE_PATH = "/colaborador/alunos"
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={student.name ?? "Aluno"}
-        description={`${student.grade}${student.school ? ` · ${student.school}` : ""}`}
-        backHref="/colaborador/alunos"
-      >
-        <div className="flex gap-2">
-          {phone && (
-            <a
-              href={`https://wa.me/55${phone}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" }) +
-                " text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 gap-1.5"}
+    <div className="space-y-4">
+
+      {/* ── Breadcrumb + navegação ─────────────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <nav className="flex items-center gap-1 text-sm text-muted-foreground">
+          <Link href={BASE_PATH} className="hover:text-foreground transition-colors">Alunos</Link>
+          <span className="mx-1">/</span>
+          <span className="text-foreground font-medium">{student.name}</span>
+        </nav>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground shrink-0">
+          {prevStudent && (
+            <Link
+              href={`${BASE_PATH}/${prevStudent.id}`}
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " h-7 w-7 p-0"}
+              title="Aluno anterior"
             >
-              <MessageCircle className="w-4 h-4" />
-              WhatsApp Aluno
-            </a>
+              <ChevronLeft className="w-4 h-4" />
+            </Link>
           )}
-          {guardianPhone && (
-            <a
-              href={`https://wa.me/55${guardianPhone}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={buttonVariants({ variant: "outline", size: "sm" }) +
-                " text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 gap-1.5"}
+          <span className="text-xs tabular-nums">{totalStudents} alunos</span>
+          {nextStudent && (
+            <Link
+              href={`${BASE_PATH}/${nextStudent.id}`}
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " h-7 w-7 p-0"}
+              title="Próximo aluno"
             >
-              <MessageCircle className="w-4 h-4" />
-              WhatsApp Resp.
-            </a>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
           )}
         </div>
-      </PageHeader>
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <div className="flex flex-col sm:flex-row gap-4">
+          {/* Avatar */}
+          <div className={`w-14 h-14 shrink-0 rounded-2xl flex items-center justify-center text-white font-bold text-lg ${avatarColor(student.name)}`}>
+            {initials(student.name)}
+          </div>
 
-        {/* Coluna esquerda — dados + pacote */}
-        <div className="space-y-6 lg:col-span-1">
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h1 className="font-sub text-xl font-bold">{student.name}</h1>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${activePkg ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
+                {activePkg ? "Ativa" : "Sem pacote"}
+              </span>
+              {activePkg && activePkg.remainingLessons <= 4 && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+                  {activePkg.remainingLessons <= 1 ? "Atenção" : "Renovar em breve"}
+                </span>
+              )}
+            </div>
 
-          {/* Dados do aluno */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                {student.grade}
+              </span>
+              {student.school && (
+                <span className="flex items-center gap-1.5">
+                  <School className="w-3.5 h-3.5 shrink-0" />
+                  {student.school}
+                </span>
+              )}
+              {(student.user?.email || guardianUser?.email) && (
+                <span className="flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 shrink-0" />
+                  {student.user?.email ?? guardianUser?.email}
+                </span>
+              )}
+              {(student.user?.phone || guardianUser?.phone) && (
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 shrink-0" />
+                  {student.user?.phone ?? guardianUser?.phone}
+                </span>
+              )}
+              <span className="flex items-center gap-1.5 text-xs">
+                <CalendarDays className="w-3.5 h-3.5 shrink-0" />
+                Aluno desde {format(createdAt, "MMM/yyyy", { locale: ptBR })}
+              </span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 shrink-0 items-start">
+            <ScheduleLessonDialog
+              studentId={id}
+              studentName={student.name}
+              teachers={teachersForDialog}
+            />
+            {whatsappPhone && (
+              <a
+                href={`https://wa.me/55${whatsappPhone}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5 text-[#219EBC] border-[#219EBC]/30 hover:bg-[#219EBC]/10"}
+              >
+                <MessageCircle className="w-4 h-4" />
+                {guardianPhone ? "Resp." : "Aluno"}
+              </a>
+            )}
+            <button
+              disabled
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5 opacity-50 cursor-not-allowed"}
+              title="Em breve"
+            >
+              <CreditCard className="w-4 h-4" />
+              Fatura
+            </button>
+          </div>
+        </div>
+
+        {/* Tags */}
+        {student.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-border/50">
+            <Tag className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+            {student.tags.map(tag => (
+              <Badge key={tag} variant="secondary" className="text-xs h-5 px-1.5">{tag}</Badge>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── Stats row ──────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {/* Pacote atual */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Pacote atual</p>
+          {activePkg ? (
+            <>
+              <p className="text-lg font-bold">
+                <span className={activePkg.remainingLessons <= 2 ? "text-red-600" : "text-primary"}>
+                  {activePkg.remainingLessons}
+                </span>
+                <span className="text-muted-foreground font-normal text-sm"> / {activePkg.totalLessons}</span>
+              </p>
+              <p className="text-[11px] text-muted-foreground">{activePkg.remainingLessons} aulas restantes</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sem pacote</p>
+          )}
+        </div>
+
+        {/* Total de aulas */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Total de aulas</p>
+          <p className="text-lg font-bold">{totalDone + totalMissed}</p>
+          <p className="text-[11px] text-muted-foreground">{totalDone} realizadas</p>
+        </div>
+
+        {/* Frequência */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Frequência</p>
+          <p className={`text-lg font-bold ${frequency >= 90 ? "text-green-600" : frequency >= 70 ? "text-yellow-600" : "text-red-600"}`}>
+            {frequency}%
+          </p>
+          <p className="text-[11px] text-muted-foreground">{totalMissed} falta{totalMissed !== 1 ? "s" : ""}</p>
+        </div>
+
+        {/* Total investido */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Total investido</p>
+          <p className="text-lg font-bold">{brl(totalInvested)}</p>
+          <p className="text-[11px] text-muted-foreground">{student.payments.filter(p => p.status === "PAID").length} pacotes</p>
+        </div>
+
+        {/* Próxima aula */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">Próxima aula</p>
+          {nextLesson ? (
+            <>
+              <p className="text-sm font-semibold leading-tight">
+                {format(nextLesson.scheduledAt, "dd/MM", { locale: ptBR })}
+                {" · "}
+                {format(nextLesson.scheduledAt, "HH:mm")}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">{nextLesson.subject.name}</p>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">Sem aula</p>
+          )}
+        </div>
+
+        {/* LTV projetado */}
+        <div className="rounded-xl border border-border bg-card p-3">
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wide mb-1">LTV projetado</p>
+          <p className="text-lg font-bold">{brl(ltvProjected)}</p>
+          <p className="text-[11px] text-muted-foreground">anualizado</p>
+        </div>
+      </div>
+
+      {/* ── Main grid ──────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+
+        {/* ── Coluna principal (col-span-2) ─────────────────────────────── */}
+        <div className="lg:col-span-2 space-y-4">
+
+          {/* Package timeline */}
+          {!activePkg && (
+            <div className="rounded-xl border border-dashed border-border bg-card/50 px-4 py-6 flex flex-col items-center gap-3 text-center">
+              <BookOpen className="w-8 h-8 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">Nenhum pacote ativo</p>
+              <PackageDialog studentId={id} studentName={student.name} mode="novo" />
+            </div>
+          )}
+
+          {activePkg && (
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-2">
+                  <CardTitle className="font-sub text-sm flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    {packageCode ? `Pacote em curso · #${packageCode}` : "Pacote em curso"}
+                    <Badge className="bg-green-100 text-green-700 border-green-200 hover:bg-green-100 text-xs">
+                      <Check className="w-3 h-3 mr-1" />
+                      Pago
+                    </Badge>
+                  </CardTitle>
+                  <PackageDialog studentId={id} studentName={student.name} mode={activePkg.remainingLessons <= 4 ? "renovar" : "novo"} />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Comprado em {format(activePkg.purchaseDate, "dd 'de' MMMM", { locale: ptBR })}
+                  {" · "}{activePkg.totalLessons} aulas
+                  {activePkg.expiresAt
+                    ? ` · vence ${format(activePkg.expiresAt, "dd/MM/yyyy", { locale: ptBR })}`
+                    : " · sem validade"}
+                </p>
+              </CardHeader>
+              <CardContent>
+                {/* Bubbles */}
+                <div className="flex flex-wrap gap-2">
+                  {Array.from({ length: activePkg.totalLessons }, (_, i) => {
+                    const lessonNum = i + 1
+                    const used = lessonNum <= (activePkg.totalLessons - activePkg.remainingLessons)
+                    const isNext = lessonNum === (activePkg.totalLessons - activePkg.remainingLessons + 1)
+                    return (
+                      <div
+                        key={i}
+                        className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold transition-all
+                          ${used
+                            ? "bg-primary text-white"
+                            : isNext
+                            ? "ring-2 ring-primary text-primary bg-primary/5"
+                            : "border border-border text-muted-foreground bg-muted/20"}`}
+                      >
+                        {String(lessonNum).padStart(2, "0")}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Stats row */}
+                <div className="flex flex-wrap gap-x-6 gap-y-1 mt-3 pt-3 border-t border-border/50 text-xs text-muted-foreground">
+                  <span>Usadas <strong className="text-foreground">{activePkg.totalLessons - activePkg.remainingLessons}</strong></span>
+                  <span>Restantes <strong className={activePkg.remainingLessons <= 2 ? "text-red-600" : "text-foreground"}>{activePkg.remainingLessons}</strong></span>
+                  {activePkg.remainingLessons > 0 && totalDone > 0 && (
+                    <span>
+                      Ritmo <strong className="text-foreground">~{(totalDone / monthsActive).toFixed(1)}/mês</strong>
+                    </span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Lesson history */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-sm flex items-center gap-2">
-                <GraduationCap className="w-4 h-4 text-primary" />
-                Dados do Aluno
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {student.user?.email && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Mail className="w-4 h-4 shrink-0" />
-                  <a href={`mailto:${student.user?.email}`} className="hover:text-foreground transition-colors truncate">
-                    {student.user?.email}
-                  </a>
-                </div>
-              )}
-              {student.user?.phone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Phone className="w-4 h-4 shrink-0" />
-                  <span>{student.user?.phone}</span>
-                </div>
-              )}
-              {student.school && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <School className="w-4 h-4 shrink-0" />
-                  <span>{student.school}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <BookOpen className="w-4 h-4 shrink-0" />
-                <span>{student.grade}</span>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <CardTitle className="font-sub text-sm flex items-center gap-2">
+                  <CalendarDays className="w-4 h-4 text-primary" />
+                  Histórico de Aulas
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {totalDone + totalMissed} no total · {totalDone} realizadas · {totalMissed} falta{totalMissed !== 1 ? "s" : ""}
+                </p>
               </div>
-              {student.notes && (
-                <div className="flex items-start gap-2 text-muted-foreground pt-1 border-t border-border">
-                  <FileText className="w-4 h-4 shrink-0 mt-0.5" />
-                  <p className="text-xs leading-relaxed">{student.notes}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Heatmap */}
+              <div>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  Frequência · últimas 13 semanas
+                </p>
+                <LessonHeatmap entries={heatmapEntries} />
+              </div>
+
+              {/* Filter tabs */}
+              <div className="flex items-center gap-1 border-b border-border pb-3">
+                {(["todas", "realizadas", "faltas"] as const).map(t => (
+                  <Link
+                    key={t}
+                    href={`?tab=${t === "todas" ? "" : t}`}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors capitalize ${
+                      (t === "todas" && !tab) || tab === t
+                        ? "bg-primary text-white"
+                        : "text-muted-foreground hover:bg-accent"
+                    }`}
+                  >
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </Link>
+                ))}
+              </div>
+
+              {/* Table */}
+              {filteredLessons.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-6">Nenhuma aula encontrada</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs text-muted-foreground">
+                        <th className="text-left py-2 pr-3 font-medium">Data & Hora</th>
+                        <th className="text-left py-2 pr-3 font-medium">Matéria</th>
+                        <th className="text-left py-2 pr-3 font-medium hidden sm:table-cell">Professor</th>
+                        <th className="text-left py-2 pr-3 font-medium hidden md:table-cell">Conteúdo</th>
+                        <th className="text-left py-2 pr-3 font-medium">Avaliação</th>
+                        <th className="text-left py-2 font-medium">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/50">
+                      {filteredLessons.map(l => (
+                        <tr key={l.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-2 pr-3 text-xs tabular-nums whitespace-nowrap">
+                            {format(l.scheduledAt, "dd/MM · HH:mm", { locale: ptBR })}
+                          </td>
+                          <td className="py-2 pr-3 text-xs font-medium whitespace-nowrap">{l.subject.name}</td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground hidden sm:table-cell whitespace-nowrap">
+                            {l.teacher?.user.name.split(" ")[0] ?? "—"}
+                          </td>
+                          <td className="py-2 pr-3 text-xs text-muted-foreground hidden md:table-cell max-w-[200px]">
+                            <span className="truncate block" title={l.topicsCovered ?? undefined}>
+                              {l.topicsCovered ?? "—"}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-3">
+                            <StarRating rating={l.studentRating} />
+                          </td>
+                          <td className="py-2">
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${LESSON_STATUS[l.status as keyof typeof LESSON_STATUS]?.cls ?? ""}`}>
+                              {LESSON_STATUS[l.status as keyof typeof LESSON_STATUS]?.label ?? l.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </CardContent>
           </Card>
+        </div>
+
+        {/* ── Coluna lateral (col-span-1) ──────────────────────────────── */}
+        <div className="space-y-4">
+
+          {/* Financeiro */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="font-sub text-sm flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-primary" />
+                Financeiro
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {brl(totalInvested)} totais
+                {activePkg && (
+                  <> · próx. {brl(Number(activePkg.pricePerLesson) * activePkg.remainingLessons)}</>
+                )}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {student.payments.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sem pagamentos</p>
+              ) : (
+                student.payments.map(pay => (
+                  <div key={pay.id} className="flex items-center justify-between gap-2 text-xs">
+                    <div className="min-w-0">
+                      <p className="font-medium">{brl(Number(pay.amount))}</p>
+                      <p className="text-muted-foreground text-[11px]">
+                        {format(pay.dueDate, "dd/MM/yyyy", { locale: ptBR })}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${PAYMENT_STATUS[pay.status].cls}`}>
+                      {PAYMENT_STATUS[pay.status].label}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Professores */}
+          {teachersList.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="font-sub text-sm flex items-center gap-2">
+                  <GraduationCap className="w-4 h-4 text-primary" />
+                  Professores
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {teachersList.length} ativo{teachersList.length !== 1 ? "s" : ""}
+                  {teachersList[0] && <> · {teachersList[0].name.split(" ")[0]} é o principal</>}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {teachersList.map((t, i) => (
+                  <div key={t.name} className="flex items-center gap-2.5">
+                    <div className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center text-white text-[11px] font-bold ${avatarColor(t.name)}`}>
+                      {initials(t.name)}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-xs font-medium truncate">{t.name}</p>
+                        {i === 0 && (
+                          <span className="text-[10px] px-1 py-0 rounded bg-primary/10 text-primary font-semibold shrink-0">principal</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {t.count} aula{t.count !== 1 ? "s" : ""} · última {formatDistanceToNow(t.lastAt, { locale: ptBR, addSuffix: true })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Responsável */}
-          {guardian && (
+          {guardianUser && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="font-sub text-sm flex items-center gap-2">
@@ -160,20 +656,20 @@ export default async function StudentDetailPage({ params }: Props) {
                   Responsável
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <p className="font-medium">{guardian.user.name}</p>
-                {guardian.user.email && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Mail className="w-4 h-4 shrink-0" />
-                    <a href={`mailto:${guardian.user.email}`} className="hover:text-foreground transition-colors truncate">
-                      {guardian.user.email}
+              <CardContent className="space-y-2 text-sm">
+                <p className="font-medium text-sm">{guardianUser.name}</p>
+                {guardianUser.email && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Mail className="w-3.5 h-3.5 shrink-0" />
+                    <a href={`mailto:${guardianUser.email}`} className="hover:text-foreground truncate">
+                      {guardianUser.email}
                     </a>
                   </div>
                 )}
-                {guardian.user.phone && (
-                  <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="w-4 h-4 shrink-0" />
-                    <span>{guardian.user.phone}</span>
+                {guardianUser.phone && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Phone className="w-3.5 h-3.5 shrink-0" />
+                    {guardianUser.phone}
                   </div>
                 )}
                 {guardianPhone && (
@@ -181,165 +677,61 @@ export default async function StudentDetailPage({ params }: Props) {
                     href={`https://wa.me/55${guardianPhone}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={buttonVariants({ variant: "outline", size: "sm" }) +
-                      " w-full justify-center text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 gap-1.5 mt-1"}
+                    className={buttonVariants({ variant: "outline", size: "sm" }) + " w-full justify-center text-[#219EBC] border-[#219EBC]/30 hover:bg-[#219EBC]/10 gap-1.5 mt-1 text-xs h-8"}
                   >
-                    <MessageCircle className="w-4 h-4" />
-                    Abrir WhatsApp
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    WhatsApp
                   </a>
                 )}
               </CardContent>
             </Card>
           )}
 
-          {/* Pacote ativo */}
-          <Card className={remaining <= 2 ? "border-red-200" : ""}>
+          {/* Observações */}
+          <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-sm flex items-center gap-2">
-                <BookOpen className={`w-4 h-4 ${remaining <= 2 ? "text-red-500" : "text-primary"}`} />
-                Pacote de Aulas
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm space-y-2">
-              {activePkg ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Saldo restante</span>
-                    <span className={`font-semibold ${remaining <= 2 ? "text-red-600" : "text-green-600"}`}>
-                      {remaining} aula{remaining !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Total do pacote</span>
-                    <span>{activePkg.totalLessons} aulas</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Valor/aula</span>
-                    <span>{brl(Number(activePkg.pricePerLesson))}</span>
-                  </div>
-                  {activePkg.expiresAt && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Validade</span>
-                      <span>{format(activePkg.expiresAt, "dd/MM/yyyy", { locale: ptBR })}</span>
-                    </div>
-                  )}
-                  {remaining <= 2 && (
-                    <p className="text-xs text-red-600 flex items-center gap-1 pt-1 border-t border-red-100">
-                      <AlertCircle className="w-3 h-3" />
-                      Saldo baixo — renovar pacote
-                    </p>
-                  )}
-                </>
-              ) : (
-                <p className="text-destructive text-xs flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Sem pacote ativo
+              <div className="flex items-center justify-between">
+                <CardTitle className="font-sub text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Observações
+                </CardTitle>
+                <button
+                  disabled
+                  className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 opacity-60 cursor-not-allowed"
+                  title="Em breve"
+                >
+                  <Plus className="w-3 h-3" />
+                  Nova
+                </button>
+              </div>
+              {student.studentNotes.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {student.studentNotes.length} nota{student.studentNotes.length !== 1 ? "s" : ""}
+                  {" · última "}
+                  {formatDistanceToNow(student.studentNotes[0].createdAt, { locale: ptBR, addSuffix: true })}
                 </p>
               )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Coluna direita — aulas + pagamentos */}
-        <div className="space-y-6 lg:col-span-2">
-
-          {/* Próximas aulas */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-sm flex items-center gap-2">
-                <CalendarDays className="w-4 h-4 text-primary" />
-                Próximas Aulas
-                {upcomingLessons.length > 0 && (
-                  <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/10 ml-auto">
-                    {upcomingLessons.length}
-                  </Badge>
-                )}
-              </CardTitle>
             </CardHeader>
-            <CardContent>
-              {upcomingLessons.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhuma aula agendada</p>
+            <CardContent className="space-y-3">
+              {student.studentNotes.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Nenhuma observação ainda</p>
               ) : (
-                <div className="space-y-2">
-                  {upcomingLessons.map((lesson) => (
-                    <div key={lesson.id} className="flex items-center gap-3 p-3 rounded-lg border border-border text-sm">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                        <Clock className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{lesson.subject.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          {lesson.teacher && ` · ${lesson.teacher.user.name}`}
-                        </p>
-                      </div>
-                      <Badge className={`${LESSON_STATUS_CFG[lesson.status].cls} hover:${LESSON_STATUS_CFG[lesson.status].cls} text-xs shrink-0`}>
-                        {LESSON_STATUS_CFG[lesson.status].label}
-                      </Badge>
+                student.studentNotes.map(note => (
+                  <div key={note.id} className="space-y-1 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold">{note.author.name.split(" ")[0]}</span>
+                      <span className="text-muted-foreground text-[11px]">
+                        {format(note.createdAt, "dd MMM", { locale: ptBR })}
+                      </span>
                     </div>
-                  ))}
-                </div>
+                    <p className="text-muted-foreground leading-relaxed">{note.content}</p>
+                  </div>
+                ))
               )}
-            </CardContent>
-          </Card>
-
-          {/* Histórico de aulas */}
-          {pastLessons.length > 0 && (
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="font-sub text-sm flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-primary" />
-                  Histórico de Aulas
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {pastLessons.map((lesson) => (
-                    <div key={lesson.id} className="flex items-center gap-3 p-3 rounded-lg border border-border text-sm">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{lesson.subject.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                          {lesson.teacher && ` · ${lesson.teacher.user.name}`}
-                        </p>
-                      </div>
-                      <Badge className={`${LESSON_STATUS_CFG[lesson.status].cls} hover:${LESSON_STATUS_CFG[lesson.status].cls} text-xs shrink-0`}>
-                        {LESSON_STATUS_CFG[lesson.status].label}
-                      </Badge>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Pagamentos */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-sm flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-primary" />
-                Pagamentos Recentes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {student.payments.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento registrado</p>
-              ) : (
-                <div className="space-y-2">
-                  {student.payments.map((payment) => (
-                    <div key={payment.id} className="flex items-center gap-3 p-3 rounded-lg border border-border text-sm">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium">{brl(Number(payment.amount))}</p>
-                        <p className="text-xs text-muted-foreground">
-                          Venc.: {format(payment.dueDate, "dd/MM/yyyy", { locale: ptBR })}
-                          {payment.paidAt && ` · Pago em ${format(payment.paidAt, "dd/MM/yyyy", { locale: ptBR })}`}
-                        </p>
-                      </div>
-                      <Badge className={`${PAYMENT_CFG[payment.status].cls} hover:${PAYMENT_CFG[payment.status].cls} text-xs shrink-0`}>
-                        {PAYMENT_CFG[payment.status].label}
-                      </Badge>
-                    </div>
-                  ))}
+              {student.notes && (
+                <div className="pt-2 border-t border-border/50">
+                  <p className="text-[11px] font-semibold text-muted-foreground mb-1">Nota interna</p>
+                  <p className="text-xs text-muted-foreground">{student.notes}</p>
                 </div>
               )}
             </CardContent>
