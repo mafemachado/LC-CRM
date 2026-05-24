@@ -268,19 +268,57 @@ export async function deleteManyUsersAction(ids: string[]) {
   const session = await requireAdmin()
   if (!ids.length) return { deleted: 0 }
 
-  // Filtra fora admins e a própria conta
   const targets = await prisma.user.findMany({
     where: { id: { in: ids } },
-    select: { id: true, role: true },
+    select: {
+      id:      true,
+      role:    true,
+      student: { select: { id: true } },
+      teacher: { select: { id: true } },
+    },
   })
 
-  const deletable = targets
-    .filter((u) => u.role !== "ADMIN" && u.id !== session.user.id)
-    .map((u) => u.id)
-
+  const deletable   = targets.filter((u) => u.role !== "ADMIN" && u.id !== session.user.id)
   if (!deletable.length) return { deleted: 0 }
 
-  await prisma.user.deleteMany({ where: { id: { in: deletable } } })
+  const deletableIds = deletable.map((u) => u.id)
+  const studentIds   = deletable.flatMap((u) => u.student ? [u.student.id] : [])
+  const teacherIds   = deletable.flatMap((u) => u.teacher ? [u.teacher.id] : [])
+
+  await prisma.$transaction(async (tx) => {
+    // Aulas dos professores que serão deletados
+    const lessonIds = teacherIds.length
+      ? (await tx.lesson.findMany({ where: { teacherId: { in: teacherIds } }, select: { id: true } })).map((l) => l.id)
+      : []
+
+    // Dependentes de Lesson (sem cascade)
+    if (lessonIds.length) {
+      await tx.homework.deleteMany({ where: { lessonId: { in: lessonIds } } })
+    }
+
+    // Dependentes de Teacher (sem cascade)
+    if (teacherIds.length) {
+      await tx.lessonRequest.deleteMany({ where: { teacherId: { in: teacherIds } } })
+      await tx.material.deleteMany({ where: { teacherId: { in: teacherIds } } }) // cascateia MaterialStudent
+      await tx.lesson.deleteMany({ where: { teacherId: { in: teacherIds } } })   // cascateia LessonParticipant
+      await tx.teacherPayout.deleteMany({ where: { teacherId: { in: teacherIds } } })
+    }
+
+    // Dependentes de Student (sem cascade)
+    if (studentIds.length) {
+      await tx.lessonPackage.deleteMany({ where: { studentId: { in: studentIds } } })
+      await tx.lessonRequest.deleteMany({ where: { studentId: { in: studentIds } } })
+      await tx.payment.deleteMany({ where: { studentId: { in: studentIds } } })
+    }
+
+    // Dependentes de User (sem cascade)
+    await tx.activityLog.deleteMany({ where: { userId: { in: deletableIds } } })
+    await tx.studentNote.deleteMany({ where: { authorId: { in: deletableIds } } })
+
+    // Deleta usuários — cascateia Student, Guardian, Teacher, Notification
+    await tx.user.deleteMany({ where: { id: { in: deletableIds } } })
+  })
+
   revalidatePath("/admin/usuarios")
   return { deleted: deletable.length }
 }
