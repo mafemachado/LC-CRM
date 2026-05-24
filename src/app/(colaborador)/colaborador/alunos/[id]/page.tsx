@@ -12,9 +12,12 @@ import {
   CreditCard, ChevronLeft, ChevronRight, Star,
   Tag, FileText, Plus, Check,
 } from "lucide-react"
-import { LessonHeatmap, type HeatmapEntry }  from "./_components/lesson-heatmap"
-import { ScheduleLessonDialog }              from "./_components/schedule-lesson-dialog"
-import { PackageDialog }                     from "./_components/package-dialog"
+import { LessonHeatmap, type HeatmapEntry }    from "./_components/lesson-heatmap"
+import { ScheduleLessonDialog }               from "./_components/schedule-lesson-dialog"
+import { PackageDialog }                      from "./_components/package-dialog"
+import { EditStudentDialog }                  from "./_components/edit-student-dialog"
+import { RegisterPastLessonDialog }           from "./_components/register-past-lesson-dialog"
+import { AddPaymentDialog }                   from "./_components/add-payment-dialog"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,12 +71,12 @@ const PAYMENT_STATUS = {
 
 interface Props {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ tab?: string }>
+  searchParams: Promise<{ tab?: string; success?: string; aulas?: string; pagamentos?: string }>
 }
 
 export default async function StudentDetailPage({ params, searchParams }: Props) {
   const { id }  = await params
-  const { tab } = await searchParams
+  const { tab, success, aulas, pagamentos } = await searchParams
 
   // Step 1 — lightweight fetch for cursor-based prev/next
   const base = await prisma.student.findUnique({ where: { id }, select: { name: true } })
@@ -172,12 +175,19 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     .sort((a, b) => a.scheduledAt.getTime() - b.scheduledAt.getTime())
     .find(l => l.scheduledAt > now && (l.status === "SCHEDULED" || l.status === "CONFIRMED"))
 
-  // Teachers for ScheduleLessonDialog
+  // Teachers for ScheduleLessonDialog & RegisterPastLessonDialog
   const teachersForDialog = teachersRaw.map(t => ({
     id:       t.id,
     name:     t.user.name,
     subjects: t.subjects.map(s => ({ id: s.subject.id, name: s.subject.name })),
   }))
+
+  // All subjects (flat, deduped) for RegisterPastLessonDialog
+  const subjectsForDialog = Array.from(
+    new Map(
+      teachersRaw.flatMap(t => t.subjects.map(s => [s.subject.id, s.subject]))
+    ).values()
+  ).sort((a, b) => a.name.localeCompare(b.name))
 
   // Teachers map from recent 20 lessons
   const teachersMap = new Map<string, { name: string; count: number; lastAt: Date }>()
@@ -218,8 +228,27 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
   // We show ← / → without exact index to avoid the full-table-scan
   const BASE_PATH = "/colaborador/alunos"
 
+  const isInactive = student.user?.active === false
+
   return (
     <div className="space-y-4">
+
+      {/* ── Banner de digitalização bem-sucedida ────────────────────────────── */}
+      {success === "digitalizado" && (
+        <div className="flex items-start gap-3 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-xl text-sm">
+          <Check className="w-4 h-4 mt-0.5 shrink-0 text-green-600" />
+          <div>
+            <p className="font-semibold">Ficha digitalizada com sucesso!</p>
+            <p className="text-xs text-green-700 mt-0.5">
+              {Number(aulas) > 0 && <>{aulas} aula{Number(aulas) !== 1 ? "s" : ""} importada{Number(aulas) !== 1 ? "s" : ""}</>}
+              {Number(aulas) > 0 && Number(pagamentos) > 0 && " · "}
+              {Number(pagamentos) > 0 && <>{pagamentos} pagamento{Number(pagamentos) !== 1 ? "s" : ""} registrado{Number(pagamentos) !== 1 ? "s" : ""}</>}
+              {Number(aulas) === 0 && Number(pagamentos) === 0 && "Aluno cadastrado no sistema."}
+              {" "}Confira os dados abaixo.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Breadcrumb + navegação ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -263,6 +292,11 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h1 className="font-sub text-xl font-bold">{student.name}</h1>
+              {isInactive && (
+                <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-300">
+                  Ex-aluno
+                </span>
+              )}
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${activePkg ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"}`}>
                 {activePkg ? "Ativa" : "Sem pacote"}
               </span>
@@ -305,6 +339,23 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
 
           {/* Action buttons */}
           <div className="flex flex-wrap gap-2 shrink-0 items-start">
+            <EditStudentDialog
+              student={{
+                id:     student.id,
+                name:   student.name,
+                grade:  student.grade,
+                school: student.school,
+                notes:  student.notes,
+                tags:   student.tags,
+                active: student.user?.active ?? true,
+                user:   student.user
+                  ? { email: student.user.email ?? null, phone: student.user.phone ?? null }
+                  : null,
+              }}
+              guardian={guardian && guardianUser
+                ? { user: { name: guardianUser.name, email: guardianUser.email ?? null, phone: guardianUser.phone ?? null } }
+                : null}
+            />
             <ScheduleLessonDialog
               studentId={id}
               studentName={student.name}
@@ -493,9 +544,16 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                   <CalendarDays className="w-4 h-4 text-primary" />
                   Histórico de Aulas
                 </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {totalDone + totalMissed} no total · {totalDone} realizadas · {totalMissed} falta{totalMissed !== 1 ? "s" : ""}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs text-muted-foreground">
+                    {totalDone + totalMissed} no total · {totalDone} realizadas · {totalMissed} falta{totalMissed !== 1 ? "s" : ""}
+                  </p>
+                  <RegisterPastLessonDialog
+                    studentId={id}
+                    teachers={teachersForDialog.map(t => ({ id: t.id, name: t.name }))}
+                    subjects={subjectsForDialog}
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -579,16 +637,21 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
           {/* Financeiro */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-sm flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-primary" />
-                Financeiro
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">
-                {brl(totalInvested)} totais
-                {activePkg && (
-                  <> · próx. {brl(Number(activePkg.pricePerLesson) * activePkg.remainingLessons)}</>
-                )}
-              </p>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="font-sub text-sm flex items-center gap-2">
+                    <CreditCard className="w-4 h-4 text-primary" />
+                    Financeiro
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {brl(totalInvested)} totais
+                    {activePkg && (
+                      <> · próx. {brl(Number(activePkg.pricePerLesson) * activePkg.remainingLessons)}</>
+                    )}
+                  </p>
+                </div>
+                <AddPaymentDialog studentId={id} />
+              </div>
             </CardHeader>
             <CardContent className="space-y-2">
               {student.payments.length === 0 ? (

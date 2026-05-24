@@ -235,10 +235,12 @@ model Lesson {
   teacherNotes    String?
   studentRating   Int?
   studentFeedback String?
-  priceOverride   Decimal?       @db.Decimal(10, 2)
-  teacherOnsite   Boolean        @default(false)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  priceOverride     Decimal?       @db.Decimal(10, 2)
+  teacherOnsite     Boolean        @default(false)
+  recurrenceGroupId String?
+  recurrenceRule    String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   participants LessonParticipant[]
   homework     Homework[]

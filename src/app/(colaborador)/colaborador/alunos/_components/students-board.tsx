@@ -165,6 +165,9 @@ interface StudentsBoardProps {
   newStudentHref: string
   importHref:     string
   detailBasePath: string
+  activeTab?:     "ativos" | "inativos" | "todos"
+  totalAtivos?:   number
+  totalInativos?: number
 }
 
 export function StudentsBoard({
@@ -174,6 +177,9 @@ export function StudentsBoard({
   newStudentHref,
   importHref,
   detailBasePath,
+  activeTab = "ativos",
+  totalAtivos = 0,
+  totalInativos = 0,
 }: StudentsBoardProps) {
   const [search,        setSearch]        = useState("")
   const [gradeFilter,   setGradeFilter]   = useState("todos")
@@ -209,6 +215,32 @@ export function StudentsBoard({
 
   return (
     <div className="space-y-4">
+      {/* Status tabs (server-driven via href) */}
+      <div className="flex items-center gap-1 border-b border-border pb-0">
+        {([
+          { key: "ativos",   label: "Ativos",    count: totalAtivos },
+          { key: "inativos", label: "Ex-alunos", count: totalInativos },
+          { key: "todos",    label: "Todos",      count: totalAtivos + totalInativos },
+        ] as const).map(tab => (
+          <a
+            key={tab.key}
+            href={`?status=${tab.key}`}
+            className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              activeTab === tab.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+              activeTab === tab.key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+            }`}>
+              {tab.count}
+            </span>
+          </a>
+        ))}
+      </div>
+
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px]">

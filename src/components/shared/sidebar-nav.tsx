@@ -18,17 +18,30 @@ const TODAY_AGENDA_HREFS = new Set([
 ])
 
 export function SidebarNav({ role, onNavigate }: SidebarNavProps) {
-  const pathname  = usePathname()
-  const items     = NAV_ITEMS[role] ?? []
-  const todayStr  = format(new Date(), "yyyy-MM-dd")
+  const pathname = usePathname()
+  const items    = NAV_ITEMS[role] ?? []
+  const todayStr = format(new Date(), "yyyy-MM-dd")
 
   return (
-    <nav className="flex flex-col gap-1 px-3">
-      {items.map(({ label, href, icon: Icon }) => {
+    <nav className="flex flex-col gap-0.5 px-3">
+      {items.map((item, i) => {
+        if (item.type === "section") {
+          return (
+            <p
+              key={`section-${item.label}-${i}`}
+              className="px-3 pt-5 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 select-none"
+            >
+              {item.label}
+            </p>
+          )
+        }
+
+        const { label, href, icon: Icon } = item
         const resolvedHref = TODAY_AGENDA_HREFS.has(href)
           ? `${href}?date=${todayStr}&view=day`
           : href
         const active = pathname === href || pathname.startsWith(href + "/")
+
         return (
           <Link
             key={href}

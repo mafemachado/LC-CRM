@@ -27,7 +27,7 @@ export default auth((req) => {
       (pathname.startsWith("/admin")       && role !== "ADMIN") ||
       (pathname.startsWith("/colaborador") && !["ADMIN", "COLLABORATOR"].includes(role)) ||
       (pathname.startsWith("/professor")   && !["ADMIN", "TEACHER"].includes(role)) ||
-      (pathname.startsWith("/aluno")       && !["GUARDIAN", "ADMIN"].includes(role))
+      (pathname.startsWith("/aluno")       && !["GUARDIAN", "ADMIN", "STUDENT"].includes(role))
 
     if (isWrongArea && home) {
       return NextResponse.redirect(new URL(home, req.url))

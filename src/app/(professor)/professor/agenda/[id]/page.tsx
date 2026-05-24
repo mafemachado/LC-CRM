@@ -4,7 +4,6 @@ import { auth }         from "@/lib/auth"
 import { PageHeader }   from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }        from "@/components/ui/badge"
-import { LessonStatusButtons } from "./lesson-status-buttons"
 import { AddHomeworkForm }     from "./add-homework-form"
 import { format }       from "date-fns"
 import { ptBR }         from "date-fns/locale"
@@ -122,78 +121,67 @@ export default async function LessonDetailPage({ params }: LessonDetailProps) {
         </CardContent>
       </Card>
 
-      {/* Registrar conteúdo / Alterar status */}
-      {!isCompleted ? (
+      {/* Registro de status (quando finalizada) */}
+      {isCompleted && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="font-sub text-base">Registrar Aula</CardTitle>
+            <CardTitle className="font-sub text-base flex items-center gap-2">
+              Registro
+              <Badge variant={lesson.status === "COMPLETED" ? "default" : "destructive"}>
+                {lesson.status === "COMPLETED" ? "Realizada" : lesson.status === "CANCELLED" ? "Cancelada" : "Faltou"}
+              </Badge>
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <LessonStatusButtons lessonId={lesson.id} />
+          <CardContent className="space-y-3 text-sm">
+            {lesson.topicsCovered && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Conteúdo ensinado</p>
+                <p className="bg-muted/50 rounded-lg p-3">{lesson.topicsCovered}</p>
+              </div>
+            )}
+            {lesson.teacherNotes && (
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Observações do professor</p>
+                <p className="bg-muted/50 rounded-lg p-3">{lesson.teacherNotes}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-base flex items-center gap-2">
-                Registro
-                <Badge variant={lesson.status === "COMPLETED" ? "default" : "destructive"}>
-                  {lesson.status === "COMPLETED" ? "Realizada" : lesson.status === "CANCELLED" ? "Cancelada" : "Faltou"}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              {lesson.topicsCovered && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Conteúdo ensinado</p>
-                  <p className="bg-muted/50 rounded-lg p-3">{lesson.topicsCovered}</p>
-                </div>
-              )}
-              {lesson.teacherNotes && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Observações do professor</p>
-                  <p className="bg-muted/50 rounded-lg p-3">{lesson.teacherNotes}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Lições de Casa */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="font-sub text-base flex items-center gap-2">
-                <PenLine className="w-4 h-4 text-primary" /> Lições de Casa
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {lesson.homework.length > 0 && (
-                <ul className="space-y-2">
-                  {lesson.homework.map((h) => (
-                    <li key={h.id} className="flex items-start gap-2 text-sm">
-                      {h.status === "COMPLETED"
-                        ? <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                        : <Clock className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />}
-                      <div>
-                        <p className={h.status === "COMPLETED" ? "line-through text-muted-foreground" : "font-medium"}>{h.title}</p>
-                        {h.dueDate && (
-                          <p className="text-xs text-muted-foreground">
-                            Prazo: {format(h.dueDate, "dd/MM/yyyy", { locale: ptBR })}
-                          </p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className={lesson.homework.length > 0 ? "border-t pt-4" : ""}>
-                <p className="text-xs text-muted-foreground mb-3">Atribuir nova lição</p>
-                <AddHomeworkForm lessonId={lesson.id} />
-              </div>
-            </CardContent>
-          </Card>
-        </>
       )}
+
+      {/* Lições de Casa */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="font-sub text-base flex items-center gap-2">
+            <PenLine className="w-4 h-4 text-primary" /> Lições de Casa
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {lesson.homework.length > 0 && (
+            <ul className="space-y-2">
+              {lesson.homework.map((h) => (
+                <li key={h.id} className="flex items-start gap-2 text-sm">
+                  {h.status === "COMPLETED"
+                    ? <CheckCircle2 className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+                    : <Clock className="w-4 h-4 text-orange-400 mt-0.5 shrink-0" />}
+                  <div>
+                    <p className={h.status === "COMPLETED" ? "line-through text-muted-foreground" : "font-medium"}>{h.title}</p>
+                    {h.dueDate && (
+                      <p className="text-xs text-muted-foreground">
+                        Prazo: {format(h.dueDate, "dd/MM/yyyy", { locale: ptBR })}
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className={lesson.homework.length > 0 ? "border-t pt-4" : ""}>
+            <p className="text-xs text-muted-foreground mb-3">Atribuir nova lição</p>
+            <AddHomeworkForm lessonId={lesson.id} />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

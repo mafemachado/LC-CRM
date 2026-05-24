@@ -5,7 +5,7 @@ import { auth }                from "@/lib/auth"
 import { revalidatePath }      from "next/cache"
 import { notify, notifyLessonConfirmed, notifyLowBalance } from "@/lib/notifications"
 import { getRoomCount, getOperationalConfig, isOperational } from "@/lib/config"
-import { startOfDay, endOfDay } from "date-fns"
+import { startOfDay, endOfDay, addWeeks, addMonths, parseISO, isAfter } from "date-fns"
 import { format }              from "date-fns"
 import { ptBR }                from "date-fns/locale"
 
@@ -220,7 +220,7 @@ export async function updateLessonStatusAction(
 ) {
   const session = await auth()
   if (!session?.user) throw new Error("Sem permissão")
-  if (!["ADMIN", "COLLABORATOR", "TEACHER"].includes(session.user.role)) throw new Error("Sem permissão")
+  if (!["ADMIN", "COLLABORATOR"].includes(session.user.role)) throw new Error("Sem permissão")
 
   const lesson = await prisma.lesson.findUnique({
     where:   { id: lessonId },
@@ -232,14 +232,8 @@ export async function updateLessonStatusAction(
   })
   if (!lesson) throw new Error("Aula não encontrada")
 
-  // Professor só pode alterar suas próprias aulas
-  if (session.user.role === "TEACHER") {
-    const teacher = await prisma.teacher.findFirst({
-      where: { userId: session.user.id },
-    })
-    if (!teacher || lesson.teacherId !== teacher.id) {
-      throw new Error("Sem permissão para alterar esta aula")
-    }
+  if (["CANCELLED", "COMPLETED", "MISSED"].includes(lesson.status)) {
+    throw new Error("Esta aula já foi finalizada e não pode ser alterada")
   }
 
   const isGroup = lesson.participants.length > 1
@@ -334,14 +328,16 @@ export async function updateLessonStatusAction(
 // ─── Criar aula diretamente (sem solicitação) ─────────────────────────────────
 
 export async function createLessonDirectAction(data: {
-  teacherId:     string
-  studentId:     string
-  subjectId:     string
-  date:          string  // "YYYY-MM-DD"
-  time:          string  // "HH:mm"
-  modality:      "PRESENCIAL" | "ONLINE"
-  duration?:     number
+  teacherId:      string
+  studentId:      string
+  subjectId:      string
+  date:           string  // "YYYY-MM-DD"
+  time:           string  // "HH:mm"
+  modality:       "PRESENCIAL" | "ONLINE"
+  duration?:      number
   teacherOnsite?: boolean  // override explícito para aulas online
+  statusOverride?: "COMPLETED" | "MISSED"  // forçar status em aulas passadas
+  topicsCovered?: string
 }) {
   await requireCollaboratorOrAdmin()
 
@@ -444,8 +440,9 @@ export async function createLessonDirectAction(data: {
         scheduledAt,
         duration,
         modality:     data.modality,
-        status:        isHistorical ? "COMPLETED" : "CONFIRMED",
+        status:        isHistorical ? (data.statusOverride ?? "COMPLETED") : "CONFIRMED",
         teacherOnsite: teacherOnsiteDirect,
+        topicsCovered: data.topicsCovered ?? null,
         participants: { create: { studentId: data.studentId } },
       },
     }),
@@ -654,6 +651,7 @@ export async function createAulaoAction(data: {
   pricePerStudent?: number
   studentIds?:      string[]
   teacherOnsite?:   boolean
+  recurrence?:      { rule: "WEEKLY" | "BIWEEKLY" | "MONTHLY"; endsAt: string }
 }) {
   await requireCollaboratorOrAdmin()
 
@@ -728,46 +726,148 @@ export async function createAulaoAction(data: {
     ? await prisma.student.findMany({ where: { id: { in: studentIds } }, include: { user: true } })
     : []
 
-  const scheduledAtFmt = format(scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+  // ── Gera datas (recorrência ou data única) ────────────────────────────────
+  let dates: Date[]
+  let recurrenceGroupId: string | undefined
 
-  await prisma.$transaction([
-    prisma.lesson.create({
-      data: {
-        teacherId:     data.teacherId,
-        subjectId:     data.subjectId,
-        scheduledAt,
-        duration,
-        modality:      data.modality,
-        status:        isHistorical ? "COMPLETED" : "CONFIRMED",
-        lessonType:    "AULAO",
-        title:         data.title,
-        capacity:      data.capacity ?? null,
-        teacherOnsite,
-        priceOverride: data.isFree ? 0 : (data.pricePerStudent ?? 0),
-        participants:  studentIds.length > 0
-          ? { create: students.map((s) => ({ studentId: s.id })) }
-          : undefined,
-      },
-    }),
-    ...(!data.isFree && students.length > 0
-      ? students.map((student) =>
-          prisma.payment.create({
-            data: {
-              studentId:   student.id,
-              amount:      data.pricePerStudent!,
-              dueDate:     scheduledAt,
-              description: `Aulão – ${subject.name} – ${data.title} (${scheduledAtFmt})`,
-              status:      "PENDING",
-            },
-          })
-        )
-      : []),
-  ])
+  if (data.recurrence) {
+    const { rule, endsAt } = data.recurrence
+    const endsAtDate = parseISO(endsAt)
+    recurrenceGroupId = crypto.randomUUID()
+    dates = [scheduledAt]
+    let current = scheduledAt
+    for (let i = 0; i < 104; i++) {
+      const next = rule === "WEEKLY"    ? addWeeks(current, 1)
+                 : rule === "BIWEEKLY" ? addWeeks(current, 2)
+                 :                       addMonths(current, 1)
+      if (isAfter(next, endsAtDate)) break
+      dates.push(next)
+      current = next
+    }
+  } else {
+    dates = [scheduledAt]
+  }
+
+  const ops = dates.flatMap(date => {
+    const scheduledAtFmt = format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+    const isPast = date < new Date()
+    return [
+      prisma.lesson.create({
+        data: {
+          teacherId:         data.teacherId,
+          subjectId:         data.subjectId,
+          scheduledAt:       date,
+          duration,
+          modality:          data.modality,
+          status:            isPast ? "COMPLETED" : "CONFIRMED",
+          lessonType:        "AULAO",
+          title:             data.title,
+          capacity:          data.capacity ?? null,
+          teacherOnsite,
+          priceOverride:     data.isFree ? 0 : (data.pricePerStudent ?? 0),
+          recurrenceGroupId: recurrenceGroupId ?? null,
+          recurrenceRule:    data.recurrence?.rule ?? null,
+          participants:      studentIds.length > 0
+            ? { create: students.map((s) => ({ studentId: s.id })) }
+            : undefined,
+        },
+      }),
+      ...(!data.isFree && students.length > 0
+        ? students.map((student) =>
+            prisma.payment.create({
+              data: {
+                studentId:   student.id,
+                amount:      data.pricePerStudent!,
+                dueDate:     date,
+                description: `Aulão – ${subject.name} – ${data.title} (${scheduledAtFmt})`,
+                status:      "PENDING",
+              },
+            })
+          )
+        : []),
+    ]
+  })
+
+  await prisma.$transaction(ops)
 
   revalidatePath("/colaborador/agenda")
   revalidatePath("/colaborador/agendamentos")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")
+  revalidatePath("/colaborador/auloes")
+}
+
+// ─── Aprovar em lote ─────────────────────────────────────────────────────────
+
+export async function bulkApproveRequestsAction(ids: string[]) {
+  await requireCollaboratorOrAdmin()
+  const results = { approved: 0, failed: [] as { id: string; reason: string }[] }
+  for (const id of ids) {
+    try {
+      await approveRequestAction(id)
+      results.approved++
+    } catch (e) {
+      results.failed.push({ id, reason: e instanceof Error ? e.message : "Erro" })
+    }
+  }
+  return results
+}
+
+// ─── Rejeitar em lote ─────────────────────────────────────────────────────────
+
+export async function bulkRejectRequestsAction(ids: string[]) {
+  const session = await requireCollaboratorOrAdmin()
+
+  const requests = await prisma.lessonRequest.findMany({
+    where:   { id: { in: ids }, status: "PENDING" },
+    include: { student: { include: { user: true, guardian: { include: { user: true } } } }, subject: true },
+  })
+
+  await prisma.lessonRequest.updateMany({
+    where: { id: { in: ids } },
+    data:  { status: "REJECTED", approvedBy: session.user.id },
+  })
+
+  await Promise.allSettled(
+    requests.map(async (request) => {
+      const recipientId    = request.student.userId ?? request.student.guardian?.userId
+      const recipientEmail = request.student.user?.email ?? request.student.guardian?.user?.email ?? undefined
+      const recipientPhone = request.student.user?.phone ?? request.student.guardian?.user?.phone ?? undefined
+      if (!recipientId) return
+      await notify({
+        userId:  recipientId,
+        type:    "LESSON_CANCELLED",
+        title:   "Solicitação de aula recusada",
+        message: `Sua solicitação de aula de ${request.subject?.name ?? "–"} não pôde ser aprovada.`,
+        email:   recipientEmail,
+        phone:   recipientPhone,
+      })
+    })
+  )
+
+  revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/colaborador/dashboard")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+}
+
+// ─── Reagendar e aprovar ──────────────────────────────────────────────────────
+
+export async function rescheduleAndApproveRequestAction(
+  requestId:      string,
+  newDate:        string,
+  newTime:        string,
+  modality?:      "PRESENCIAL" | "ONLINE",
+  teacherOnsite?: boolean,
+) {
+  await requireCollaboratorOrAdmin()
+
+  await prisma.lessonRequest.update({
+    where: { id: requestId },
+    data:  { preferredAt: new Date(`${newDate}T${newTime}:00`) },
+  })
+
+  await approveRequestAction(requestId, modality, teacherOnsite)
 }
 
 // ─── Criar Compromisso do Professor ──────────────────────────────────────────

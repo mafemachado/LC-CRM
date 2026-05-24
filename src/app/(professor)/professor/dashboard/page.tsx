@@ -347,7 +347,7 @@ export default async function ProfessorDashboard() {
           {[
             { label: "Aulas hoje",    value: String(d.aulasHoje),  sub: `${d.aulasHoje} total`,          mono: false },
             { label: "Aulas no mês",  value: String(d.aulasMes),   sub: d.deltaAulas != null ? `${d.deltaAulas >= 0 ? "+" : ""}${d.deltaAulas}% vs. mês ant.` : "primeiro mês", mono: false, subPos: d.deltaAulas != null ? d.deltaAulas >= 0 : null },
-            { label: "Ganhos do mês", value: brl(d.ganhosMes),     sub: `${d.aulasMes} aulas`,            mono: true  },
+            { label: "Ganhos do mês", value: brl(d.ganhosMes),     sub: `${d.aulasMes} aulas`,            mono: false },
             { label: "Avaliação",     value: d.avgRating,          sub: `${d.totalAvaliacoes} reviews`,   mono: false },
           ].map(({ label, value, sub, mono, subPos }) => (
             <div key={label} className="min-w-[130px] bg-card px-[16px] py-[10px]">
@@ -685,7 +685,7 @@ export default async function ProfessorDashboard() {
                   </p>
                   <div className="flex flex-col gap-1.5">
                     {d.ganhosBreakdown.map((b, i) => (
-                      <div key={i} className="grid items-center gap-2 text-[12px]" style={{ gridTemplateColumns: "80px 1fr 60px 24px" }}>
+                      <div key={i} className="grid items-center gap-2 text-[12px]" style={{ gridTemplateColumns: "80px 1fr auto auto" }}>
                         <span style={{ color: "var(--text-2)" }} className="truncate">{b.name}</span>
                         <div className="h-[6px] overflow-hidden rounded-[2px]" style={{ background: "var(--border)" }}>
                           <div
@@ -696,10 +696,10 @@ export default async function ProfessorDashboard() {
                             }}
                           />
                         </div>
-                        <span className="text-right font-mono" style={{ fontFeatureSettings: '"tnum"' }}>
+                        <span className="text-right" style={{ fontFeatureSettings: '"tnum"' }}>
                           {brl(b.valor)}
                         </span>
-                        <span className="text-right font-mono text-muted-foreground">{b.aulas}</span>
+                        <span className="text-right text-muted-foreground">{b.aulas}</span>
                       </div>
                     ))}
                   </div>

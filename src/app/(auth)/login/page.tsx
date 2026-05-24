@@ -158,12 +158,22 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </div>
 
       {/* ─── Painel direito ──────────────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-6 lg:p-10 bg-background overflow-y-auto">
-        <div className="w-full max-w-[420px] py-8">
+      <div className="flex-1 flex flex-col p-6 lg:p-10 bg-background overflow-y-auto">
+        <div className="w-full max-w-[420px] mx-auto my-auto py-8">
 
-          {/* Logo — apenas mobile */}
-          <div className="flex lg:hidden justify-center mb-8">
-            <Image src="/logo.svg" alt="Lição de Casa" width={140} height={48} priority />
+          {/* Header — apenas mobile */}
+          <div className="flex lg:hidden flex-col items-center gap-3 mb-8">
+            <div className="rounded-2xl overflow-hidden shadow-md">
+              <Image src="/logo.svg" alt="Lição de Casa" width={72} height={72} priority />
+            </div>
+            <div className="text-center">
+              <h1 className="font-heading text-2xl text-[#023047] dark:text-gray-100 tracking-wide leading-none">
+                LIÇÃO DE CASA
+              </h1>
+              <p className="font-accent text-sm text-brand-orange mt-0.5">
+                Aprender é uma lição de cada dia.
+              </p>
+            </div>
           </div>
 
           <h2 className="font-sub text-2xl font-bold text-foreground mb-1">

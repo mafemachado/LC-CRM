@@ -106,18 +106,19 @@ export interface WeekLessonSlot extends LessonSlot {
 }
 
 export interface AulaoCard {
-  id:          string
-  lessonType:  "AULAO" | "GROUP"
-  title:       string | null
-  teacherName: string
-  teacherId:   string
-  subjectName: string
-  time:        string
-  endTime:     string
-  enrolled:    number
-  capacity:    number | null
-  status:      string
-  modality:    "PRESENCIAL" | "ONLINE"
+  id:                string
+  lessonType:        "AULAO" | "GROUP"
+  title:             string | null
+  teacherName:       string
+  teacherId:         string
+  subjectName:       string
+  time:              string
+  endTime:           string
+  enrolled:          number
+  capacity:          number | null
+  status:            string
+  modality:          "PRESENCIAL" | "ONLINE"
+  recurrenceGroupId: string | null
 }
 
 export interface PendingRequestSlot {
@@ -1354,6 +1355,15 @@ export function AgendaGrid({
 
           {/* Direita: contagem + legenda + botão grupo */}
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs gap-1.5 border-violet-400/50 text-violet-700 hover:bg-violet-50"
+              onClick={() => setShowAulaoDialog(true)}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Aulão
+            </Button>
             {allStudents && allStudents.length >= 2 && (
               <Button
                 size="sm"

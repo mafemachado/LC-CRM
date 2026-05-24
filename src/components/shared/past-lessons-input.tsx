@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Button }   from "@/components/ui/button"
 import { Input }    from "@/components/ui/input"
 import { Label }    from "@/components/ui/label"
-import { Plus, Trash2, History } from "lucide-react"
+import { Plus, Trash2, History, CheckCircle2, XCircle } from "lucide-react"
 
 interface Teacher { id: string; name: string }
 interface Subject { id: string; name: string }
@@ -17,6 +17,7 @@ interface PastLesson {
   duration:  string
   modality:  "PRESENCIAL" | "ONLINE"
   topics:    string
+  status:    "COMPLETED" | "MISSED"
 }
 
 function emptyLesson(teachers: Teacher[], subjects: Subject[]): PastLesson {
@@ -28,23 +29,31 @@ function emptyLesson(teachers: Teacher[], subjects: Subject[]): PastLesson {
     duration:  "60",
     modality:  "PRESENCIAL",
     topics:    "",
+    status:    "COMPLETED",
   }
 }
 
 export function PastLessonsInput({
   teachers,
   subjects,
+  onChange,
 }: {
   teachers: Teacher[]
   subjects: Subject[]
+  onChange?: (lessons: PastLesson[]) => void
 }) {
   const [open,    setOpen]    = useState(false)
   const [lessons, setLessons] = useState<PastLesson[]>([])
 
-  function add()    { setLessons(prev => [...prev, emptyLesson(teachers, subjects)]) }
-  function remove(i: number) { setLessons(prev => prev.filter((_, idx) => idx !== i)) }
+  function updateLessons(next: PastLesson[]) {
+    setLessons(next)
+    onChange?.(next.filter(l => l.date && l.teacherId && l.subjectId))
+  }
+
+  function add()    { updateLessons([...lessons, emptyLesson(teachers, subjects)]) }
+  function remove(i: number) { updateLessons(lessons.filter((_, idx) => idx !== i)) }
   function update(i: number, field: keyof PastLesson, val: string) {
-    setLessons(prev => prev.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
+    updateLessons(lessons.map((l, idx) => idx === i ? { ...l, [field]: val } : l))
   }
 
   const valid = lessons.filter(l => l.date && l.teacherId && l.subjectId)
@@ -83,102 +92,124 @@ export function PastLessonsInput({
           )}
 
           {lessons.map((lesson, i) => (
-            <div key={i} className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-muted/30 border border-border">
-              {/* Data */}
-              <div className="space-y-1">
-                <Label className="text-xs">Data *</Label>
-                <Input
-                  type="date"
-                  value={lesson.date}
-                  onChange={e => update(i, "date", e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              {/* Horário */}
-              <div className="space-y-1">
-                <Label className="text-xs">Horário</Label>
-                <Input
-                  type="time"
-                  value={lesson.time}
-                  onChange={e => update(i, "time", e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              {/* Duração */}
-              <div className="space-y-1">
-                <Label className="text-xs">Duração (min)</Label>
-                <Input
-                  type="number"
-                  value={lesson.duration}
-                  min={30} max={240} step={30}
-                  onChange={e => update(i, "duration", e.target.value)}
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              {/* Professor */}
-              <div className="space-y-1">
-                <Label className="text-xs">Professor *</Label>
-                <select
-                  value={lesson.teacherId}
-                  onChange={e => update(i, "teacherId", e.target.value)}
-                  className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Selecione</option>
-                  {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-
-              {/* Matéria */}
-              <div className="space-y-1">
-                <Label className="text-xs">Matéria *</Label>
-                <select
-                  value={lesson.subjectId}
-                  onChange={e => update(i, "subjectId", e.target.value)}
-                  className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Selecione</option>
-                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
-              </div>
-
-              {/* Modalidade */}
-              <div className="space-y-1">
-                <Label className="text-xs">Modalidade</Label>
-                <select
-                  value={lesson.modality}
-                  onChange={e => update(i, "modality", e.target.value as "PRESENCIAL" | "ONLINE")}
-                  className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="PRESENCIAL">Presencial</option>
-                  <option value="ONLINE">Online</option>
-                </select>
-              </div>
-
-              {/* Conteúdo */}
-              <div className="space-y-1 col-span-2">
-                <Label className="text-xs">Conteúdo abordado</Label>
-                <Input
-                  value={lesson.topics}
-                  onChange={e => update(i, "topics", e.target.value)}
-                  placeholder="Ex: Frações, equações do 1º grau…"
-                  className="h-8 text-xs"
-                />
-              </div>
-
-              {/* Remover */}
-              <div className="flex items-end justify-end">
-                <Button
+            <div key={i} className="rounded-xl bg-muted/30 border border-border p-3 space-y-3">
+              {/* Status toggle */}
+              <div className="flex items-center gap-2">
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => remove(i)}
-                  className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  onClick={() => update(i, "status", lesson.status === "COMPLETED" ? "MISSED" : "COMPLETED")}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-full border transition-colors ${
+                    lesson.status === "COMPLETED"
+                      ? "bg-green-100 text-green-700 border-green-300 hover:bg-green-200"
+                      : "bg-red-100 text-red-700 border-red-300 hover:bg-red-200"
+                  }`}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
+                  {lesson.status === "COMPLETED"
+                    ? <><CheckCircle2 className="w-3 h-3" /> Realizada</>
+                    : <><XCircle className="w-3 h-3" /> Faltou</>
+                  }
+                </button>
+                <span className="text-xs text-muted-foreground">Clique para alternar o status</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {/* Data */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Data *</Label>
+                  <Input
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={lesson.date}
+                    onChange={e => update(i, "date", e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Horário */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Horário</Label>
+                  <Input
+                    type="time"
+                    value={lesson.time}
+                    onChange={e => update(i, "time", e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Duração */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Duração (min)</Label>
+                  <Input
+                    type="number"
+                    value={lesson.duration}
+                    min={30} max={240} step={30}
+                    onChange={e => update(i, "duration", e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Professor */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Professor *</Label>
+                  <select
+                    value={lesson.teacherId}
+                    onChange={e => update(i, "teacherId", e.target.value)}
+                    className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Selecione</option>
+                    {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Matéria */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Matéria *</Label>
+                  <select
+                    value={lesson.subjectId}
+                    onChange={e => update(i, "subjectId", e.target.value)}
+                    className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="">Selecione</option>
+                    {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                {/* Modalidade */}
+                <div className="space-y-1">
+                  <Label className="text-xs">Modalidade</Label>
+                  <select
+                    value={lesson.modality}
+                    onChange={e => update(i, "modality", e.target.value as "PRESENCIAL" | "ONLINE")}
+                    className="flex h-8 w-full rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                  >
+                    <option value="PRESENCIAL">Presencial</option>
+                    <option value="ONLINE">Online</option>
+                  </select>
+                </div>
+
+                {/* Conteúdo */}
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Conteúdo abordado</Label>
+                  <Input
+                    value={lesson.topics}
+                    onChange={e => update(i, "topics", e.target.value)}
+                    placeholder="Ex: Frações, equações do 1º grau…"
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Remover */}
+                <div className="flex items-end justify-end">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => remove(i)}
+                    className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
               </div>
             </div>
           ))}

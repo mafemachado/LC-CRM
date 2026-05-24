@@ -11,6 +11,7 @@ export type StudentRow = Prisma.StudentGetPayload<{
     packages: true
     participations: { include: { lesson: { include: { subject: true } } } }
     payments: true
+    _count: { select: { packages: true; participations: true } }
   }
 }>
 
@@ -93,7 +94,10 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
   const studentPhone  = student.user?.phone?.replace(/\D/g, "") ?? null
   const waPhone       = guardianPhone ?? studentPhone
 
-  const status = getStatusInfo(pkg)
+  const status        = getStatusInfo(pkg)
+  const isInactive    = student.user?.active === false
+  const hasNoPackage  = student._count.packages === 0
+  const hasNoHistory  = student._count.participations === 0
 
   const remainingPct = pkg && pkg.totalLessons > 0
     ? Math.round((pkg.remainingLessons / pkg.totalLessons) * 100)
@@ -108,7 +112,7 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
   const detailHref = `${detailBasePath}/${student.id}`
 
   return (
-    <div className="rounded-xl border bg-card p-4 flex flex-col gap-3 hover:shadow-md transition-shadow">
+    <div className={`rounded-xl border bg-card p-4 flex flex-col gap-3 hover:shadow-md transition-shadow ${isInactive ? "opacity-65" : ""}`}>
       {/* Header */}
       <div className="flex items-start gap-3">
         <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0 ${avatarColor(displayName)}`}>
@@ -116,9 +120,29 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <Link href={detailHref} className="font-semibold text-sm hover:underline leading-tight truncate">
-              {displayName}
-            </Link>
+            <div className="flex-1 min-w-0">
+              <Link href={detailHref} className="font-semibold text-sm hover:underline leading-tight truncate block">
+                {displayName}
+              </Link>
+              {/* Badges de status */}
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {isInactive && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-300">
+                    Ex-aluno
+                  </span>
+                )}
+                {!isInactive && hasNoPackage && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
+                    Sem pacote
+                  </span>
+                )}
+                {!isInactive && hasNoHistory && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-300">
+                    Sem histórico
+                  </span>
+                )}
+              </div>
+            </div>
             <span className={`shrink-0 text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap ${status.cls}`}>
               {status.label}
             </span>

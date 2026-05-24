@@ -1,6 +1,6 @@
 "use client"
 
-import { MapPin, Wifi, Users, Plus, CalendarPlus } from "lucide-react"
+import { MapPin, Wifi, Users, Plus, CalendarPlus, Repeat2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { AulaoCard } from "./agenda-grid"
 
@@ -73,13 +73,18 @@ export function AuloesSection({ auloes, onNewAulao, onNewCommitment }: Props) {
             >
               {/* Badge + horário */}
               <div className="flex items-center justify-between gap-2">
-                <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                  isAulao
-                    ? "bg-violet-200 text-violet-800"
-                    : "bg-blue-200 text-blue-800"
-                }`}>
-                  {isAulao ? "Aulão" : "Grupo"}
-                </span>
+                <div className="flex items-center gap-1">
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                    isAulao
+                      ? "bg-violet-200 text-violet-800"
+                      : "bg-blue-200 text-blue-800"
+                  }`}>
+                    {isAulao ? "Aulão" : "Grupo"}
+                  </span>
+                  {a.recurrenceGroupId && (
+                    <Repeat2 className={`w-3 h-3 ${isAulao ? "text-violet-500" : "text-blue-500"}`} aria-label="Recorrente" />
+                  )}
+                </div>
                 <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
                   {a.time}–{a.endTime}
                 </span>

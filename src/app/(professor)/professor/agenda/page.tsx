@@ -2,12 +2,6 @@ import { headers }      from "next/headers"
 import { auth }         from "@/lib/auth"
 import { prisma }       from "@/lib/prisma"
 import { PageHeader }   from "@/components/shared/page-header"
-import { RequestCard }  from "@/components/shared/request-card"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge }        from "@/components/ui/badge"
-import { Clock }        from "lucide-react"
-import { hasConflict, isWithinAvailability } from "@/lib/availability"
-import type { Availability } from "@/lib/availability"
 import { generateCalendarToken } from "@/lib/calendar-token"
 import { TeacherAgendaView }    from "@/components/professor/teacher-agenda-view"
 
@@ -18,28 +12,12 @@ export default async function ProfessorAgendaPage() {
     where: { user: { email: session?.user?.email ?? "" } },
   })
 
-  const [requests, lessons] = await Promise.all([
-    teacher ? prisma.lessonRequest.findMany({
-      where:   { teacherId: teacher.id, status: "PENDING" },
-      include: {
-        student: { include: { user: true } },
-        teacher: { include: { user: true } },
-        subject: true,
-      },
-      orderBy: { requestedAt: "asc" },
-    }) : [],
-    teacher ? prisma.lesson.findMany({
-      where:   { teacherId: teacher.id },
-      include: { participants: { include: { student: { include: { user: true } } } }, subject: true },
-      orderBy: { scheduledAt: "asc" },
-      take:    60,
-    }) : [],
-  ])
-
-  const availability   = (teacher?.availability ?? {}) as unknown as Availability
-  const confirmedTimes = lessons
-    .filter((l) => ["SCHEDULED", "CONFIRMED"].includes(l.status))
-    .map((l) => l.scheduledAt)
+  const lessons = await (teacher ? prisma.lesson.findMany({
+    where:   { teacherId: teacher.id },
+    include: { participants: { include: { student: { include: { user: true } } } }, subject: true },
+    orderBy: { scheduledAt: "asc" },
+    take:    60,
+  }) : Promise.resolve([]))
 
   // Serialise lessons for client component (Date → ISO string)
   const serialisedLessons = lessons.map((l) => ({
@@ -64,42 +42,7 @@ export default async function ProfessorAgendaPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title="MINHA AGENDA" description="Solicitações e aulas agendadas" />
-
-      {/* Pending requests — server-rendered with approve/reject actions */}
-      {requests.length > 0 && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="font-sub text-base flex items-center gap-2">
-              <Clock className="w-4 h-4 text-orange-500" />
-              Solicitações Pendentes
-              <Badge variant="destructive" className="ml-1">{requests.length}</Badge>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {requests.map((r) => {
-              const conflict      = hasConflict(r.preferredAt, confirmedTimes)
-              const outOfSchedule = Object.keys(availability).length > 0 &&
-                                    !isWithinAvailability(r.preferredAt, availability)
-              return (
-                <RequestCard
-                  key={r.id}
-                  id={r.id}
-                  studentName={r.student.name ?? "Aluno"}
-                  teacherName={r.teacher.user.name}
-                  subjectName={r.subject?.name ?? "–"}
-                  preferredAt={r.preferredAt}
-                  notes={r.reason}
-                  hasConflict={conflict}
-                  outOfSchedule={outOfSchedule}
-                  teacherMode={r.teacher.teachingMode as "ONLINE_ONLY" | "PRESENCIAL" | "HYBRID"}
-                  requestModality={r.modality as "PRESENCIAL" | "ONLINE"}
-                />
-              )
-            })}
-          </CardContent>
-        </Card>
-      )}
+      <PageHeader title="MINHA AGENDA" description="Aulas agendadas" />
 
       {/* Interactive agenda (list + calendar views + sync) */}
       <TeacherAgendaView

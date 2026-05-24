@@ -1,6 +1,7 @@
 import { prisma }        from "@/lib/prisma"
 import { PageHeader }    from "@/components/shared/page-header"
 import { StudentsBoard } from "@/app/(colaborador)/colaborador/alunos/_components/students-board"
+import type { StudentRow } from "@/app/(colaborador)/colaborador/alunos/_components/student-board-card"
 
 export default async function AdminAlunosPage() {
   const [students, subjectRows] = await Promise.all([
@@ -23,11 +24,30 @@ export default async function AdminAlunosPage() {
           orderBy: { dueDate: "desc" },
           take:    1,
         },
+        _count: {
+          select: {
+            packages:       true,
+            participations: true,
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),
     prisma.subject.findMany({ orderBy: { name: "asc" } }),
   ])
+
+  const serialized: StudentRow[] = students.map(s => ({
+    ...s,
+    packages:       s.packages.map(p => ({ ...p, pricePerLesson: Number(p.pricePerLesson) })),
+    payments:       s.payments.map(p => ({ ...p, amount: Number(p.amount) })),
+    participations: s.participations.map(part => ({
+      ...part,
+      lesson: {
+        ...part.lesson,
+        priceOverride: part.lesson.priceOverride != null ? Number(part.lesson.priceOverride) : null,
+      },
+    })),
+  })) as unknown as StudentRow[]
 
   const grades   = [...new Set(students.map(s => s.grade).filter(Boolean))].sort() as string[]
   const subjects = subjectRows.map(s => s.name)
@@ -40,7 +60,7 @@ export default async function AdminAlunosPage() {
       />
 
       <StudentsBoard
-        students={students}
+        students={serialized}
         grades={grades}
         subjects={subjects}
         newStudentHref="/admin/usuarios/novo"

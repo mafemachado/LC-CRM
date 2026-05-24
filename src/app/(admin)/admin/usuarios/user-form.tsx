@@ -351,7 +351,7 @@ export function UserForm({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="space-y-1.5">
                       <Label htmlFor="newGuardian_phone">Telefone / WhatsApp *</Label>
-                      <Input id="newGuardian_phone" name="newGuardian_phone" placeholder="(11) 99999-9999" required />
+                      <PhoneInput id="newGuardian_phone" name="newGuardian_phone" required />
                     </div>
                     <div className="space-y-1.5">
                       <Label htmlFor="newGuardian_email">

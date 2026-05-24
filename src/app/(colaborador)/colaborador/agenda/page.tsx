@@ -235,10 +235,11 @@ export default async function ColaboradorAgendaPage({ searchParams }: AgendaPage
         subjectName: l.subject?.name ?? "–",
         time:        format(l.scheduledAt, "HH:mm"),
         endTime:     format(endDt,         "HH:mm"),
-        enrolled:    l.participants.length,
-        capacity:    l.capacity ?? null,
-        status:      l.status,
-        modality:    l.modality as "PRESENCIAL" | "ONLINE",
+        enrolled:          l.participants.length,
+        capacity:          l.capacity ?? null,
+        status:            l.status,
+        modality:          l.modality as "PRESENCIAL" | "ONLINE",
+        recurrenceGroupId: l.recurrenceGroupId ?? null,
       }
     })
 

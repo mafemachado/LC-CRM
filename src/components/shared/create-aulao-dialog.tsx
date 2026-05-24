@@ -44,6 +44,8 @@ export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDa
   const [capacity,         setCapacity]         = useState("")
   const [isFree,           setIsFree]           = useState(true)
   const [pricePerStudent,  setPricePerStudent]  = useState("")
+  const [recurrence,       setRecurrence]       = useState<"" | "WEEKLY" | "BIWEEKLY" | "MONTHLY">("")
+  const [recurrenceEndsAt, setRecurrenceEndsAt] = useState("")
   const [pending, start]   = useTransition()
 
   const teacher        = teachers.find(t => t.id === teacherId)
@@ -81,6 +83,8 @@ export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDa
     setCapacity("")
     setIsFree(true)
     setPricePerStudent("")
+    setRecurrence("")
+    setRecurrenceEndsAt("")
     onClose()
   }
 
@@ -91,6 +95,8 @@ export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDa
       const price = parseFloat(pricePerStudent.replace(",", "."))
       if (isNaN(price) || price <= 0) { toast.error("Informe um valor válido por aluno"); return }
     }
+    if (recurrence && !recurrenceEndsAt) { toast.error("Informe a data final da recorrência"); return }
+    if (recurrence && recurrenceEndsAt <= date) { toast.error("A data final deve ser posterior à data do aulão"); return }
 
     start(async () => {
       try {
@@ -107,6 +113,7 @@ export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDa
           pricePerStudent: isFree ? undefined : parseFloat(pricePerStudent.replace(",", ".")),
           studentIds:      selectedStudentIds,
           teacherOnsite:   modality === "ONLINE" ? teacherOnsite : undefined,
+          recurrence:      recurrence ? { rule: recurrence, endsAt: recurrenceEndsAt } : undefined,
         })
         toast.success("Aulão criado com sucesso")
         handleClose()
@@ -191,6 +198,43 @@ export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDa
                 className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
             </div>
           </div>
+
+          {/* Recorrência */}
+          <div>
+            <label className="text-xs font-medium">Recorrência</label>
+            <div className="mt-1 grid grid-cols-4 gap-1.5">
+              {(["", "WEEKLY", "BIWEEKLY", "MONTHLY"] as const).map(rule => (
+                <button
+                  key={rule}
+                  type="button"
+                  onClick={() => setRecurrence(rule)}
+                  className={`rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                    recurrence === rule
+                      ? "bg-violet-600 text-white border-violet-600"
+                      : "bg-background text-muted-foreground border-input hover:bg-muted/50"
+                  }`}
+                >
+                  {rule === "" ? "Nenhuma" : rule === "WEEKLY" ? "Semanal" : rule === "BIWEEKLY" ? "Quinzenal" : "Mensal"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Data final da recorrência */}
+          {recurrence && (
+            <div>
+              <label className="text-xs font-medium">
+                Repetir até <span className="text-destructive">*</span>
+              </label>
+              <input
+                type="date"
+                value={recurrenceEndsAt}
+                min={date}
+                onChange={e => setRecurrenceEndsAt(e.target.value)}
+                className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+              />
+            </div>
+          )}
 
           {/* Capacidade */}
           <div>

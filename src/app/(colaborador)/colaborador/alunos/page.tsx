@@ -1,16 +1,25 @@
 import { prisma }        from "@/lib/prisma"
 import { PageHeader }    from "@/components/shared/page-header"
 import { StudentsBoard } from "./_components/students-board"
+import type { StudentRow } from "./_components/student-board-card"
 
 interface AlunosPageProps {
-  searchParams: Promise<{ success?: string }>
+  searchParams: Promise<{ success?: string; status?: string }>
 }
 
 export default async function ColaboradorAlunosPage({ searchParams }: AlunosPageProps) {
-  const { success } = await searchParams
+  const { success, status = "ativos" } = await searchParams
+
+  // Filter by user.active based on status tab
+  // Students with userId=null (no account) are treated as active by default
+  const whereClause =
+    status === "inativos" ? { user: { active: false } }
+    : status === "todos"  ? undefined
+    : { OR: [{ userId: null }, { user: { active: true } }] } // "ativos": no account OR active=true
 
   const [students, subjectRows] = await Promise.all([
     prisma.student.findMany({
+      where: whereClause,
       include: {
         user: true,
         guardian: { include: { user: true } },
@@ -29,11 +38,37 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
           orderBy: { dueDate: "desc" },
           take:    1,
         },
+        _count: {
+          select: {
+            packages:       true,
+            participations: true,
+          },
+        },
       },
       orderBy: { name: "asc" },
     }),
     prisma.subject.findMany({ orderBy: { name: "asc" } }),
   ])
+
+  // Counts for tabs — students with no userId count as active
+  const [totalAtivos, totalInativos] = await Promise.all([
+    prisma.student.count({ where: { OR: [{ userId: null }, { user: { active: true } }] } }),
+    prisma.student.count({ where: { user: { active: false } } }),
+  ])
+
+  // Serialize Prisma Decimal fields to plain numbers (required for Server→Client boundary)
+  const serialized: StudentRow[] = students.map(s => ({
+    ...s,
+    packages:       s.packages.map(p => ({ ...p, pricePerLesson: Number(p.pricePerLesson) })),
+    payments:       s.payments.map(p => ({ ...p, amount: Number(p.amount) })),
+    participations: s.participations.map(part => ({
+      ...part,
+      lesson: {
+        ...part.lesson,
+        priceOverride: part.lesson.priceOverride != null ? Number(part.lesson.priceOverride) : null,
+      },
+    })),
+  })) as unknown as StudentRow[]
 
   const grades   = [...new Set(students.map(s => s.grade).filter(Boolean))].sort() as string[]
   const subjects = subjectRows.map(s => s.name)
@@ -42,7 +77,11 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
     <div className="space-y-6">
       <PageHeader
         title="ALUNOS"
-        description={`${students.length} aluno${students.length !== 1 ? "s" : ""} cadastrado${students.length !== 1 ? "s" : ""}`}
+        description={`${students.length} aluno${students.length !== 1 ? "s" : ""} ${
+          status === "inativos" ? "ex-aluno" + (students.length !== 1 ? "s" : "")
+          : status === "todos"  ? "no total"
+          : "ativo" + (students.length !== 1 ? "s" : "")
+        }`}
       />
 
       {success && (
@@ -52,12 +91,15 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
       )}
 
       <StudentsBoard
-        students={students}
+        students={serialized}
         grades={grades}
         subjects={subjects}
         newStudentHref="/colaborador/alunos/novo"
         importHref="/colaborador/alunos/importar"
         detailBasePath="/colaborador/alunos"
+        activeTab={status === "inativos" ? "inativos" : status === "todos" ? "todos" : "ativos"}
+        totalAtivos={totalAtivos}
+        totalInativos={totalInativos}
       />
     </div>
   )
