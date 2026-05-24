@@ -60,7 +60,7 @@ export function UsersTable({ users, currentId }: UsersTableProps) {
   function toggleOne(id: string) {
     setSelected((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) { next.delete(id) } else { next.add(id) }
       return next
     })
   }
@@ -102,19 +102,21 @@ export function UsersTable({ users, currentId }: UsersTableProps) {
           </Button>
 
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="h-7 px-3 text-xs gap-1.5"
-                disabled={isPending}
-              >
-                {isPending
-                  ? <Loader2 className="w-3 h-3 animate-spin" />
-                  : <Trash2 className="w-3 h-3" />
-                }
-                Excluir selecionados
-              </Button>
+            <AlertDialogTrigger
+              render={
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="h-7 px-3 text-xs gap-1.5"
+                  disabled={isPending}
+                />
+              }
+            >
+              {isPending
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : <Trash2 className="w-3 h-3" />
+              }
+              {" "}Excluir selecionados
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
