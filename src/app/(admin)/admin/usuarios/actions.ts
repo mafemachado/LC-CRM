@@ -262,3 +262,25 @@ export async function deleteUserAction(id: string) {
   revalidatePath("/admin/usuarios")
   return { success: true }
 }
+
+// ─── Excluir múltiplos usuários ───────────────────────────────────────────────
+export async function deleteManyUsersAction(ids: string[]) {
+  const session = await requireAdmin()
+  if (!ids.length) return { deleted: 0 }
+
+  // Filtra fora admins e a própria conta
+  const targets = await prisma.user.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, role: true },
+  })
+
+  const deletable = targets
+    .filter((u) => u.role !== "ADMIN" && u.id !== session.user.id)
+    .map((u) => u.id)
+
+  if (!deletable.length) return { deleted: 0 }
+
+  await prisma.user.deleteMany({ where: { id: { in: deletable } } })
+  revalidatePath("/admin/usuarios")
+  return { deleted: deletable.length }
+}

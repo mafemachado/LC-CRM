@@ -128,20 +128,11 @@ export async function generatePayoutAction(teacherId: string, month: number, yea
   const rate  = Number(lessons[0].teacher.hourlyRate)
   const total = lessons.length * rate
 
-  const existing = await prisma.teacherPayout.findFirst({
-    where: { teacherId, month, year },
+  await prisma.teacherPayout.upsert({
+    where:  { teacherId_month_year: { teacherId, month, year } },
+    update: { totalLessons: lessons.length, totalAmount: total },
+    create: { teacherId, month, year, totalLessons: lessons.length, totalAmount: total, status: "PENDING" },
   })
-
-  if (existing) {
-    await prisma.teacherPayout.update({
-      where: { id: existing.id },
-      data:  { totalLessons: lessons.length, totalAmount: total },
-    })
-  } else {
-    await prisma.teacherPayout.create({
-      data: { teacherId, month, year, totalLessons: lessons.length, totalAmount: total, status: "PENDING" },
-    })
-  }
 
   revalidatePath("/admin/financeiro/professores")
   redirect("/admin/financeiro/professores?success=Repasse+calculado+com+sucesso")

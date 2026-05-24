@@ -40,15 +40,21 @@ export async function createMaterialAction(
     throw new Error("URL não permitida. Use links do Google Drive, Google Docs, Dropbox ou OneDrive.")
   }
 
-  await prisma.material.create({
-    data: {
-      teacherId: teacher.id,
-      title,
-      fileUrl,
-      fileType,
-      subjectId: subjectId || null,
-      studentId: studentId || null,
-    },
+  await prisma.$transaction(async (tx) => {
+    const m = await tx.material.create({
+      data: {
+        teacherId: teacher.id,
+        title,
+        fileUrl,
+        fileType,
+        subjectId: subjectId || null,
+      },
+    })
+    if (studentId) {
+      await tx.materialStudent.create({
+        data: { materialId: m.id, studentId },
+      })
+    }
   })
 
   if (studentId) {
@@ -56,8 +62,7 @@ export async function createMaterialAction(
       where:   { id: studentId },
       include: { user: true },
     })
-    if (student) {
-      if (!student.userId) return
+    if (student?.userId) {
       await notify({
         userId:  student.userId,
         type:    "MATERIAL_UPLOADED",

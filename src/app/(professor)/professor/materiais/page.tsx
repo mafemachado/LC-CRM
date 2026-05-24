@@ -30,7 +30,10 @@ export default async function ProfessorMateriaisPage() {
   const [materials, students, subjectRows] = await Promise.all([
     teacher ? prisma.material.findMany({
       where:   { teacherId: teacher.id },
-      include: { subject: true },
+      include: {
+        subject:  true,
+        students: { include: { student: { select: { name: true } } } },
+      },
       orderBy: { uploadedAt: "desc" },
     }) : [],
     teacher ? prisma.student.findMany({
@@ -46,9 +49,6 @@ export default async function ProfessorMateriaisPage() {
 
   const studentOptions = students.map((s) => ({ id: s.id, name: s.user?.name ?? "Aluno" }))
   const subjectOptions = subjectRows.map((ts) => ({ id: ts.subjectId, name: ts.subject.name }))
-
-  // Para mostrar nome do aluno nos materiais com studentId
-  const studentMap = Object.fromEntries(students.map((s) => [s.id, s.user?.name ?? "Aluno"]))
 
   return (
     <div className="space-y-6">
@@ -103,7 +103,11 @@ export default async function ProfessorMateriaisPage() {
                     )}
                     <span className="flex items-center gap-1 text-xs text-muted-foreground">
                       <User className="w-3 h-3" />
-                      {m.studentId ? studentMap[m.studentId] ?? "Aluno específico" : "Todos os alunos"}
+                      {m.students.length === 0
+                        ? "Todos os alunos"
+                        : m.students.length === 1
+                          ? m.students[0].student.name
+                          : `${m.students.length} alunos`}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       {format(m.uploadedAt, "dd/MM/yyyy", { locale: ptBR })}

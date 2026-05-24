@@ -14,8 +14,9 @@ export default async function AulaoDetailPage({ params }: Props) {
   const lesson = await prisma.lesson.findUnique({
     where:   { id },
     include: {
-      teacher: { include: { user: true } },
-      subject: true,
+      teacher:          { include: { user: true } },
+      subject:          true,
+      recurrenceGroup:  true,
       participants: {
         include: {
           student: {
@@ -68,7 +69,7 @@ export default async function AulaoDetailPage({ params }: Props) {
     pricePerStudent:   price > 0 ? price : null,
     participants,
     recurrenceGroupId: lesson.recurrenceGroupId ?? null,
-    recurrenceRule:    lesson.recurrenceRule ?? null,
+    recurrenceRule:    lesson.recurrenceGroup?.rule ?? null,
   }
 
   const allStudents: StudentOption[] = allStudentsRaw.map(s => ({ id: s.id, name: s.name }))

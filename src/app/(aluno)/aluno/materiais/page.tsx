@@ -35,18 +35,18 @@ export default async function AlunoMateriaisPage() {
   const teacherIds = teacherRows.map((r) => r.teacherId)
 
   const materials = await prisma.material.findMany({
-        where: {
-          OR: [
-            { studentId: student.id },
-            { teacherId: { in: teacherIds }, studentId: null },
-          ],
-        },
-        include: {
-          teacher: { include: { user: true } },
-          subject: true,
-        },
-        orderBy: { uploadedAt: "desc" },
-      })
+    where: {
+      OR: [
+        { students: { some: { studentId: student.id } } },
+        { teacherId: { in: teacherIds }, students: { none: {} } },
+      ],
+    },
+    include: {
+      teacher: { include: { user: true } },
+      subject: true,
+    },
+    orderBy: { uploadedAt: "desc" },
+  })
 
   return (
     <div className="space-y-6">

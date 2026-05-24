@@ -66,6 +66,11 @@ enum TeacherMode {
   HYBRID       // pode trabalhar de casa (online) E vir à sede (presencial/online)
 }
 
+enum RoomType {
+  PHYSICAL
+  VIRTUAL
+}
+
 enum LessonType {
   INDIVIDUAL
   GROUP
@@ -126,6 +131,7 @@ model Student {
   requests       LessonRequest[]
   payments       Payment[]
   studentNotes   StudentNote[]
+  materials      MaterialStudent[]
 
   @@map("students")
 }
@@ -170,6 +176,34 @@ model Teacher {
   payouts   TeacherPayout[]
 
   @@map("teachers")
+}
+
+// ─── Salas ────────────────────────────────────────────────────────────────────
+
+model Room {
+  id       String   @id @default(cuid())
+  name     String
+  capacity Int?
+  type     RoomType @default(PHYSICAL)
+  active   Boolean  @default(true)
+
+  lessons  Lesson[]
+
+  @@map("rooms")
+}
+
+// ─── Recorrência ──────────────────────────────────────────────────────────────
+
+model RecurrenceGroup {
+  id        String    @id @default(cuid())
+  rule      String
+  startsAt  DateTime
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  lessons   Lesson[]
+
+  @@map("recurrence_groups")
 }
 
 // ─── Matérias ─────────────────────────────────────────────────────────────────
@@ -237,8 +271,10 @@ model Lesson {
   studentFeedback String?
   priceOverride     Decimal?       @db.Decimal(10, 2)
   teacherOnsite     Boolean        @default(false)
+  roomId            String?
+  room              Room?          @relation(fields: [roomId], references: [id], onDelete: SetNull)
   recurrenceGroupId String?
-  recurrenceRule    String?
+  recurrenceGroup   RecurrenceGroup? @relation(fields: [recurrenceGroupId], references: [id], onDelete: SetNull)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -308,7 +344,6 @@ model Material {
   id         String   @id @default(cuid())
   teacherId  String
   teacher    Teacher  @relation(fields: [teacherId], references: [id])
-  studentId  String?
   subjectId  String?
   subject    Subject? @relation(fields: [subjectId], references: [id])
   title      String
@@ -316,7 +351,20 @@ model Material {
   fileType   String
   uploadedAt DateTime @default(now())
 
+  students   MaterialStudent[]
+
   @@map("materials")
+}
+
+model MaterialStudent {
+  materialId String
+  studentId  String
+  material   Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([materialId, studentId])
+  @@index([studentId])
+  @@map("material_students")
 }
 
 // ─── Financeiro ───────────────────────────────────────────────────────────────
@@ -351,6 +399,7 @@ model TeacherPayout {
   paidAt       DateTime?
   status       PayoutStatus @default(PENDING)
 
+  @@unique([teacherId, month, year])
   @@map("teacher_payouts")
 }
 

@@ -4,14 +4,10 @@ import { Button }        from "@/components/ui/button"
 import { Input }         from "@/components/ui/input"
 import { Card }          from "@/components/ui/card"
 import { PageHeader }    from "@/components/shared/page-header"
-import { RoleBadge }     from "@/components/shared/role-badge"
 import { LinkButton }    from "@/components/shared/link-button"
-import { ToggleActiveButton } from "@/components/shared/toggle-active-button"
-import { DeleteUserButton }   from "./delete-user-button"
-import { UserRoleTabs }       from "./user-role-tabs"
-import { UserPlus, Pencil, Search, ShieldAlert, ChevronLeft, ChevronRight } from "lucide-react"
-import { format }        from "date-fns"
-import { ptBR }          from "date-fns/locale"
+import { UserRoleTabs }  from "./user-role-tabs"
+import { UsersTable }    from "./users-table"
+import { UserPlus, Search, ChevronLeft, ChevronRight } from "lucide-react"
 import { Suspense }      from "react"
 import type { Role }     from "@prisma/client"
 
@@ -107,66 +103,7 @@ export default async function UsuariosPage({ searchParams }: UsuariosPageProps) 
 
       {/* Tabela */}
       <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50">
-                <th className="text-left px-4 py-3 font-sub font-semibold text-muted-foreground">Nome</th>
-                <th className="text-left px-4 py-3 font-sub font-semibold text-muted-foreground hidden md:table-cell">E-mail</th>
-                <th className="text-left px-4 py-3 font-sub font-semibold text-muted-foreground">Perfil</th>
-                <th className="text-left px-4 py-3 font-sub font-semibold text-muted-foreground hidden lg:table-cell">Cadastro</th>
-                <th className="text-center px-4 py-3 font-sub font-semibold text-muted-foreground">Ativo</th>
-                <th className="text-right px-4 py-3 font-sub font-semibold text-muted-foreground">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-12 text-muted-foreground">
-                    Nenhum usuário encontrado
-                  </td>
-                </tr>
-              ) : (
-                users.map((user) => {
-                  const isProtectedAdmin = user.role === "ADMIN" && user.id !== currentId
-                  return (
-                    <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-foreground">{user.name}</p>
-                          <p className="text-xs text-muted-foreground md:hidden">{user.email}</p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{user.email}</td>
-                      <td className="px-4 py-3"><RoleBadge role={user.role} /></td>
-                      <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">
-                        {format(user.createdAt, "dd/MM/yyyy", { locale: ptBR })}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {isProtectedAdmin
-                          ? <ShieldAlert className="w-4 h-4 text-muted-foreground mx-auto" aria-label="Conta protegida" />
-                          : <ToggleActiveButton id={user.id} active={user.active} />
-                        }
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {isProtectedAdmin ? (
-                          <span className="text-xs text-muted-foreground px-2">Protegido</span>
-                        ) : (
-                          <div className="flex items-center justify-end gap-1">
-                            <LinkButton href={`/admin/usuarios/${user.id}`} variant="ghost" size="icon">
-                              <Pencil className="w-4 h-4" />
-                            </LinkButton>
-                            <DeleteUserButton id={user.id} name={user.name} />
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+        <UsersTable users={users} currentId={currentId} />
 
         {/* Paginação */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-border text-sm text-muted-foreground">

@@ -728,12 +728,10 @@ export async function createAulaoAction(data: {
 
   // ── Gera datas (recorrência ou data única) ────────────────────────────────
   let dates: Date[]
-  let recurrenceGroupId: string | undefined
 
   if (data.recurrence) {
     const { rule, endsAt } = data.recurrence
     const endsAtDate = parseISO(endsAt)
-    recurrenceGroupId = crypto.randomUUID()
     dates = [scheduledAt]
     let current = scheduledAt
     for (let i = 0; i < 104; i++) {
@@ -748,11 +746,25 @@ export async function createAulaoAction(data: {
     dates = [scheduledAt]
   }
 
-  const ops = dates.flatMap(date => {
-    const scheduledAtFmt = format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-    const isPast = date < new Date()
-    return [
-      prisma.lesson.create({
+  await prisma.$transaction(async (tx) => {
+    let recurrenceGroupId: string | undefined
+
+    if (data.recurrence) {
+      const group = await tx.recurrenceGroup.create({
+        data: {
+          rule:     data.recurrence.rule,
+          startsAt: scheduledAt,
+          endsAt:   parseISO(data.recurrence.endsAt),
+        },
+      })
+      recurrenceGroupId = group.id
+    }
+
+    for (const date of dates) {
+      const scheduledAtFmt = format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+      const isPast = date < new Date()
+
+      await tx.lesson.create({
         data: {
           teacherId:         data.teacherId,
           subjectId:         data.subjectId,
@@ -766,29 +778,27 @@ export async function createAulaoAction(data: {
           teacherOnsite,
           priceOverride:     data.isFree ? 0 : (data.pricePerStudent ?? 0),
           recurrenceGroupId: recurrenceGroupId ?? null,
-          recurrenceRule:    data.recurrence?.rule ?? null,
           participants:      studentIds.length > 0
             ? { create: students.map((s) => ({ studentId: s.id })) }
             : undefined,
         },
-      }),
-      ...(!data.isFree && students.length > 0
-        ? students.map((student) =>
-            prisma.payment.create({
-              data: {
-                studentId:   student.id,
-                amount:      data.pricePerStudent!,
-                dueDate:     date,
-                description: `Aulão – ${subject.name} – ${data.title} (${scheduledAtFmt})`,
-                status:      "PENDING",
-              },
-            })
-          )
-        : []),
-    ]
-  })
+      })
 
-  await prisma.$transaction(ops)
+      if (!data.isFree && students.length > 0) {
+        for (const student of students) {
+          await tx.payment.create({
+            data: {
+              studentId:   student.id,
+              amount:      data.pricePerStudent!,
+              dueDate:     date,
+              description: `Aulão – ${subject.name} – ${data.title} (${scheduledAtFmt})`,
+              status:      "PENDING",
+            },
+          })
+        }
+      }
+    }
+  })
 
   revalidatePath("/colaborador/agenda")
   revalidatePath("/colaborador/agendamentos")
