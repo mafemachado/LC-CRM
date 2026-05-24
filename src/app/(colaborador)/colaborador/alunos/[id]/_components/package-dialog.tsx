@@ -294,7 +294,7 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
                   {/* Método */}
                   <div className="space-y-1.5">
                     <Label className="text-xs">Método de pagamento <span className="text-muted-foreground">(opcional)</span></Label>
-                    <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                    <Select value={paymentMethod} onValueChange={(v) => setPaymentMethod(v ?? "")}>
                       <SelectTrigger className="h-9 text-sm">
                         <SelectValue placeholder="Selecione o método" />
                       </SelectTrigger>
