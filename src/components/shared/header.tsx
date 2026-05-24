@@ -1,3 +1,6 @@
+"use client"
+
+import { usePathname }         from "next/navigation"
 import { MobileSidebar }       from "./mobile-sidebar"
 import { LogoutButton }        from "./logout-button"
 import { NotificationBell }    from "./notification-bell"
@@ -38,7 +41,6 @@ interface StudentOption {
 }
 
 interface HeaderProps {
-  pathname:         string
   name:             string
   email:            string
   role:             Role
@@ -48,7 +50,8 @@ interface HeaderProps {
   activeStudentId?: string
 }
 
-export function Header({ pathname, name, email, role, image, phone, allStudents, activeStudentId }: HeaderProps) {
+export function Header({ name, email, role, image, phone, allStudents, activeStudentId }: HeaderProps) {
+  const pathname = usePathname()
   const title = PAGE_TITLES[pathname] ?? "Lição de Casa"
 
   return (

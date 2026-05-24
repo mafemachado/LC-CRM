@@ -5,6 +5,7 @@ import { Sparkline }   from "@/components/shared/kpi-card"
 import { RevenueMetaChart } from "@/components/charts/revenue-meta-chart"
 import { ModoBadge }   from "@/components/shared/modo-badge"
 import { PeriodSelector } from "./period-selector"
+import { DashboardGreeting } from "@/components/shared/dashboard-greeting"
 import Link            from "next/link"
 import { cn }          from "@/lib/utils"
 import {
@@ -367,11 +368,6 @@ const ALERT_COLORS = {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-function getGreeting(hour: number) {
-  if (hour >= 5 && hour < 12) return "Bom dia"
-  if (hour >= 12 && hour < 18) return "Boa tarde"
-  return "Boa noite"
-}
 
 export default async function AdminOpsPage({
   searchParams,
@@ -384,8 +380,6 @@ export default async function AdminOpsPage({
   const [d, session] = await Promise.all([getOpsData(periodo), auth()])
   const { receitaDeltaNum, aulasDeltaNum } = d
 
-  const now       = new Date()
-  const greeting  = getGreeting(now.getHours())
   const firstName = (session?.user?.name ?? "").split(" ")[0] || "Admin"
 
   return (
@@ -395,15 +389,7 @@ export default async function AdminOpsPage({
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-              Visão geral · {d.todayLabel}
-            </p>
-            <h1 className="font-sub text-[22px] font-semibold leading-tight tracking-[-0.02em]">
-              {greeting}, {firstName}!
-            </h1>
-            <p className="text-[13px] text-muted-foreground mt-0.5">
-              Operação · {d.periodLabel}
-            </p>
+            <DashboardGreeting firstName={firstName} subtitle={`Operação · ${d.periodLabel}`} />
           </div>
           <div className="flex gap-1.5">
             <OpsBtn href="/admin/relatorios">↗ Relatórios</OpsBtn>

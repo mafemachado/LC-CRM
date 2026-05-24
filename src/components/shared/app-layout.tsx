@@ -1,4 +1,3 @@
-import { headers }              from "next/headers"
 import { Sidebar }              from "./sidebar"
 import { Header }               from "./header"
 import { WhatsAppButton }       from "./whatsapp-button"
@@ -25,9 +24,6 @@ interface AppLayoutProps {
 }
 
 export async function AppLayout({ children, name, email, role, image, phone, missingEmail, allStudents, activeStudentId }: AppLayoutProps) {
-  const headerList = await headers()
-  const pathname   = headerList.get("x-pathname") ?? ""
-
   return (
     <div className="flex h-screen bg-muted/30 overflow-hidden">
       <NavigationProgress />
@@ -39,7 +35,6 @@ export async function AppLayout({ children, name, email, role, image, phone, mis
       {/* Conteúdo principal */}
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header
-          pathname={pathname}
           name={name}
           email={email}
           role={role}

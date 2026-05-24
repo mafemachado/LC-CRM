@@ -3,6 +3,7 @@ import { prisma }           from "@/lib/prisma"
 import { redirect }         from "next/navigation"
 import { getActiveStudent } from "@/lib/get-active-student"
 import { ModoBadge }        from "@/components/shared/modo-badge"
+import { DashboardGreeting } from "@/components/shared/dashboard-greeting"
 import Link                 from "next/link"
 import { format }           from "date-fns"
 import { ptBR }             from "date-fns/locale"
@@ -132,8 +133,6 @@ export default async function AlunoDashboard() {
   const studentColorMap: Record<string, string> = {}
   allStudents.forEach((s, i) => { studentColorMap[s.id] = STUDENT_COLORS[i % STUDENT_COLORS.length] })
 
-  const hora      = now.getHours()
-  const saudacao  = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite"
   const guardianFirstName = (session.user.name ?? "").split(" ")[0]
 
   // Next lesson per student
@@ -199,17 +198,10 @@ export default async function AlunoDashboard() {
       {/* ── Greeting ─────────────────────────────────────────────────────── */}
       <div className="flex items-end justify-between">
         <div>
-          <div style={{ fontSize: 11, color: "var(--subtle)", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: 4, fontWeight: 500 }}>
-            {format(now, "EEEE · dd 'de' MMMM · HH:mm", { locale: ptBR })}
-          </div>
-          <h1 style={{ fontSize: 28, fontWeight: 600, margin: 0, letterSpacing: "-0.025em", color: "var(--text)" }}>
-            {saudacao}, {guardianFirstName}.
-          </h1>
-          {contextParts.length > 0 && (
-            <div style={{ fontSize: 14, color: "var(--text-2)", marginTop: 6 }}>
-              {contextParts.join(". ")}.
-            </div>
-          )}
+          <DashboardGreeting
+            firstName={guardianFirstName}
+            subtitle={contextParts.length > 0 ? contextParts.join(". ") : undefined}
+          />
         </div>
         {unreadCount > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 14px", borderRadius: 8, background: "var(--accent-soft)", border: "1px solid var(--border)" }}>

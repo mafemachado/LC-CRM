@@ -5,6 +5,7 @@ import { redirect }  from "next/navigation"
 import Link       from "next/link"
 import { MeusAlunos } from "./meus-alunos"
 import { ModoBadge }  from "@/components/shared/modo-badge"
+import { DashboardGreeting } from "@/components/shared/dashboard-greeting"
 import {
   format, subMonths, startOfMonth, endOfMonth, startOfDay, endOfDay,
   differenceInHours, differenceInDays, differenceInMinutes,
@@ -269,14 +270,9 @@ async function getProfData(email: string) {
     }
   }
 
-  const hora     = now.getHours()
-  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite"
-
   return {
     teacherName:     teacher.user.name,
     teacherSubjects: teacher.subjects.map(ts => ts.subject.name),
-    saudacao,
-    dateLabel:  format(now, "EEEE · dd 'de' MMMM", { locale: ptBR }),
     aulasHoje, aulasMes, deltaAulas, ganhosMes, avgRating,
     timelineItems, nowLeft, nowLabel, nowVisible, minutesUntil,
     hero,
@@ -321,22 +317,10 @@ export default async function ProfessorDashboard() {
       {/* Header: greeting + 4 MiniStats */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.04em] text-muted-foreground">
-            {d.saudacao}, {d.teacherName.split(" ")[0]}
-          </p>
-          <h1 className="font-sub text-[22px] font-semibold leading-tight tracking-[-0.02em]">
-            {d.aulasHoje} aula{d.aulasHoje !== 1 ? "s" : ""} hoje
-            {d.minutesUntil != null && (
-              <>
-                {" · próxima em "}
-                <span style={{ color: "var(--primary)" }}>
-                  {d.minutesUntil < 60
-                    ? `${d.minutesUntil} min`
-                    : `${Math.floor(d.minutesUntil / 60)}h${d.minutesUntil % 60 > 0 ? `${d.minutesUntil % 60}` : ""}`}
-                </span>
-              </>
-            )}
-          </h1>
+          <DashboardGreeting
+            firstName={d.teacherName.split(" ")[0]}
+            subtitle={`${d.aulasHoje} aula${d.aulasHoje !== 1 ? "s" : ""} hoje${d.minutesUntil != null ? ` · próxima em ${d.minutesUntil < 60 ? `${d.minutesUntil} min` : `${Math.floor(d.minutesUntil / 60)}h`}` : ""}`}
+          />
         </div>
 
         {/* 4 MiniStats */}

@@ -44,9 +44,9 @@ export function TeacherAgendaView({ lessons, calendarToken, baseUrl }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* ── View toggle ── */}
-      <div className="flex items-center justify-between">
-        <div className="inline-flex rounded-lg border border-border overflow-hidden">
+      {/* ── View toggle + sync buttons ── */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="inline-flex rounded-lg border border-border overflow-hidden self-start">
           {(["list", "calendar"] as View[]).map((v) => {
             const Icon = v === "list" ? LayoutList : CalendarDays
             const label = v === "list" ? "Lista" : "Calendário"
@@ -68,8 +68,8 @@ export function TeacherAgendaView({ lessons, calendarToken, baseUrl }: Props) {
           })}
         </div>
 
-        {/* Sync button */}
-        <div className="flex items-center gap-2">
+        {/* Sync buttons */}
+        <div className="flex items-center gap-2 flex-wrap">
           <a
             href={icsUrl}
             download="agenda-licaodecasa.ics"
