@@ -1,15 +1,8 @@
-import { prisma }           from "@/lib/prisma"
-import { PageHeader }       from "@/components/shared/page-header"
-import { UserForm }         from "@/app/(admin)/admin/usuarios/user-form"
-import { createUserAction } from "@/app/(admin)/admin/usuarios/actions"
+import { prisma }         from "@/lib/prisma"
+import { PageHeader }     from "@/components/shared/page-header"
+import { CreateUserForm } from "@/app/(admin)/admin/usuarios/novo/create-user-form"
 
-interface NovoUsuarioColabProps {
-  searchParams: Promise<{ error?: string }>
-}
-
-export default async function NovoUsuarioColabPage({ searchParams }: NovoUsuarioColabProps) {
-  const { error } = await searchParams
-
+export default async function NovoUsuarioColabPage() {
   const guardians = await prisma.guardian.findMany({
     include: { user: { select: { name: true } } },
     orderBy: { user: { name: "asc" } },
@@ -22,11 +15,10 @@ export default async function NovoUsuarioColabPage({ searchParams }: NovoUsuario
         description="Cadastre alunos, professores, responsáveis ou colaboradores"
         backHref="/colaborador/alunos"
       />
-      <UserForm
-        action={createUserAction}
-        error={error}
+      <CreateUserForm
         canCreateAdmin={false}
         guardians={guardians.map((g) => ({ id: g.id, name: g.user.name }))}
+        students={[]}
       />
     </div>
   )

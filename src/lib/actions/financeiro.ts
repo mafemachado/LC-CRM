@@ -47,29 +47,62 @@ export async function createStudentPackageAction(data: {
   totalLessons:   number
   pricePerLesson: number
   expiresInDays?: number
+  purchaseDate?:  string  // "YYYY-MM-DD" — para pacotes retroativos
+  isClosed?:      boolean // true → status EXHAUSTED, remainingLessons = 0
+  payment?: {
+    amount:  number
+    dueDate: string  // "YYYY-MM-DD"
+    paidAt?: string  // "YYYY-MM-DD" — define status como PAID se preenchido
+    method?: string
+  }
 }) {
   const session = await auth()
   if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
     throw new Error("Sem permissão")
   }
-  const expiresAt = data.expiresInDays
-    ? new Date(Date.now() + data.expiresInDays * 86_400_000)
-    : null
 
-  await prisma.lessonPackage.create({
-    data: {
-      studentId:        data.studentId,
-      totalLessons:     data.totalLessons,
-      remainingLessons: data.totalLessons,
-      pricePerLesson:   data.pricePerLesson,
-      expiresAt:        expiresAt ?? undefined,
-      status:           "ACTIVE",
-    },
+  const baseDate      = data.purchaseDate ? new Date(data.purchaseDate) : new Date()
+  const expiresAt     = data.expiresInDays
+    ? new Date(baseDate.getTime() + data.expiresInDays * 86_400_000)
+    : null
+  const status          = data.isClosed ? "EXHAUSTED" : "ACTIVE"
+  const remainingLessons = data.isClosed ? 0 : data.totalLessons
+
+  await prisma.$transaction(async (tx) => {
+    await tx.lessonPackage.create({
+      data: {
+        studentId:        data.studentId,
+        totalLessons:     data.totalLessons,
+        remainingLessons,
+        pricePerLesson:   data.pricePerLesson,
+        expiresAt:        expiresAt ?? undefined,
+        purchaseDate:     baseDate,
+        status,
+      },
+    })
+
+    if (data.payment) {
+      const { amount, dueDate, paidAt, method } = data.payment
+      const paidAtDate = paidAt ? new Date(paidAt) : undefined
+      await tx.payment.create({
+        data: {
+          studentId:   data.studentId,
+          amount,
+          dueDate:     new Date(dueDate),
+          paidAt:      paidAtDate ?? undefined,
+          method:      method || undefined,
+          status:      paidAtDate ? "PAID" : "PENDING",
+          description: `Pacote de ${data.totalLessons} aulas`,
+        },
+      })
+    }
   })
+
   revalidatePath(`/colaborador/alunos/${data.studentId}`)
   revalidatePath("/colaborador/financeiro")
   revalidatePath(`/admin/alunos/${data.studentId}`)
   revalidatePath("/admin/financeiro/pacotes")
+  revalidatePath("/admin/financeiro/pagamentos")
 }
 
 // ─── Registrar Pagamento ──────────────────────────────────────────────────────

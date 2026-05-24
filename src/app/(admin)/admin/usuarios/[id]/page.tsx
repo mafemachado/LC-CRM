@@ -9,12 +9,12 @@ import type { Role, TeacherMode, EducationLevel } from "@prisma/client"
 
 interface EditUserPageProps {
   params:       Promise<{ id: string }>
-  searchParams: Promise<{ error?: string }>
+  searchParams: Promise<{ error?: string; success?: string }>
 }
 
 export default async function EditUserPage({ params, searchParams }: EditUserPageProps) {
-  const { id }    = await params
-  const { error } = await searchParams
+  const { id }               = await params
+  const { error, success }   = await searchParams
 
   const [user, guardians] = await Promise.all([
     prisma.user.findUnique({
@@ -60,6 +60,12 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
         description={`Editando: ${user.name}`}
         backHref="/admin/usuarios"
       />
+
+      {success && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm">
+          {decodeURIComponent(success)}
+        </div>
+      )}
 
       <Card>
         <CardContent className="pt-6">
