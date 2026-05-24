@@ -17,6 +17,7 @@ import { ScheduleLessonDialog }               from "./_components/schedule-lesso
 import { PackageDialog }                      from "./_components/package-dialog"
 import { EditStudentDialog }                  from "./_components/edit-student-dialog"
 import { RegisterPastLessonDialog }           from "./_components/register-past-lesson-dialog"
+import { BatchPastLessonsDialog }             from "./_components/batch-past-lessons-dialog"
 import { AddPaymentDialog }                   from "./_components/add-payment-dialog"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -55,7 +56,7 @@ function StarRating({ rating }: { rating: number | null }) {
 
 const LESSON_STATUS = {
   SCHEDULED:  { label: "Agendada",   cls: "bg-amber-100 text-amber-700 border-amber-200"    },
-  CONFIRMED:  { label: "Confirmada", cls: "bg-[#219EBC]/10 text-[#219EBC] border-[#219EBC]/30" },
+  CONFIRMED:  { label: "Confirmada", cls: "bg-[#219EBC]/10 text-brand-blue border-brand-blue/30" },
   COMPLETED:  { label: "Realizada",  cls: "bg-slate-100 text-slate-600 border-slate-200"    },
   CANCELLED:  { label: "Cancelada",  cls: "bg-red-100 text-red-600 border-red-200"          },
   MISSED:     { label: "Faltou",     cls: "bg-orange-100 text-orange-700 border-orange-200" },
@@ -94,6 +95,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     nextStudent,
     totalStudents,
     teachersRaw,
+    allStudentsRaw,
   ] = await prisma.$transaction([
     prisma.student.findUnique({
       where: { id },
@@ -153,6 +155,12 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
         subjects: { select: { subject: { select: { id: true, name: true } } } },
       },
       orderBy: { user: { name: "asc" } },
+    }),
+    prisma.student.findMany({
+      where:   { id: { not: id } },
+      select:  { id: true, name: true },
+      orderBy: { name: "asc" },
+      take:    200,
     }),
   ])
 
@@ -366,7 +374,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                 href={`https://wa.me/55${whatsappPhone}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5 text-[#219EBC] border-[#219EBC]/30 hover:bg-[#219EBC]/10"}
+                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5 text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10"}
               >
                 <MessageCircle className="w-4 h-4" />
                 {guardianPhone ? "Resp." : "Aluno"}
@@ -536,6 +544,62 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
             </Card>
           )}
 
+          {/* Package history */}
+          {student.packages.length > 0 && (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="font-sub text-sm flex items-center gap-2">
+                  <BookOpen className="w-4 h-4 text-primary" />
+                  Histórico de Pacotes
+                  <span className="text-xs font-normal text-muted-foreground">
+                    ({student.packages.length} pacote{student.packages.length !== 1 ? "s" : ""})
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {[...student.packages].reverse().map((pkg, revIdx) => {
+                  const pkgNum  = student.packages.length - revIdx
+                  const total   = Number(pkg.pricePerLesson) * pkg.totalLessons
+                  const used    = pkg.totalLessons - pkg.remainingLessons
+                  const STATUS  = {
+                    ACTIVE:    { label: "Ativo",    cls: "bg-green-100 text-green-700 border-green-200" },
+                    EXPIRED:   { label: "Expirado", cls: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+                    EXHAUSTED: { label: "Esgotado", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+                  } as const
+                  const st = STATUS[pkg.status]
+                  return (
+                    <div key={pkg.id} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm">
+                      <div className="shrink-0 text-xs font-bold text-muted-foreground w-10">
+                        #{String(pkgNum).padStart(3, "0")}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${st.cls}`}>
+                            {st.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            {format(pkg.purchaseDate, "dd/MM/yyyy", { locale: ptBR })}
+                          </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {pkg.totalLessons} aulas · {used} usadas · {brl(Number(pkg.pricePerLesson))}/aula · total {brl(total)}
+                          {pkg.expiresAt && ` · vence ${format(pkg.expiresAt, "dd/MM/yyyy", { locale: ptBR })}`}
+                        </p>
+                      </div>
+                      <BatchPastLessonsDialog
+                        studentId={id}
+                        studentName={student.name}
+                        totalLessons={pkg.totalLessons}
+                        teachers={teachersForDialog.map(t => ({ id: t.id, name: t.name }))}
+                        subjects={subjectsForDialog}
+                      />
+                    </div>
+                  )
+                })}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Lesson history */}
           <Card>
             <CardHeader className="pb-3">
@@ -552,6 +616,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                     studentId={id}
                     teachers={teachersForDialog.map(t => ({ id: t.id, name: t.name }))}
                     subjects={subjectsForDialog}
+                    allStudents={allStudentsRaw}
                   />
                 </div>
               </div>
@@ -740,7 +805,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                     href={`https://wa.me/55${guardianPhone}`}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={buttonVariants({ variant: "outline", size: "sm" }) + " w-full justify-center text-[#219EBC] border-[#219EBC]/30 hover:bg-[#219EBC]/10 gap-1.5 mt-1 text-xs h-8"}
+                    className={buttonVariants({ variant: "outline", size: "sm" }) + " w-full justify-center text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 gap-1.5 mt-1 text-xs h-8"}
                   >
                     <MessageCircle className="w-3.5 h-3.5" />
                     WhatsApp

@@ -493,7 +493,9 @@ export async function createGroupLessonAction(data: {
   date:            string        // "YYYY-MM-DD"
   time:            string        // "HH:mm"
   modality:        "PRESENCIAL" | "ONLINE"
-  pricePerStudent: number        // valor avulso cobrado de cada aluno
+  pricePerStudent?: number       // valor uniforme por aluno (omita se usar studentPrices)
+  studentPrices?:  { studentId: string; price: number }[]  // preços individuais — sobrescreve pricePerStudent
+  statusOverride?: "COMPLETED" | "MISSED"  // para registro de aulas passadas em dupla
   duration?:       number
   teacherOnsite?:  boolean
 }) {
@@ -595,19 +597,21 @@ export async function createGroupLessonAction(data: {
         scheduledAt,
         duration,
         modality:      data.modality,
-        status:        isHistorical ? "COMPLETED" : "CONFIRMED",
+        status:        isHistorical ? (data.statusOverride ?? "COMPLETED") : "CONFIRMED",
         lessonType:    "GROUP",
         teacherOnsite,
-        priceOverride: data.pricePerStudent,
+        priceOverride: data.pricePerStudent ?? null,
         participants: { create: students.map((s) => ({ studentId: s.id })) },
       },
     }),
-    // Criar um pagamento por aluno (evento avulso, fora do pacote)
+    // Criar um pagamento por aluno — valor individual se studentPrices fornecido
     ...students.map((student) =>
       prisma.payment.create({
         data: {
           studentId:   student.id,
-          amount:      data.pricePerStudent,
+          amount:      data.studentPrices?.find(sp => sp.studentId === student.id)?.price
+                       ?? data.pricePerStudent
+                       ?? 0,
           dueDate:     scheduledAt,
           description: `Aula em grupo – ${subject.name} (${scheduledAtFmt})`,
           status:      "PENDING",
@@ -634,6 +638,45 @@ export async function createGroupLessonAction(data: {
   revalidatePath("/colaborador/agendamentos")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")
+}
+
+// ─── Registrar aulas passadas em lote (para pacotes retroativos) ─────────────
+
+export async function createBatchPastLessonsAction(data: {
+  studentId: string
+  teacherId: string
+  subjectId: string
+  modality:  "PRESENCIAL" | "ONLINE"
+  duration?: number
+  lessons:   { date: string; time: string; status: "COMPLETED" | "MISSED" }[]
+}) {
+  await requireCollaboratorOrAdmin()
+  if (!data.lessons.length) return
+
+  const duration = data.duration ?? 60
+
+  await prisma.$transaction(
+    data.lessons.map(({ date, time, status }) => {
+      const scheduledAt = new Date(`${date}T${time}:00`)
+      return prisma.lesson.create({
+        data: {
+          teacherId:    data.teacherId,
+          subjectId:    data.subjectId,
+          scheduledAt,
+          duration,
+          modality:     data.modality,
+          teacherOnsite: data.modality === "PRESENCIAL",
+          status,
+          participants: { create: { studentId: data.studentId } },
+        },
+      })
+    })
+  )
+
+  revalidatePath(`/colaborador/alunos/${data.studentId}`)
+  revalidatePath(`/admin/usuarios/${data.studentId}`)
+  revalidatePath("/colaborador/agenda")
+  revalidatePath("/admin/agenda")
 }
 
 // ─── Criar Aulão ──────────────────────────────────────────────────────────────
