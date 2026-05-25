@@ -175,7 +175,9 @@ export function EditPackageDialog({ pkg, studentId }: Props) {
               <Label className="text-xs">Status</Label>
               <Select value={status} onValueChange={v => setStatus(v as typeof status)}>
                 <SelectTrigger className="h-9 text-sm">
-                  <SelectValue />
+                  <SelectValue>
+                    {status === "ACTIVE" ? "Ativo" : status === "EXHAUSTED" ? "Esgotado" : "Expirado"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIVE">Ativo</SelectItem>

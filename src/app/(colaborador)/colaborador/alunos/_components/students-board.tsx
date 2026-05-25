@@ -29,18 +29,11 @@ interface ColumnDef {
 
 const COLUMNS: ColumnDef[] = [
   {
-    id:          "atencao",
-    title:       "Atenção imediata",
-    description: "0–1 aula ou vencido",
-    topBorder:   "border-t-red-400",
-    headerBg:    "bg-red-50 dark:bg-red-950/20",
-  },
-  {
-    id:          "renovar",
-    title:       "Renovar em breve",
-    description: "2–4 aulas restantes",
-    topBorder:   "border-t-yellow-400",
-    headerBg:    "bg-yellow-50 dark:bg-yellow-950/20",
+    id:          "novos",
+    title:       "Recém-cadastrados",
+    description: "sem pacote ativo",
+    topBorder:   "border-t-blue-400",
+    headerBg:    "bg-blue-50 dark:bg-blue-950/20",
   },
   {
     id:          "em-dia",
@@ -50,11 +43,18 @@ const COLUMNS: ColumnDef[] = [
     headerBg:    "bg-green-50 dark:bg-green-950/20",
   },
   {
-    id:          "novos",
-    title:       "Recém-cadastrados",
-    description: "sem pacote ativo",
-    topBorder:   "border-t-blue-400",
-    headerBg:    "bg-blue-50 dark:bg-blue-950/20",
+    id:          "renovar",
+    title:       "Renovar em breve",
+    description: "2–4 aulas restantes",
+    topBorder:   "border-t-yellow-400",
+    headerBg:    "bg-yellow-50 dark:bg-yellow-950/20",
+  },
+  {
+    id:          "atencao",
+    title:       "Atenção imediata",
+    description: "0–1 aula ou vencido",
+    topBorder:   "border-t-red-400",
+    headerBg:    "bg-red-50 dark:bg-red-950/20",
   },
 ]
 
@@ -142,7 +142,7 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
             href={`https://wa.me/55${waPhone}`}
             target="_blank"
             rel="noopener noreferrer"
-            className={buttonVariants({ variant: "outline", size: "sm" }) + " text-[#219EBC] border-[#219EBC]/30 hover:bg-[#219EBC]/10 h-8 text-xs px-2"}
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " text-brand-blue border-brand-blue/30 hover:bg-brand-blue/10 h-8 text-xs px-2"}
           >
             <MessageCircle className="w-3 h-3 mr-1" />
             {guardianPhone ? "Resp." : "Aluno"}
@@ -243,7 +243,7 @@ export function StudentsBoard({
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[180px]">
+        <div className="relative flex-1 min-w-45">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Aluno, responsável, telefone..."

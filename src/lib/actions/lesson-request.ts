@@ -649,11 +649,9 @@ export async function createGroupLessonAction(data: {
 export async function createBatchPastLessonsAction(data: {
   studentId: string
   packageId: string
-  teacherId: string
-  subjectId: string
   modality:  "PRESENCIAL" | "ONLINE"
   duration?: number
-  lessons:   { date: string; time: string; status: "COMPLETED" | "MISSED" }[]
+  lessons:   { date: string; time: string; status: "COMPLETED" | "MISSED"; teacherId: string; subjectId: string }[]
 }) {
   await requireCollaboratorOrAdmin()
   if (!data.lessons.length) return
@@ -662,12 +660,12 @@ export async function createBatchPastLessonsAction(data: {
   const count    = data.lessons.length
 
   await prisma.$transaction([
-    ...data.lessons.map(({ date, time, status }) => {
+    ...data.lessons.map(({ date, time, status, teacherId, subjectId }) => {
       const scheduledAt = new Date(`${date}T${time}:00`)
       return prisma.lesson.create({
         data: {
-          teacherId:    data.teacherId,
-          subjectId:    data.subjectId,
+          teacherId,
+          subjectId,
           scheduledAt,
           duration,
           modality:     data.modality,

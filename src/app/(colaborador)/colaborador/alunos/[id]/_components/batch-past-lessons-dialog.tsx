@@ -12,13 +12,20 @@ import { Input }    from "@/components/ui/input"
 import { Label }    from "@/components/ui/label"
 import {
   CalendarDays, Loader2, CheckCircle2, XCircle,
-  MonitorPlay, School, Plus, Trash2,
+  MonitorPlay, School, Plus, Trash2, Wand2,
 } from "lucide-react"
 
 interface Subject { id: string; name: string }
 interface Teacher { id: string; name: string; subjects: Subject[] }
 type LessonStatus = "COMPLETED" | "MISSED"
-interface LessonRow { date: string; time: string; status: LessonStatus }
+
+interface LessonRow {
+  date:      string
+  time:      string
+  teacherId: string
+  subjectId: string
+  status:    LessonStatus
+}
 
 interface Props {
   studentId:    string
@@ -28,78 +35,108 @@ interface Props {
   teachers:     Teacher[]
 }
 
-function emptyRow(): LessonRow {
-  return { date: "", time: "08:00", status: "COMPLETED" }
+// 07:00 to 22:00 in 30-min steps
+const TIME_OPTIONS = Array.from({ length: 31 }, (_, i) => {
+  const total = 7 * 60 + i * 30
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+})
+
+const WEEKDAYS = [
+  { label: "Seg", value: 1 },
+  { label: "Ter", value: 2 },
+  { label: "Qua", value: 3 },
+  { label: "Qui", value: 4 },
+  { label: "Sex", value: 5 },
+  { label: "Sáb", value: 6 },
+  { label: "Dom", value: 0 },
+]
+
+function emptyRow(teachers: Teacher[]): LessonRow {
+  const t = teachers[0]
+  return { date: "", time: "08:00", teacherId: t?.id ?? "", subjectId: t?.subjects[0]?.id ?? "", status: "COMPLETED" }
+}
+
+// Returns the N most recent past dates (incl. today) for the given weekdays, oldest first
+function generatePastDates(weekdays: number[], count: number): string[] {
+  if (!weekdays.length || count <= 0) return []
+  const dates: string[] = []
+  const cursor = new Date()
+  cursor.setHours(0, 0, 0, 0)
+  while (dates.length < count) {
+    if (weekdays.includes(cursor.getDay())) {
+      dates.push(cursor.toISOString().slice(0, 10))
+    }
+    cursor.setDate(cursor.getDate() - 1)
+  }
+  return dates.reverse()
 }
 
 export function BatchPastLessonsDialog({
   studentId, packageId, studentName, totalLessons, teachers,
 }: Props) {
   const router = useRouter()
-  const [open, setOpen]   = useState(false)
-  const [pending, start]  = useTransition()
+  const [open,    setOpen]   = useState(false)
+  const [pending, start]     = useTransition()
 
-  const [teacherId, setTeacherId] = useState(teachers[0]?.id ?? "")
-  const [subjectId, setSubjectId] = useState(teachers[0]?.subjects[0]?.id ?? "")
-  const [modality,  setModality]  = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
-  const [duration,  setDuration]  = useState("60")
-  const [lessons,   setLessons]   = useState<LessonRow[]>(() =>
-    Array.from({ length: totalLessons }, emptyRow)
-  )
-
-  const selectedTeacher   = teachers.find(t => t.id === teacherId)
-  const availableSubjects = selectedTeacher?.subjects ?? []
-
-  function handleTeacherChange(tid: string) {
-    setTeacherId(tid)
-    const t = teachers.find(x => x.id === tid)
-    const subs = t?.subjects ?? []
-    if (!subs.find(s => s.id === subjectId)) {
-      setSubjectId(subs[0]?.id ?? "")
-    }
-  }
+  const [modality,     setModality]     = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
+  const [duration,     setDuration]     = useState("60")
+  const [lessons,      setLessons]      = useState<LessonRow[]>([])
+  const [quickDays,    setQuickDays]    = useState<number[]>([])
+  const [defaultTime,  setDefaultTime]  = useState("08:00")
 
   function handleOpen(v: boolean) {
     if (v) {
-      const firstTeacher = teachers[0]
-      setTeacherId(firstTeacher?.id ?? "")
-      setSubjectId(firstTeacher?.subjects[0]?.id ?? "")
       setModality("PRESENCIAL")
       setDuration("60")
-      setLessons(Array.from({ length: totalLessons }, emptyRow))
+      setQuickDays([])
+      setDefaultTime("08:00")
+      setLessons(Array.from({ length: totalLessons }, () => emptyRow(teachers)))
     }
     setOpen(v)
   }
 
   function updateRow(i: number, field: keyof LessonRow, value: string) {
-    setLessons(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))
+    setLessons(prev => prev.map((r, idx) => {
+      if (idx !== i) return r
+      const updated = { ...r, [field]: value }
+      if (field === "teacherId") {
+        const t = teachers.find(x => x.id === value)
+        updated.subjectId = t?.subjects[0]?.id ?? ""
+      }
+      return updated
+    }))
   }
 
-  function addRow() {
-    setLessons(prev => [...prev, emptyRow()])
+  function addRow() { setLessons(prev => [...prev, emptyRow(teachers)]) }
+  function removeRow(i: number) { setLessons(prev => prev.filter((_, idx) => idx !== i)) }
+
+  function toggleQuickDay(day: number) {
+    setQuickDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day])
   }
 
-  function removeRow(i: number) {
-    setLessons(prev => prev.filter((_, idx) => idx !== i))
+  function applyQuickFill() {
+    const emptyCount = lessons.filter(r => !r.date).length || lessons.length
+    const dates = generatePastDates(quickDays, emptyCount)
+    let di = 0
+    setLessons(prev => prev.map(row => {
+      if (!row.date && di < dates.length) return { ...row, date: dates[di++], time: defaultTime }
+      return row
+    }))
+  }
+
+  function applyTimeToAll() {
+    setLessons(prev => prev.map(row => ({ ...row, time: defaultTime })))
   }
 
   function submit() {
     const toRegister = lessons.filter(r => r.date.trim())
-    if (!toRegister.length) { toast.error("Preencha ao menos uma data"); return }
-    if (!teacherId)         { toast.error("Selecione o professor"); return }
-    if (!subjectId)         { toast.error("Selecione a matéria"); return }
+    if (!toRegister.length)                   { toast.error("Preencha ao menos uma data"); return }
+    if (toRegister.some(r => !r.teacherId))   { toast.error("Selecione o professor em todas as aulas"); return }
+    if (toRegister.some(r => !r.subjectId))   { toast.error("Selecione a matéria em todas as aulas"); return }
 
     start(async () => {
       try {
-        await createBatchPastLessonsAction({
-          studentId,
-          packageId,
-          teacherId,
-          subjectId,
-          modality,
-          duration: parseInt(duration) || 60,
-          lessons:  toRegister,
-        })
+        await createBatchPastLessonsAction({ studentId, packageId, modality, duration: parseInt(duration) || 60, lessons: toRegister })
         const n = toRegister.length
         toast.success(`${n} aula${n !== 1 ? "s" : ""} registrada${n !== 1 ? "s" : ""}`)
         setOpen(false)
@@ -114,18 +151,13 @@ export function BatchPastLessonsDialog({
 
   return (
     <>
-      <Button
-        variant="outline"
-        size="sm"
-        className="gap-1.5 h-7 text-xs"
-        onClick={() => handleOpen(true)}
-      >
+      <Button variant="outline" size="sm" className="gap-1.5 h-7 text-xs" onClick={() => handleOpen(true)}>
         <CalendarDays className="w-3.5 h-3.5" />
         Registrar aulas
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sub flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-primary" />
@@ -134,35 +166,7 @@ export function BatchPastLessonsDialog({
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            {/* Professor e Matéria */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs">Professor *</Label>
-                <select
-                  value={teacherId}
-                  onChange={e => handleTeacherChange(e.target.value)}
-                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                >
-                  <option value="">Selecione</option>
-                  {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs">Matéria *</Label>
-                <select
-                  value={subjectId}
-                  onChange={e => setSubjectId(e.target.value)}
-                  className="flex h-9 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                  disabled={availableSubjects.length === 0}
-                >
-                  <option value="">Selecione</option>
-                  {availableSubjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
+            {/* Global: duração + modalidade */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs">Duração (min)</Label>
@@ -196,69 +200,135 @@ export function BatchPastLessonsDialog({
               </div>
             </div>
 
-            {/* Linhas de datas */}
-            <div className="border-t pt-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-                  Datas das aulas
-                </p>
-                <span className="text-xs text-muted-foreground">
-                  {filled} de {lessons.length} preenchidas
-                </span>
+            {/* Quick-fill */}
+            <div className="rounded-xl border border-dashed bg-muted/30 p-3 space-y-3">
+              <div className="flex items-center gap-2">
+                <Wand2 className="w-3.5 h-3.5 text-primary" />
+                <span className="text-xs font-medium">Preenchimento rápido de datas</span>
               </div>
 
-              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {lessons.map((row, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <Input
-                      type="date"
-                      max={new Date().toISOString().slice(0, 10)}
-                      value={row.date}
-                      onChange={e => updateRow(i, "date", e.target.value)}
-                      className="h-8 text-sm flex-1"
-                    />
-                    <Input
-                      type="time"
-                      value={row.time}
-                      onChange={e => updateRow(i, "time", e.target.value)}
-                      className="h-8 text-sm w-24 shrink-0"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => updateRow(i, "status", row.status === "COMPLETED" ? "MISSED" : "COMPLETED")}
-                      className={`h-8 px-2 rounded-lg border text-xs font-medium shrink-0 transition-colors ${
-                        row.status === "COMPLETED"
-                          ? "bg-green-100 text-green-700 border-green-300"
-                          : "bg-red-100 text-red-700 border-red-300"
-                      }`}
-                      title="Clique para alternar realizada/falta"
-                    >
-                      {row.status === "COMPLETED"
-                        ? <CheckCircle2 className="w-3.5 h-3.5" />
-                        : <XCircle className="w-3.5 h-3.5" />
-                      }
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeRow(i)}
-                      className="h-8 w-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0">Dias da semana:</span>
+                {WEEKDAYS.map(d => (
+                  <button
+                    key={d.value}
+                    type="button"
+                    onClick={() => toggleQuickDay(d.value)}
+                    className={`text-xs px-2.5 py-1 rounded-full border font-medium transition-colors ${
+                      quickDays.includes(d.value)
+                        ? "bg-primary text-white border-primary"
+                        : "bg-background text-muted-foreground border-border hover:border-primary/50"
+                    }`}
+                  >
+                    {d.label}
+                  </button>
                 ))}
               </div>
 
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full gap-1.5 text-xs h-8"
-                onClick={addRow}
-              >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-muted-foreground shrink-0">Horário padrão:</span>
+                <select
+                  value={defaultTime}
+                  onChange={e => setDefaultTime(e.target.value)}
+                  className="h-8 rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <Button type="button" size="sm" variant="outline" className="h-8 text-xs" onClick={applyTimeToAll}>
+                  Aplicar horário a todas
+                </Button>
+                <Button
+                  type="button" size="sm" className="h-8 text-xs gap-1.5"
+                  disabled={!quickDays.length}
+                  onClick={applyQuickFill}
+                >
+                  <Wand2 className="w-3 h-3" /> Gerar datas
+                </Button>
+              </div>
+            </div>
+
+            {/* Lesson rows */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Datas das aulas</p>
+                <span className="text-xs text-muted-foreground">{filled} de {lessons.length} preenchidas</span>
+              </div>
+
+              <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {lessons.map((row, i) => {
+                  const rowTeacher  = teachers.find(t => t.id === row.teacherId)
+                  const rowSubjects = rowTeacher?.subjects ?? []
+                  return (
+                    <div key={i} className="rounded-xl border bg-card p-2.5 space-y-2">
+                      {/* Linha 1: número, data, horário, status, excluir */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
+                          {String(i + 1).padStart(2, "0")}
+                        </span>
+                        <Input
+                          type="date"
+                          max={new Date().toISOString().slice(0, 10)}
+                          value={row.date}
+                          onChange={e => updateRow(i, "date", e.target.value)}
+                          className="h-8 text-sm flex-1"
+                        />
+                        <select
+                          value={row.time}
+                          onChange={e => updateRow(i, "time", e.target.value)}
+                          className="h-8 rounded-lg border border-input bg-background px-2 text-xs shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => updateRow(i, "status", row.status === "COMPLETED" ? "MISSED" : "COMPLETED")}
+                          title={row.status === "COMPLETED" ? "Realizada — clique para marcar como falta" : "Falta — clique para marcar como realizada"}
+                          className={`h-8 px-2 rounded-lg border text-xs font-medium shrink-0 transition-colors ${
+                            row.status === "COMPLETED"
+                              ? "bg-green-100 text-green-700 border-green-300"
+                              : "bg-red-100 text-red-700 border-red-300"
+                          }`}
+                        >
+                          {row.status === "COMPLETED"
+                            ? <CheckCircle2 className="w-3.5 h-3.5" />
+                            : <XCircle className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeRow(i)}
+                          className="h-8 w-8 flex items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-destructive hover:border-destructive transition-colors shrink-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Linha 2: professor e matéria */}
+                      <div className="flex gap-2 pl-7">
+                        <select
+                          value={row.teacherId}
+                          onChange={e => updateRow(i, "teacherId", e.target.value)}
+                          className="h-8 flex-1 rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+                        >
+                          <option value="">Professor</option>
+                          {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                        <select
+                          value={row.subjectId}
+                          onChange={e => updateRow(i, "subjectId", e.target.value)}
+                          disabled={rowSubjects.length === 0}
+                          className="h-8 flex-1 rounded-lg border border-input bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                        >
+                          <option value="">Matéria</option>
+                          {rowSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <Button type="button" variant="outline" size="sm" className="w-full gap-1.5 text-xs h-8" onClick={addRow}>
                 <Plus className="w-3.5 h-3.5" /> Adicionar linha
               </Button>
             </div>

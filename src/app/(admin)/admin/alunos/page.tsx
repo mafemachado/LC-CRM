@@ -11,7 +11,10 @@ export default async function AdminAlunosPage() {
         guardian: { include: { user: true } },
         packages: {
           where:   { status: { in: ["ACTIVE", "EXHAUSTED"] } },
-          orderBy: { purchaseDate: "desc" },
+          orderBy: [
+            { status: "asc" },        // ACTIVE sorts before EXHAUSTED in enum definition
+            { purchaseDate: "desc" }, // most recent within same status
+          ],
           take:    1,
         },
         participations: {

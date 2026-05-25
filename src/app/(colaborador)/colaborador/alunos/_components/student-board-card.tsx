@@ -207,13 +207,30 @@ export function StudentBoardCard({ student, column, detailBasePath }: StudentBoa
         )}
       </div>
 
-      {/* Action button */}
-      <Link
-        href={detailHref}
-        className={`w-full text-center text-xs font-semibold py-1.5 rounded-lg transition-colors ${action.cls}`}
-      >
-        {action.label}
-      </Link>
+      {/* Action button(s) */}
+      {action.label === "Detalhes" ? (
+        <Link
+          href={detailHref}
+          className={`w-full text-center text-xs font-semibold py-1.5 rounded-lg transition-colors ${action.cls}`}
+        >
+          {action.label}
+        </Link>
+      ) : (
+        <div className="flex gap-2">
+          <Link
+            href={detailHref}
+            className="flex-1 text-center text-xs font-semibold py-1.5 rounded-lg transition-colors border border-brand-blue text-brand-blue hover:bg-brand-blue/10 bg-transparent"
+          >
+            Detalhes
+          </Link>
+          <Link
+            href={detailHref}
+            className={`flex-1 text-center text-xs font-semibold py-1.5 rounded-lg transition-colors ${action.cls}`}
+          >
+            {action.label}
+          </Link>
+        </div>
+      )}
     </div>
   )
 }
