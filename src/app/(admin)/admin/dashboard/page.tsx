@@ -186,16 +186,10 @@ async function getOpsData(periodo: Periodo) {
 
   const receitaMes     = sumPaid(start, end)
   const receitaPrevMes = sumPaid(prevStart, prevEnd)
-  const receitaGoal    = receitaPrevMes > 0
-    ? Math.round(receitaPrevMes * 1.1)
-    : Math.max(Math.round(receitaMes * 1.2), 1000)
   const receitaSpark   = chartPoints.map((m) => sumPaid(m.start, m.end))
   const receitaDeltaNum = receitaPrevMes > 0
     ? Math.round(((receitaMes - receitaPrevMes) / receitaPrevMes) * 100)
     : null
-
-  // meta por barra do gráfico: se isMonthly, a meta já é mensal; caso contrário, divide pelo nº de pontos
-  const chartMeta = isMonthly ? receitaGoal : Math.round(receitaGoal / chartPoints.length)
 
   // ── Lessons ─────────────────────────────────────────────────────────────────
   const countLessons = (status: string, s: Date, e: Date) =>
@@ -203,11 +197,57 @@ async function getOpsData(periodo: Periodo) {
 
   const aulasMes     = countLessons("COMPLETED", start, end)
   const aulasPrevMes = countLessons("COMPLETED", prevStart, prevEnd)
-  const aulasGoal    = aulasPrevMes > 0 ? Math.round(aulasPrevMes * 1.1) : Math.max(Math.round(aulasMes * 1.2), 10)
   const aulasSpark   = chartPoints.map((m) => countLessons("COMPLETED", m.start, m.end))
   const aulasDeltaNum = aulasPrevMes > 0
     ? Math.round(((aulasMes - aulasPrevMes) / aulasPrevMes) * 100)
     : null
+
+  // ── Fetch stored goals for chart months ──────────────────────────────────────
+  const monthsNeeded = chartPoints.map((m) => ({
+    year:  m.start.getFullYear(),
+    month: m.start.getMonth() + 1,
+  }))
+  const storedGoals = await prisma.monthlyGoal.findMany({
+    where: {
+      OR: monthsNeeded.map(({ year, month }) => ({ year, month })),
+    },
+  })
+  const storedGoalMap = new Map(
+    storedGoals.map((g) => [`${g.year}-${g.month}`, g])
+  )
+
+  // Per-chart-point meta (stored or auto-calc based on that month's prev revenue)
+  const chartData = chartPoints.map((m) => {
+    const key  = `${m.start.getFullYear()}-${m.start.getMonth() + 1}`
+    const sg   = storedGoalMap.get(key)
+    let meta: number
+    if (sg?.revenueGoal != null) {
+      meta = Number(sg.revenueGoal)
+    } else {
+      const prevS = new Date(m.start); prevS.setMonth(prevS.getMonth() - 1)
+      const prevE = new Date(m.end);   prevE.setMonth(prevE.getMonth() - 1)
+      const prev  = sumPaid(prevS, prevE)
+      const cur   = sumPaid(m.start, m.end)
+      meta = prev > 0 ? Math.round(prev * 1.1) : Math.max(Math.round(cur * 1.2), 1000)
+    }
+    return { m: m.label, v: sumPaid(m.start, m.end), meta }
+  })
+
+  // KPI goals — for the primary period month
+  const primaryKey  = `${start.getFullYear()}-${start.getMonth() + 1}`
+  const primaryGoal = storedGoalMap.get(primaryKey)
+
+  const receitaGoal = primaryGoal?.revenueGoal != null
+    ? Number(primaryGoal.revenueGoal)
+    : receitaPrevMes > 0
+      ? Math.round(receitaPrevMes * 1.1)
+      : Math.max(Math.round(receitaMes * 1.2), 1000)
+
+  const aulasGoal = primaryGoal?.lessonsGoal != null
+    ? primaryGoal.lessonsGoal
+    : aulasPrevMes > 0 ? Math.round(aulasPrevMes * 1.1) : Math.max(Math.round(aulasMes * 1.2), 10)
+
+  const alunosGoal = primaryGoal?.studentsGoal ?? null
 
   // ── Students ─────────────────────────────────────────────────────────────────
   const alunosSpark = chartPoints.map((m) =>
@@ -280,7 +320,7 @@ async function getOpsData(periodo: Periodo) {
   return {
     receitaMes, receitaGoal, receitaSpark, receitaDeltaNum,
     aulasMes, aulasGoal, aulasSpark, aulasDeltaNum,
-    alunosAtivos, alunosSpark,
+    alunosAtivos, alunosGoal, alunosSpark,
     inadimplenciaTotal, inadimplenciaAlunos, inadimplenciaSpark,
     chartData, atrasados, alertas, proximas,
     periodLabel: raw.charAt(0).toUpperCase() + raw.slice(1),
@@ -430,9 +470,14 @@ export default async function AdminOpsPage({
           value={String(d.alunosAtivos)}
           delta="ativos"
           deltaPos={null}
-          sub={`${d.inadimplenciaAlunos} inadimplente${d.inadimplenciaAlunos !== 1 ? "s" : ""}`}
+          sub={
+            d.alunosGoal != null
+              ? `Meta ${d.alunosGoal} · ${pct(d.alunosGoal > 0 ? d.alunosAtivos / d.alunosGoal : 0)}`
+              : `${d.inadimplenciaAlunos} inadimplente${d.inadimplenciaAlunos !== 1 ? "s" : ""}`
+          }
           spark={d.alunosSpark}
           sparkColor="var(--success)"
+          goalProgress={d.alunosGoal != null && d.alunosGoal > 0 ? d.alunosAtivos / d.alunosGoal : undefined}
         />
         <KpiCell
           label="Inadimplência"

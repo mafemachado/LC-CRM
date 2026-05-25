@@ -403,6 +403,21 @@ model TeacherPayout {
   @@map("teacher_payouts")
 }
 
+// ─── Metas Mensais ────────────────────────────────────────────────────────────
+
+model MonthlyGoal {
+  id           String   @id @default(cuid())
+  year         Int
+  month        Int      // 1–12
+  revenueGoal  Decimal? @db.Decimal(10, 2)
+  lessonsGoal  Int?
+  studentsGoal Int?
+  updatedAt    DateTime @updatedAt
+
+  @@unique([year, month])
+  @@map("monthly_goals")
+}
+
 // ─── Configurações do Sistema ─────────────────────────────────────────────────
 
 model SystemConfig {

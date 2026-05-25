@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, Users, CalendarDays, DollarSign,
   BarChart3, Settings, BookOpen, ClipboardList,
-  GraduationCap, Wallet, FolderOpen, PenLine, Clock, School, UserPlus, Library,
+  GraduationCap, Wallet, FolderOpen, PenLine, Clock, School, UserPlus, Library, Target,
 } from "lucide-react"
 import type { Role } from "@prisma/client"
 
@@ -30,6 +30,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
     { type: "section", label: "Gestão" },
     { label: "Financeiro", href: "/admin/financeiro", icon: DollarSign      },
     { label: "Relatórios", href: "/admin/relatorios", icon: BarChart3       },
+    { label: "Metas",      href: "/admin/metas",      icon: Target          },
     { label: "Config.",    href: "/admin/config",     icon: Settings        },
   ],
   COLLABORATOR: [
