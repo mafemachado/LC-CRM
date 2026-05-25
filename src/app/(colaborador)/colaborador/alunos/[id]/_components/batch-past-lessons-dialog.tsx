@@ -22,6 +22,7 @@ interface LessonRow { date: string; time: string; status: LessonStatus }
 
 interface Props {
   studentId:    string
+  packageId:    string
   studentName:  string
   totalLessons: number
   teachers:     Teacher[]
@@ -32,7 +33,7 @@ function emptyRow(): LessonRow {
 }
 
 export function BatchPastLessonsDialog({
-  studentId, studentName, totalLessons, teachers,
+  studentId, packageId, studentName, totalLessons, teachers,
 }: Props) {
   const router = useRouter()
   const [open, setOpen]   = useState(false)
@@ -92,6 +93,7 @@ export function BatchPastLessonsDialog({
       try {
         await createBatchPastLessonsAction({
           studentId,
+          packageId,
           teacherId,
           subjectId,
           modality,

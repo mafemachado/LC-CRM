@@ -594,6 +594,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                       </div>
                       <BatchPastLessonsDialog
                         studentId={id}
+                        packageId={pkg.id}
                         studentName={student.name}
                         totalLessons={pkg.totalLessons}
                         teachers={teachersForDialog}

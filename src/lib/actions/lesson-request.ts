@@ -648,6 +648,7 @@ export async function createGroupLessonAction(data: {
 
 export async function createBatchPastLessonsAction(data: {
   studentId: string
+  packageId: string
   teacherId: string
   subjectId: string
   modality:  "PRESENCIAL" | "ONLINE"
@@ -658,9 +659,10 @@ export async function createBatchPastLessonsAction(data: {
   if (!data.lessons.length) return
 
   const duration = data.duration ?? 60
+  const count    = data.lessons.length
 
-  await prisma.$transaction(
-    data.lessons.map(({ date, time, status }) => {
+  await prisma.$transaction([
+    ...data.lessons.map(({ date, time, status }) => {
       const scheduledAt = new Date(`${date}T${time}:00`)
       return prisma.lesson.create({
         data: {
@@ -674,8 +676,23 @@ export async function createBatchPastLessonsAction(data: {
           participants: { create: { studentId: data.studentId } },
         },
       })
+    }),
+    prisma.lessonPackage.update({
+      where: { id: data.packageId },
+      data: {
+        remainingLessons: { decrement: count },
+      },
+    }),
+  ])
+
+  // Recalculate status after decrement
+  const pkg = await prisma.lessonPackage.findUnique({ where: { id: data.packageId } })
+  if (pkg && pkg.remainingLessons <= 0) {
+    await prisma.lessonPackage.update({
+      where: { id: data.packageId },
+      data:  { remainingLessons: 0, status: "EXHAUSTED" },
     })
-  )
+  }
 
   revalidatePath(`/colaborador/alunos/${data.studentId}`)
   revalidatePath(`/admin/usuarios/${data.studentId}`)
