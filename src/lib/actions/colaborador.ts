@@ -132,6 +132,8 @@ export async function createStudentWithGuardianAction(formData: FormData) {
 
   let createdStudentId = ""
 
+  const gPass = guardianName ? await bcrypt.hash(`Resp@${Math.random().toString(36).slice(2, 8)}`, 12) : ""
+
   await prisma.$transaction(async (tx) => {
     const studentUser = await tx.user.create({
       data: { name, email, password: hashed, phone, role: "STUDENT", active: !inactive },
@@ -141,7 +143,6 @@ export async function createStudentWithGuardianAction(formData: FormData) {
 
     if (guardianName) {
       const gEmail = guardianEmail || `resp.${Date.now()}@interno.lcasa`
-      const gPass  = await bcrypt.hash(`Resp@${Math.random().toString(36).slice(2, 8)}`, 12)
 
       const existingGuardian = guardianEmail
         ? await tx.user.findUnique({ where: { email: guardianEmail } })

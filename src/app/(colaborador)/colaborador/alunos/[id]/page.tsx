@@ -375,6 +375,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
               studentId={id}
               studentName={student.name}
               teachers={teachersForDialog}
+              hasBalance={!!activePkg && activePkg.remainingLessons > 0}
             />
             {whatsappPhone && (
               <a

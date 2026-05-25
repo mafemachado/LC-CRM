@@ -27,9 +27,10 @@ interface Props {
   studentId:   string
   studentName: string
   teachers:    Teacher[]
+  hasBalance?: boolean
 }
 
-export function ScheduleLessonDialog({ studentId, studentName, teachers }: Props) {
+export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBalance = true }: Props) {
   const router = useRouter()
   const [open, setOpen]         = useState(false)
   const [teacherId, setTeacher] = useState("")
@@ -77,7 +78,13 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers }: Props
 
   return (
     <>
-      <Button size="sm" className="gap-1.5" onClick={() => handleOpen(true)}>
+      <Button
+        size="sm"
+        className="gap-1.5"
+        onClick={() => handleOpen(true)}
+        disabled={!hasBalance}
+        title={!hasBalance ? "Aluno sem saldo — adicione um pacote primeiro" : undefined}
+      >
         <Plus className="w-4 h-4" />
         Marcar aula
       </Button>
