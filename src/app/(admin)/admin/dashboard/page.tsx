@@ -265,9 +265,6 @@ async function getOpsData(periodo: Periodo) {
       .reduce((s, p) => s + Number(p.amount), 0)
   )
 
-  // ── Chart data ───────────────────────────────────────────────────────────────
-  const chartData = chartPoints.map((m) => ({ m: m.label, v: sumPaid(m.start, m.end), meta: chartMeta }))
-
   // ── Atrasados ────────────────────────────────────────────────────────────────
   const atrasados = overduePayments.map((p) => ({
     id:      p.id,
