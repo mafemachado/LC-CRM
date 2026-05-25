@@ -15,6 +15,11 @@ import {
   Users, Plus, Trash2, DollarSign,
 } from "lucide-react"
 
+const TIME_OPTIONS = Array.from({ length: 31 }, (_, i) => {
+  const total = 7 * 60 + i * 30
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`
+})
+
 interface Subject { id: string; name: string }
 interface Teacher { id: string; name: string; subjects: Subject[] }
 interface Student { id: string; name: string }
@@ -189,7 +194,7 @@ export function RegisterPastLessonDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sub flex items-center gap-2">
               <History className="w-4 h-4 text-primary" />
@@ -278,23 +283,23 @@ export function RegisterPastLessonDialog({
                         </button>
                       )}
                     </div>
+                    <select
+                      value={entry.studentId}
+                      onChange={e => updateGroupEntry(i, "studentId", e.target.value)}
+                      className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Selecione</option>
+                      {otherStudents.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
                     <div className="flex gap-2">
-                      <select
-                        value={entry.studentId}
-                        onChange={e => updateGroupEntry(i, "studentId", e.target.value)}
-                        className="flex-1 h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-                      >
-                        <option value="">Selecione</option>
-                        {otherStudents.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
                       <Input
                         type="number" min={0} step="0.01"
                         value={entry.price}
                         onChange={e => updateGroupEntry(i, "price", e.target.value)}
                         placeholder="R$ valor"
-                        className="h-9 w-24 shrink-0"
+                        className="h-9 flex-1 min-w-0"
                       />
                       <button
                         type="button"
@@ -335,7 +340,13 @@ export function RegisterPastLessonDialog({
               </div>
               <div className="space-y-1.5">
                 <Label>Horário</Label>
-                <Input type="time" value={time} onChange={e => setTime(e.target.value)} />
+                <select
+                  value={time}
+                  onChange={e => setTime(e.target.value)}
+                  className="flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
               </div>
             </div>
 

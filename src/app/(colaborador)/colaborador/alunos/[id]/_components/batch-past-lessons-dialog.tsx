@@ -157,7 +157,7 @@ export function BatchPastLessonsDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sub flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-primary" />
@@ -261,7 +261,7 @@ export function BatchPastLessonsDialog({
                   return (
                     <div key={i} className="rounded-xl border bg-card p-2.5 space-y-2">
                       {/* Linha 1: número, data, horário, status, excluir */}
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <span className="text-xs text-muted-foreground w-5 shrink-0 text-right">
                           {String(i + 1).padStart(2, "0")}
                         </span>
@@ -270,12 +270,12 @@ export function BatchPastLessonsDialog({
                           max={new Date().toISOString().slice(0, 10)}
                           value={row.date}
                           onChange={e => updateRow(i, "date", e.target.value)}
-                          className="h-8 text-sm flex-1"
+                          className="h-8 text-xs flex-1 min-w-0 px-2"
                         />
                         <select
                           value={row.time}
                           onChange={e => updateRow(i, "time", e.target.value)}
-                          className="h-8 rounded-lg border border-input bg-background px-2 text-xs shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
+                          className="h-8 w-18 rounded-lg border border-input bg-background px-1.5 text-xs shrink-0 focus:outline-none focus:ring-2 focus:ring-ring"
                         >
                           {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                         </select>
