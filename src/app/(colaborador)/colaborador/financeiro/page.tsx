@@ -2,7 +2,8 @@ import { prisma }        from "@/lib/prisma"
 import { PageHeader }    from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }         from "@/components/ui/badge"
-import { PaymentActions } from "./payment-actions"
+import { PaymentActions }    from "./payment-actions"
+import { EditPaymentDialog } from "./edit-payment-dialog"
 import { DollarSign, BookOpen, AlertCircle } from "lucide-react"
 import { format }        from "date-fns"
 import { ptBR }          from "date-fns/locale"
@@ -117,6 +118,18 @@ export default async function ColaboradorFinanceiroPage({ searchParams }: Financ
                     <p className="text-sm font-bold">{brl(Number(p.amount))}</p>
                     <Badge variant={STATUS_CFG[p.status].variant}>{STATUS_CFG[p.status].label}</Badge>
                     <PaymentActions id={p.id} status={p.status} />
+                    <EditPaymentDialog
+                      studentName={p.student.name ?? "Aluno"}
+                      payment={{
+                        id:          p.id,
+                        amount:      Number(p.amount),
+                        dueDate:     format(p.dueDate, "yyyy-MM-dd"),
+                        paidAt:      p.paidAt ? format(p.paidAt, "yyyy-MM-dd") : null,
+                        description: p.description ?? null,
+                        method:      p.method      ?? null,
+                        status:      p.status,
+                      }}
+                    />
                   </div>
                 </div>
               ))}

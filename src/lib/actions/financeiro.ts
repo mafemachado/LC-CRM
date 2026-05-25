@@ -212,6 +212,52 @@ export async function updateStudentPackageAction(data: {
   revalidatePath("/admin/financeiro/pacotes")
 }
 
+// ─── Editar Cobrança ─────────────────────────────────────────────────────────
+
+export async function updatePaymentAction(data: {
+  id:           string
+  amount:       number
+  dueDate:      string   // "YYYY-MM-DD"
+  description?: string
+  method?:      string
+  status:       "PENDING" | "PAID" | "OVERDUE"
+  paidAt?:      string   // "YYYY-MM-DD" | undefined
+}) {
+  const session = await auth()
+  if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
+    throw new Error("Sem permissão")
+  }
+
+  await prisma.payment.update({
+    where: { id: data.id },
+    data: {
+      amount:      data.amount,
+      dueDate:     new Date(data.dueDate),
+      description: data.description || null,
+      method:      data.method      || null,
+      status:      data.status,
+      paidAt:      data.paidAt ? new Date(data.paidAt) : (data.status === "PAID" ? new Date() : null),
+    },
+  })
+
+  revalidatePath("/colaborador/financeiro")
+  revalidatePath("/admin/financeiro/pagamentos")
+}
+
+// ─── Excluir Cobrança ─────────────────────────────────────────────────────────
+
+export async function deletePaymentAction(id: string) {
+  const session = await auth()
+  if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
+    throw new Error("Sem permissão")
+  }
+
+  await prisma.payment.delete({ where: { id } })
+
+  revalidatePath("/colaborador/financeiro")
+  revalidatePath("/admin/financeiro/pagamentos")
+}
+
 // ─── Excluir Pacote do Aluno ──────────────────────────────────────────────────
 
 export async function deleteStudentPackageAction(packageId: string, studentId: string) {
