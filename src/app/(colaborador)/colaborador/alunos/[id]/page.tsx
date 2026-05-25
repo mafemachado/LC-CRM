@@ -22,6 +22,7 @@ import { BatchPastLessonsDialog }             from "./_components/batch-past-les
 import { EditPackageDialog }                  from "./_components/edit-package-dialog"
 import { EditLessonDialog }                   from "./_components/edit-lesson-dialog"
 import { AddPaymentDialog }                   from "./_components/add-payment-dialog"
+import { DeletePaymentButton }               from "./_components/delete-payment-button"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -760,16 +761,19 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                 <p className="text-xs text-muted-foreground">Sem pagamentos</p>
               ) : (
                 student.payments.map(pay => (
-                  <div key={pay.id} className="flex items-center justify-between gap-2 text-xs">
+                  <div key={pay.id} className="group flex items-center justify-between gap-2 text-xs">
                     <div className="min-w-0">
                       <p className="font-medium">{brl(Number(pay.amount))}</p>
                       <p className="text-muted-foreground text-[11px]">
                         {format(pay.dueDate, "dd/MM/yyyy", { locale: ptBR })}
                       </p>
                     </div>
-                    <span className={`shrink-0 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${PAYMENT_STATUS[pay.status].cls}`}>
-                      {PAYMENT_STATUS[pay.status].label}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${PAYMENT_STATUS[pay.status].cls}`}>
+                        {PAYMENT_STATUS[pay.status].label}
+                      </span>
+                      <DeletePaymentButton paymentId={pay.id} />
+                    </div>
                   </div>
                 ))
               )}
