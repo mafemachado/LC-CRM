@@ -62,16 +62,17 @@ export function LessonHeatmap({ entries }: Props) {
 
   return (
     <div className="relative select-none">
-      {/* Month labels */}
-      <div className="flex mb-1" style={{ gap: 3 }}>
-        {Array.from({ length: WEEKS }, (_, w) => {
-          const label = monthLabels.find(m => m.weekIndex === w)
-          return (
-            <div key={w} className="text-[10px] text-muted-foreground" style={{ width: 12, minWidth: 12 }}>
-              {label ? label.label.charAt(0).toUpperCase() + label.label.slice(1) : ""}
-            </div>
-          )
-        })}
+      {/* Month labels — positioned absolutely to avoid overlap */}
+      <div className="relative mb-1" style={{ height: 14 }}>
+        {monthLabels.map((m, i) => (
+          <span
+            key={i}
+            className="absolute text-[10px] text-muted-foreground leading-none"
+            style={{ left: m.weekIndex * 16 }}
+          >
+            {m.label.charAt(0).toUpperCase() + m.label.slice(1)}
+          </span>
+        ))}
       </div>
 
       {/* Grid */}

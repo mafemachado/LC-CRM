@@ -21,6 +21,7 @@ import { RegisterPastLessonDialog }           from "./_components/register-past-
 import { BatchPastLessonsDialog }             from "./_components/batch-past-lessons-dialog"
 import { EditPackageDialog }                  from "./_components/edit-package-dialog"
 import { EditLessonDialog }                   from "./_components/edit-lesson-dialog"
+import { DeleteLessonButton }                from "./_components/delete-lesson-button"
 import { AddPaymentDialog }                   from "./_components/add-payment-dialog"
 import { DeletePaymentButton }               from "./_components/delete-payment-button"
 
@@ -711,7 +712,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                     </thead>
                     <tbody className="divide-y divide-border/50">
                       {filteredLessons.map(l => (
-                        <tr key={l.id} className="hover:bg-muted/30 transition-colors">
+                        <tr key={l.id} className="group hover:bg-muted/30 transition-colors">
                           <td className="py-2 pr-3 text-xs tabular-nums whitespace-nowrap">
                             {format(l.scheduledAt, "dd/MM · HH:mm", { locale: ptBR })}
                           </td>
@@ -733,22 +734,25 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                                 {LESSON_STATUS[l.status as keyof typeof LESSON_STATUS]?.label ?? l.status}
                               </span>
                               {isAdmin && (
-                                <EditLessonDialog
-                                  lesson={{
-                                    id:            l.id,
-                                    date:          format(l.scheduledAt, "yyyy-MM-dd"),
-                                    time:          format(l.scheduledAt, "HH:mm"),
-                                    status:        l.status,
-                                    teacherId:     l.teacher?.id ?? "",
-                                    subjectId:     l.subjectId ?? null,
-                                    modality:      l.modality,
-                                    duration:      l.duration,
-                                    topicsCovered: l.topicsCovered,
-                                    teacherNotes:  l.teacherNotes,
-                                  }}
-                                  studentId={id}
-                                  teachers={teachersForDialog}
-                                />
+                                <>
+                                  <EditLessonDialog
+                                    lesson={{
+                                      id:            l.id,
+                                      date:          format(l.scheduledAt, "yyyy-MM-dd"),
+                                      time:          format(l.scheduledAt, "HH:mm"),
+                                      status:        l.status,
+                                      teacherId:     l.teacher?.id ?? "",
+                                      subjectId:     l.subjectId ?? null,
+                                      modality:      l.modality,
+                                      duration:      l.duration,
+                                      topicsCovered: l.topicsCovered,
+                                      teacherNotes:  l.teacherNotes,
+                                    }}
+                                    studentId={id}
+                                    teachers={teachersForDialog}
+                                  />
+                                  <DeleteLessonButton lessonId={l.id} />
+                                </>
                               )}
                             </div>
                           </td>
