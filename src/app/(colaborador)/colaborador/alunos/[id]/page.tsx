@@ -25,6 +25,7 @@ import { DeleteLessonButton }                from "./_components/delete-lesson-b
 import { RequestCancellationButton }         from "./_components/request-cancellation-button"
 import { AddPaymentDialog }                   from "./_components/add-payment-dialog"
 import { DeletePaymentButton }               from "./_components/delete-payment-button"
+import { ReceiptDialog }                     from "./_components/receipt-dialog"
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -179,13 +180,6 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
 
   if (!student) notFound()
 
-  // Pending cancellation requests for the lessons shown in the table
-  const pendingCancellations = await prisma.lessonCancellationRequest.findMany({
-    where: { lessonId: { in: recentLessons.map(l => l.id) }, status: "PENDING" },
-    select: { lessonId: true },
-  })
-  const pendingCancellationLessonIds = new Set(pendingCancellations.map(r => r.lessonId))
-
   // ─── Computed values ─────────────────────────────────────────────────────
 
   const activePkg   = student.packages.find(p => p.status === "ACTIVE") ?? null
@@ -244,6 +238,17 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     : tab === "faltas"
     ? recentLessons.filter(l => l.status === "MISSED")
     : recentLessons
+
+  // Payments serialized for client dialog (Decimal → number, Date → ISO string)
+  const paymentsForReceipt = student.payments.map(p => ({
+    id:          p.id,
+    amount:      Number(p.amount),
+    dueDate:     p.dueDate.toISOString(),
+    paidAt:      p.paidAt?.toISOString() ?? null,
+    method:      p.method,
+    description: p.description,
+    status:      p.status,
+  }))
 
   // Contact info
   const guardian     = student.guardian
@@ -741,32 +746,24 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                               <span className={`text-xs font-medium px-1.5 py-0.5 rounded border ${LESSON_STATUS[l.status as keyof typeof LESSON_STATUS]?.cls ?? ""}`}>
                                 {LESSON_STATUS[l.status as keyof typeof LESSON_STATUS]?.label ?? l.status}
                               </span>
-                              {isAdmin ? (
-                                <>
-                                  <EditLessonDialog
-                                    lesson={{
-                                      id:            l.id,
-                                      date:          format(l.scheduledAt, "yyyy-MM-dd"),
-                                      time:          format(l.scheduledAt, "HH:mm"),
-                                      status:        l.status,
-                                      teacherId:     l.teacher?.id ?? "",
-                                      subjectId:     l.subjectId ?? null,
-                                      modality:      l.modality,
-                                      duration:      l.duration,
-                                      topicsCovered: l.topicsCovered,
-                                      teacherNotes:  l.teacherNotes,
-                                    }}
-                                    studentId={id}
-                                    teachers={teachersForDialog}
-                                  />
-                                  <DeleteLessonButton lessonId={l.id} />
-                                </>
-                              ) : (
-                                <RequestCancellationButton
-                                  lessonId={l.id}
-                                  hasPendingRequest={pendingCancellationLessonIds.has(l.id)}
-                                />
-                              )}
+                              <EditLessonDialog
+                                lesson={{
+                                  id:            l.id,
+                                  date:          format(l.scheduledAt, "yyyy-MM-dd"),
+                                  time:          format(l.scheduledAt, "HH:mm"),
+                                  status:        l.status,
+                                  teacherId:     l.teacher?.id ?? "",
+                                  subjectId:     l.subjectId ?? null,
+                                  modality:      l.modality,
+                                  duration:      l.duration,
+                                  topicsCovered: l.topicsCovered,
+                                  teacherNotes:  l.teacherNotes,
+                                }}
+                                studentId={id}
+                                teachers={teachersForDialog}
+                              />
+                              {isAdmin && <DeleteLessonButton lessonId={l.id} />}
+                              {!isAdmin && <RequestCancellationButton lessonId={l.id} />}
                             </div>
                           </td>
                         </tr>
@@ -798,7 +795,15 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                     )}
                   </p>
                 </div>
-                <AddPaymentDialog studentId={id} />
+                <div className="flex items-center gap-1">
+                  <ReceiptDialog
+                    studentId={id}
+                    payments={paymentsForReceipt}
+                    guardianName={guardianUser?.name ?? null}
+                    guardianPhone={guardianPhone ?? null}
+                  />
+                  <AddPaymentDialog studentId={id} />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">

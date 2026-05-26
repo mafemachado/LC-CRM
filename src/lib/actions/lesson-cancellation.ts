@@ -11,15 +11,15 @@ function lessonCost(durationMinutes: number): number {
   return durationMinutes / 60
 }
 
-// ─── Solicitar cancelamento (COLLABORATOR) ────────────────────────────────────
+// ─── Cancelar aula diretamente (COLLABORATOR) ────────────────────────────────
 
-export async function requestLessonCancellationAction(
+export async function cancelLessonDirectAction(
   lessonId: string,
   reason?: string,
 ): Promise<void> {
   const session = await auth()
   if (!session?.user) throw new Error("Sem permissão")
-  if (session.user.role !== "COLLABORATOR") throw new Error("Apenas colaboradores podem solicitar cancelamentos")
+  if (session.user.role !== "COLLABORATOR") throw new Error("Apenas colaboradores podem cancelar aulas")
 
   const lesson = await prisma.lesson.findUnique({
     where:   { id: lessonId },
@@ -33,22 +33,33 @@ export async function requestLessonCancellationAction(
     throw new Error("Esta aula não pode ser cancelada")
   }
 
-  const existing = await prisma.lessonCancellationRequest.findFirst({
-    where: { lessonId, status: "PENDING" },
-  })
-  if (existing) throw new Error("Já existe uma solicitação de cancelamento pendente para esta aula")
+  const studentId = lesson.participants[0]?.studentId ?? null
 
-  await prisma.lessonCancellationRequest.create({
-    data: {
-      lessonId,
-      requestedById: session.user.id,
-      reason:        reason?.trim() || null,
-      status:        "PENDING",
-    },
-  })
+  const activePkg = studentId
+    ? await prisma.lessonPackage.findFirst({
+        where:   { studentId, status: { in: ["ACTIVE", "EXHAUSTED"] } },
+        orderBy: { purchaseDate: "desc" },
+      })
+    : null
 
-  const scheduledAt = format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-  const subjectName = lesson.subject?.name ?? "–"
+  const refundCost = lessonCost(lesson.duration)
+
+  await prisma.$transaction([
+    prisma.lesson.update({
+      where: { id: lessonId },
+      data:  { status: "CANCELLED" },
+    }),
+    ...(activePkg
+      ? [prisma.lessonPackage.update({
+          where: { id: activePkg.id },
+          data:  { remainingLessons: { increment: refundCost }, status: "ACTIVE" },
+        })]
+      : []
+    ),
+  ])
+
+  const scheduledAt   = format(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+  const subjectName   = lesson.subject?.name ?? "–"
   const requesterName = session.user.name ?? "Colaborador"
 
   const admins = await prisma.user.findMany({
@@ -61,17 +72,18 @@ export async function requestLessonCancellationAction(
       notify({
         userId:  admin.id,
         type:    "CANCELLATION_REQUEST",
-        title:   "Solicitação de cancelamento de aula",
-        message: `${requesterName} solicitou o cancelamento da aula de ${subjectName} (${scheduledAt}).${reason ? ` Motivo: "${reason}"` : ""}`,
+        title:   "Aula cancelada pelo colaborador",
+        message: `${requesterName} cancelou a aula de ${subjectName} (${scheduledAt}).${reason ? ` Motivo: "${reason}"` : ""}${activePkg ? " O saldo foi devolvido ao pacote." : ""}`,
         email:   admin.email ?? undefined,
         phone:   admin.phone ?? undefined,
       })
     )
   )
 
-  for (const p of lesson.participants) {
-    revalidatePath(`/colaborador/alunos/${p.studentId}`)
-  }
+  revalidatePath("/admin/dashboard")
+  revalidatePath("/admin/agenda")
+  if (studentId) revalidatePath(`/colaborador/alunos/${studentId}`)
+  revalidatePath("/colaborador/agenda")
 }
 
 // ─── Aprovar cancelamento (ADMIN) ─────────────────────────────────────────────

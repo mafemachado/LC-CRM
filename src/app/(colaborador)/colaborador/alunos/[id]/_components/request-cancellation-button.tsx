@@ -3,19 +3,16 @@
 import { useState, useTransition, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { requestLessonCancellationAction } from "@/lib/actions/lesson-cancellation"
-import { Ban, Loader2, Clock } from "lucide-react"
+import { cancelLessonDirectAction } from "@/lib/actions/lesson-cancellation"
+import { Ban, Loader2 } from "lucide-react"
 
 interface Props {
-  lessonId:          string
-  hasPendingRequest: boolean
+  lessonId: string
 }
 
-export function RequestCancellationButton({ lessonId, hasPendingRequest }: Props) {
+export function RequestCancellationButton({ lessonId }: Props) {
   const router  = useRouter()
-  const [state, setState]   = useState<"idle" | "confirm" | "sending" | "sent">(
-    hasPendingRequest ? "sent" : "idle"
-  )
+  const [state, setState]   = useState<"idle" | "confirm">("idle")
   const [reason, setReason] = useState("")
   const [pending, start]    = useTransition()
   const textareaRef         = useRef<HTMLTextAreaElement>(null)
@@ -28,27 +25,19 @@ export function RequestCancellationButton({ lessonId, hasPendingRequest }: Props
   function handleSubmit() {
     start(async () => {
       try {
-        await requestLessonCancellationAction(lessonId, reason || undefined)
-        setState("sent")
-        toast.success("Solicitação enviada ao admin")
+        await cancelLessonDirectAction(lessonId, reason || undefined)
+        toast.success("Aula cancelada")
+        setState("idle")
+        setReason("")
         router.refresh()
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Erro ao enviar solicitação")
+        toast.error(e instanceof Error ? e.message : "Erro ao cancelar aula")
         setState("idle")
       }
     })
   }
 
-  if (state === "sent") {
-    return (
-      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 shrink-0">
-        <Clock className="w-2.5 h-2.5" />
-        Aguardando admin
-      </span>
-    )
-  }
-
-  if (state === "confirm" || state === "sending") {
+  if (state === "confirm") {
     return (
       <div className="flex flex-col gap-1 shrink-0" onClick={e => e.stopPropagation()}>
         <textarea
@@ -76,7 +65,7 @@ export function RequestCancellationButton({ lessonId, hasPendingRequest }: Props
             className="text-[10px] font-medium text-destructive hover:underline disabled:opacity-50 flex items-center gap-1"
           >
             {pending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : null}
-            Solicitar
+            Cancelar aula
           </button>
         </div>
       </div>
@@ -87,7 +76,7 @@ export function RequestCancellationButton({ lessonId, hasPendingRequest }: Props
     <button
       type="button"
       onClick={handleConfirm}
-      title="Solicitar cancelamento ao admin"
+      title="Cancelar aula"
       className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
     >
       <Ban className="w-3 h-3" />
