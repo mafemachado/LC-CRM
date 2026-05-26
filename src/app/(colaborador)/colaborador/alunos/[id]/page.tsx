@@ -204,13 +204,6 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
     subjects: t.subjects.map(s => ({ id: s.subject.id, name: s.subject.name })),
   }))
 
-  // All subjects (flat, deduped) for RegisterPastLessonDialog
-  const subjectsForDialog = Array.from(
-    new Map(
-      teachersRaw.flatMap(t => t.subjects.map(s => [s.subject.id, s.subject]))
-    ).values()
-  ).sort((a, b) => a.name.localeCompare(b.name))
-
   // Teachers map from recent 20 lessons
   const teachersMap = new Map<string, { name: string; count: number; lastAt: Date }>()
   for (const l of recentLessons) {

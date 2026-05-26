@@ -47,7 +47,7 @@ const METHOD_LABEL: Record<string, string> = {
   PIX: "Pix", CARTAO: "Cartão", DINHEIRO: "Dinheiro", TED: "TED", BOLETO: "Boleto",
 }
 
-export function ReceiptDialog({ studentId, payments, guardianName, guardianPhone }: Props) {
+export function ReceiptDialog({ studentId, payments, guardianName }: Props) {
   const [open, setOpen] = useState(false)
 
   const paidPayments = payments.filter(p => p.status === "PAID")
@@ -104,14 +104,15 @@ export function ReceiptDialog({ studentId, payments, guardianName, guardianPhone
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="sm"
         onClick={() => handleOpen(true)}
-        title="Gerar recibo"
-        className="h-7 w-7 flex items-center justify-center rounded text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+        className="gap-1.5 h-8 text-xs"
       >
         <FileText className="w-3.5 h-3.5" />
-      </button>
+        Recibo
+      </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
         <DialogContent className="w-[calc(100%-2rem)] max-w-md overflow-x-hidden">

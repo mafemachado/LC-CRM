@@ -91,13 +91,10 @@ export async function createUserAction(
 
   const userRole: Role = (role === "STUDENT" && guardianMode === "self") ? "GUARDIAN" : role as Role
 
-  let createdUserId = ""
-
   await prisma.$transaction(async (tx) => {
     const user = await tx.user.create({
       data: { name, email: emailNorm, password: hashed, phone: phoneNorm, role: userRole },
     })
-    createdUserId = user.id
 
     if (role === "STUDENT") {
       let resolvedGuardianId: string | undefined

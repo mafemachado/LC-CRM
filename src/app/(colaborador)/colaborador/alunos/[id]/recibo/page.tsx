@@ -2,7 +2,8 @@ import { prisma }      from "@/lib/prisma"
 import { notFound }    from "next/navigation"
 import { PrintTrigger } from "./print-trigger"
 import Link            from "next/link"
-import { ArrowLeft, MessageCircle, GraduationCap } from "lucide-react"
+import Image           from "next/image"
+import { ArrowLeft, MessageCircle } from "lucide-react"
 import { format }      from "date-fns"
 import { ptBR }        from "date-fns/locale"
 import { buttonVariants } from "@/components/ui/button"
@@ -63,10 +64,18 @@ export default async function ReciboPage({ params, searchParams }: Props) {
       <style>{`
         @media print {
           .print-hide { display: none !important; }
-          body { background: white !important; }
-          .print-page { box-shadow: none !important; border: none !important; }
+          body { background: white !important; margin: 0 !important; padding: 0 !important; }
+          .print-page {
+            box-shadow: none !important;
+            border: none !important;
+            border-radius: 0 !important;
+            max-width: 100% !important;
+            overflow: visible !important;
+            margin: 0 !important;
+          }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
-        @page { margin: 10mm; }
+        @page { size: A4 portrait; margin: 12mm; }
       `}</style>
 
       {/* Barra de ações */}
@@ -104,11 +113,13 @@ export default async function ReciboPage({ params, searchParams }: Props) {
       </div>
 
       {/* Recibo */}
-      <div className="print-page max-w-[560px] mx-auto bg-white rounded-xl shadow-md border border-border overflow-hidden">
+      <div className="print-page max-w-140 mx-auto bg-white rounded-xl shadow-md border border-border overflow-hidden">
 
-        {/* Cabeçalho laranja */}
-        <div className="bg-[#FB8500] flex items-center justify-center gap-4 px-8 py-6">
-          <GraduationCap className="w-10 h-10 text-white shrink-0" />
+        {/* Cabeçalho com logo + título */}
+        <div className="bg-brand-orange flex flex-col items-center justify-center gap-3 px-8 py-5">
+          <div className="rounded-2xl overflow-hidden shadow-md">
+            <Image src="/logo.svg" alt="Lição de Casa" width={72} height={72} priority />
+          </div>
           <h1 className="text-white font-heading text-2xl tracking-wider">RECIBO DE PAGAMENTO</h1>
         </div>
 
@@ -124,13 +135,13 @@ export default async function ReciboPage({ params, searchParams }: Props) {
           <div className="flex flex-col items-end gap-3">
             <div className="text-right">
               <p className="text-[10px] text-gray-500 mb-1">Data:</p>
-              <div className="border border-gray-300 rounded-xl px-4 py-1.5 text-sm font-medium text-center min-w-[110px]">
+              <div className="border border-gray-300 rounded-xl px-4 py-1.5 text-sm font-medium text-center min-w-27.5">
                 {dateStr}
               </div>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-gray-500 mb-1">Valor do Serviço</p>
-              <div className="bg-[#219EBC] text-white rounded-xl px-4 py-1.5 text-sm font-bold text-center min-w-[110px]">
+              <div className="bg-brand-blue text-white rounded-xl px-4 py-1.5 text-sm font-bold text-center min-w-27.5">
                 {amount}
               </div>
             </div>
@@ -139,10 +150,10 @@ export default async function ReciboPage({ params, searchParams }: Props) {
 
         {/* Seção de descrição */}
         <div className="px-8 pb-6">
-          <div className="bg-[#219EBC] text-white text-center py-2 text-xs font-bold tracking-widest rounded-t-lg">
+          <div className="bg-brand-blue text-white text-center py-2 text-xs font-bold tracking-widest rounded-t-lg">
             DESCRIÇÃO DOS SERVIÇOS PRESTADOS
           </div>
-          <div className="border-2 border-[#219EBC] rounded-b-lg px-5 py-5 min-h-[110px]">
+          <div className="border-2 border-brand-blue rounded-b-lg px-5 py-5 min-h-27.5">
             <p className="text-sm text-gray-700">{description}</p>
           </div>
         </div>

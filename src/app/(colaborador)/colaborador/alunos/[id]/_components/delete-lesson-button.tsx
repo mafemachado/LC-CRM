@@ -17,7 +17,8 @@ export function DeleteLessonButton({ lessonId }: { lessonId: string }) {
         <button
           type="button"
           onClick={() => setConfirm(false)}
-          className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+          disabled={pending}
+          className="text-[10px] text-muted-foreground hover:text-foreground px-1 disabled:opacity-40"
         >
           Não
         </button>
@@ -25,17 +26,17 @@ export function DeleteLessonButton({ lessonId }: { lessonId: string }) {
           type="button"
           disabled={pending}
           onClick={() => {
-            setConfirm(false)
             start(async () => {
               try {
                 await deleteLessonAction(lessonId)
                 router.refresh()
               } catch (e) {
                 toast.error(e instanceof Error ? e.message : "Erro ao excluir aula")
+                setConfirm(false)
               }
             })
           }}
-          className="text-[10px] font-medium text-destructive hover:underline disabled:opacity-50"
+          className="text-[10px] font-medium text-destructive hover:underline disabled:opacity-50 flex items-center gap-1"
         >
           {pending ? <Loader2 className="w-3 h-3 animate-spin" /> : "Sim"}
         </button>
