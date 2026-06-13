@@ -42,14 +42,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
               where: { phone: normalized, active: true },
             })
           }
-        } catch {
+        } catch (e) {
+          console.error("[authorize] ERRO ao consultar banco:", e instanceof Error ? `${e.name}: ${e.message}` : e)
           return null
         }
 
-        if (!user) return null
+        if (!user) {
+          console.error("[authorize] usuario NAO encontrado para:", input)
+          return null
+        }
 
         const valid = await bcrypt.compare(parsed.data.password, user.password)
-        if (!valid) return null
+        if (!valid) {
+          console.error("[authorize] senha NAO confere para:", user.email ?? user.phone)
+          return null
+        }
 
         if (user.role === "STUDENT") throw new Error("student_login_disabled")
 
