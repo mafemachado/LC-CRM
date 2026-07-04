@@ -3,8 +3,9 @@
 import { useState, useTransition } from "react"
 import { useRouter }               from "next/navigation"
 import { format }                  from "date-fns"
-import { Plus, Loader2, CalendarDays, Wifi, MapPin } from "lucide-react"
+import { Plus, Loader2, CalendarDays, Wifi, MapPin, Users, X } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
+import { Badge }                   from "@/components/ui/badge"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
@@ -15,7 +16,7 @@ import {
 import { Input }  from "@/components/ui/input"
 import { Label }  from "@/components/ui/label"
 import { toast }  from "sonner"
-import { createLessonDirectAction } from "@/lib/actions/lesson-request"
+import { createLessonDirectAction, createDuoLessonAction } from "@/lib/actions/lesson-request"
 
 interface Teacher {
   id:       string
@@ -24,13 +25,14 @@ interface Teacher {
 }
 
 interface Props {
-  studentId:   string
-  studentName: string
-  teachers:    Teacher[]
-  hasBalance?: boolean
+  studentId:     string
+  studentName:   string
+  teachers:      Teacher[]
+  hasBalance?:   boolean
+  otherStudents?: { id: string; name: string }[]
 }
 
-export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBalance = true }: Props) {
+export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBalance = true, otherStudents = [] }: Props) {
   const router = useRouter()
   const [open, setOpen]         = useState(false)
   const [teacherId, setTeacher] = useState("")
@@ -38,10 +40,20 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
   const [date, setDate]         = useState(format(new Date(), "yyyy-MM-dd"))
   const [time, setTime]         = useState("14:00")
   const [modality, setModality] = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
+  const [isDuo, setIsDuo]       = useState(false)
+  const [duoIds, setDuoIds]     = useState<string[]>([])
   const [pending, start]        = useTransition()
 
   const selectedTeacher = teachers.find(t => t.id === teacherId)
   const subjects        = selectedTeacher?.subjects ?? []
+
+  function toggleDuo(id: string) {
+    setDuoIds(prev =>
+      prev.includes(id)
+        ? prev.filter(s => s !== id)
+        : prev.length < 3 ? [...prev, id] : prev   // total máx. 4 (este + 3)
+    )
+  }
 
   function handleTeacherChange(val: string | null) {
     setTeacher(val ?? "")
@@ -55,6 +67,8 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
       setDate(format(new Date(), "yyyy-MM-dd"))
       setTime("14:00")
       setModality("PRESENCIAL")
+      setIsDuo(false)
+      setDuoIds([])
     }
     setOpen(v)
   }
@@ -64,10 +78,26 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
       toast.error("Preencha todos os campos obrigatórios")
       return
     }
+    if (isDuo && duoIds.length < 1) {
+      toast.error("Selecione ao menos mais um aluno para a dupla")
+      return
+    }
     start(async () => {
       try {
-        await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality })
-        toast.success("Aula agendada com sucesso")
+        if (isDuo) {
+          await createDuoLessonAction({
+            teacherId,
+            subjectId,
+            studentIds: [studentId, ...duoIds],
+            date,
+            time,
+            modality,
+          })
+          toast.success("Aula em dupla agendada com sucesso")
+        } else {
+          await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality })
+          toast.success("Aula agendada com sucesso")
+        }
         setOpen(false)
         router.push(`/colaborador/alunos/${studentId}`)
       } catch (e) {
@@ -99,6 +129,73 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* Aula em dupla */}
+            {otherStudents.length > 0 && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { setIsDuo(v => !v); if (isDuo) setDuoIds([]) }}
+                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    isDuo
+                      ? "bg-primary/10 text-primary border-primary/40"
+                      : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  {isDuo ? "Aula em dupla (ativada)" : "Aula em dupla"}
+                </button>
+
+                {isDuo && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      {studentName.split(" ")[0]} + até 3 alunos. Cada um terá 1 aula descontada do seu pacote.
+                    </p>
+                    {duoIds.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {duoIds.map(did => {
+                          const name = otherStudents.find(s => s.id === did)?.name ?? did
+                          return (
+                            <Badge
+                              key={did}
+                              variant="secondary"
+                              className="gap-1 pl-2 pr-1 cursor-pointer hover:bg-destructive/10"
+                              onClick={() => toggleDuo(did)}
+                            >
+                              {name}
+                              <X className="w-3 h-3" />
+                            </Badge>
+                          )
+                        })}
+                      </div>
+                    )}
+                    <div className="max-h-32 overflow-y-auto rounded-lg border border-input bg-background divide-y">
+                      {otherStudents.map(s => {
+                        const selected = duoIds.includes(s.id)
+                        const disabled = !selected && duoIds.length >= 3
+                        return (
+                          <button
+                            key={s.id}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => toggleDuo(s.id)}
+                            className={`w-full text-left px-3 py-1.5 text-sm transition-colors ${
+                              selected
+                                ? "bg-primary/10 text-primary font-medium"
+                                : disabled
+                                ? "text-muted-foreground/40 cursor-not-allowed"
+                                : "hover:bg-muted/50"
+                            }`}
+                          >
+                            {s.name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Professor */}
             <div className="space-y-1.5">
               <Label className="text-xs">Professor *</Label>

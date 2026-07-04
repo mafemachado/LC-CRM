@@ -131,6 +131,7 @@ export default async function AdminAgendaPage({ searchParams }: AgendaPageProps)
         lessons={lessonSlots}
         roomCount={roomCount}
         students={students}
+        allStudents={students.map(s => ({ id: s.id, name: s.name }))}
       />
     </div>
   )

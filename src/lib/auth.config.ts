@@ -13,7 +13,9 @@ export const ROLE_HOME: Record<string, string> = {
 // Config mínima para o middleware Edge — sem callbacks, sem Prisma, sem bcrypt
 export const authConfig: NextAuthConfig = {
   trustHost: true,
-  session:   { strategy: "jwt", maxAge: 8 * 60 * 60 },  // 8 horas
+  // Cookie vive 30 dias; a validade REAL do token é definida em auth.ts (jwt.encode)
+  // conforme o "Lembrar de mim": 30 dias se marcado, 8 horas se não.
+  session:   { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
   pages:     { signIn: "/login" },
   providers: [],
   callbacks: {

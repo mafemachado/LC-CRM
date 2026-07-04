@@ -31,6 +31,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
 import { CreateGroupLessonDialog }  from "@/components/shared/create-group-lesson-dialog"
+import { CreateDuoLessonDialog }     from "@/components/shared/create-duo-lesson-dialog"
 import { CreateAulaoDialog }        from "@/components/shared/create-aulao-dialog"
 import { CreateCommitmentDialog }   from "@/components/shared/create-commitment-dialog"
 import { AuloesSection }            from "./auloes-section"
@@ -287,16 +288,14 @@ function LessonDetailModal({
           {/* ── Links rápidos ────────────────────────────────── */}
           {lesson.lessonType !== "COMPROMISSO" && (
             <div className="flex gap-2">
-              {lesson.studentId && (
-                <Link
-                  href={studentHref}
-                  onClick={onClose}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors py-2 text-xs font-medium text-foreground"
-                >
-                  <GraduationCap className="w-3.5 h-3.5 text-primary" />
-                  Ver aluno
-                </Link>
-              )}
+              <Link
+                href={studentHref}
+                onClick={onClose}
+                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-border bg-muted/30 hover:bg-muted/60 transition-colors py-2 text-xs font-medium text-foreground"
+              >
+                <GraduationCap className="w-3.5 h-3.5 text-primary" />
+                Ver aluno
+              </Link>
               <Link
                 href={teacherHref}
                 onClick={onClose}
@@ -1126,6 +1125,7 @@ export function AgendaGrid({
   } | null>(null)
   const [auloes,           setAuloes]           = useState<AulaoCard[]>(initialAuloes)
   const [showGroupDialog,  setShowGroupDialog]  = useState(false)
+  const [showDuoDialog,    setShowDuoDialog]    = useState(false)
   const [showAulaoDialog,  setShowAulaoDialog]  = useState(false)
   const [showCommitmentDialog, setShowCommitmentDialog] = useState(false)
   const [hoveredCell, setHoveredCell] = useState<{
@@ -1402,10 +1402,21 @@ export function AgendaGrid({
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
+                onClick={() => setShowDuoDialog(true)}
+              >
+                <Users className="w-3.5 h-3.5" />
+                Dupla
+              </Button>
+            )}
+            {allStudents && allStudents.length >= 2 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5 border-violet-400/50 text-violet-700 hover:bg-violet-50"
                 onClick={() => setShowGroupDialog(true)}
               >
                 <Users className="w-3.5 h-3.5" />
-                Grupo
+                Grupo (avulso)
               </Button>
             )}
             <span>
@@ -1901,6 +1912,20 @@ export function AgendaGrid({
           students={students}
           teachers={effectiveTeachers}
           onClose={() => { setQuickSchedule(null); fetchData(curDate, view) }}
+        />
+      )}
+      {showDuoDialog && allStudents && (
+        <CreateDuoLessonDialog
+          open={showDuoDialog}
+          onClose={() => { setShowDuoDialog(false); fetchData(curDate, view) }}
+          students={students ?? allStudents}
+          teachers={effectiveTeachers.map(t => ({
+            id:           t.id,
+            name:         t.name,
+            teachingMode: t.teachingMode,
+            subjects:     t.subjects ?? [],
+          }))}
+          defaultDate={curDate}
         />
       )}
       {showGroupDialog && allStudents && (

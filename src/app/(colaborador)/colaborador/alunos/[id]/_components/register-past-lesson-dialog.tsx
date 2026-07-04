@@ -194,7 +194,7 @@ export function RegisterPastLessonDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
+        <DialogContent className="w-[calc(100%-2rem)] sm:max-w-lg max-h-[90vh] overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sub flex items-center gap-2">
               <History className="w-4 h-4 text-primary" />

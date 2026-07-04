@@ -12,11 +12,12 @@ import { Input }    from "@/components/ui/input"
 import { Label }    from "@/components/ui/label"
 import {
   CalendarDays, Loader2, CheckCircle2, XCircle,
-  MonitorPlay, School, Plus, Trash2, Wand2,
+  MonitorPlay, School, Plus, Trash2, Wand2, Users,
 } from "lucide-react"
 
 interface Subject { id: string; name: string }
 interface Teacher { id: string; name: string; subjects: Subject[] }
+interface Student { id: string; name: string }
 type LessonStatus = "COMPLETED" | "MISSED"
 
 interface LessonRow {
@@ -26,14 +27,16 @@ interface LessonRow {
   subjectId: string
   status:    LessonStatus
   duration:  number
+  partnerId: string   // 2º aluno da dupla ("" = sozinho)
 }
 
 interface Props {
-  studentId:    string
-  packageId:    string
-  studentName:  string
-  totalLessons: number
-  teachers:     Teacher[]
+  studentId:     string
+  packageId:     string
+  studentName:   string
+  totalLessons:  number
+  teachers:      Teacher[]
+  otherStudents?: Student[]
 }
 
 // 07:00 to 22:00 in 30-min steps
@@ -54,7 +57,7 @@ const WEEKDAYS = [
 
 function emptyRow(teachers: Teacher[], duration = 60): LessonRow {
   const t = teachers[0]
-  return { date: "", time: "08:00", teacherId: t?.id ?? "", subjectId: t?.subjects[0]?.id ?? "", status: "COMPLETED", duration }
+  return { date: "", time: "08:00", teacherId: t?.id ?? "", subjectId: t?.subjects[0]?.id ?? "", status: "COMPLETED", duration, partnerId: "" }
 }
 
 // Returns the N most recent past dates (incl. today) for the given weekdays, oldest first
@@ -73,7 +76,7 @@ function generatePastDates(weekdays: number[], count: number): string[] {
 }
 
 export function BatchPastLessonsDialog({
-  studentId, packageId, studentName, totalLessons, teachers,
+  studentId, packageId, studentName, totalLessons, teachers, otherStudents = [],
 }: Props) {
   const router = useRouter()
   const [open,    setOpen]   = useState(false)
@@ -151,6 +154,7 @@ export function BatchPastLessonsDialog({
   }
 
   const filled = lessons.filter(r => r.date).length
+  const partnerOptions = otherStudents.filter(s => s.id !== studentId)
 
   return (
     <>
@@ -160,7 +164,7 @@ export function BatchPastLessonsDialog({
       </Button>
 
       <Dialog open={open} onOpenChange={handleOpen}>
-        <DialogContent className="w-[calc(100%-2rem)] max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
+        <DialogContent className="w-[calc(100%-2rem)] sm:max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="font-sub flex items-center gap-2">
               <CalendarDays className="w-4 h-4 text-primary" />
@@ -328,6 +332,25 @@ export function BatchPastLessonsDialog({
                           {rowSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                         </select>
                       </div>
+
+                      {/* Linha 3: dupla (opcional) */}
+                      {partnerOptions.length > 0 && (
+                        <div className="flex items-center gap-2 pl-7">
+                          <Users className={`w-3.5 h-3.5 shrink-0 ${row.partnerId ? "text-primary" : "text-muted-foreground"}`} />
+                          <select
+                            value={row.partnerId}
+                            onChange={e => updateRow(i, "partnerId", e.target.value)}
+                            className={`h-8 flex-1 rounded-lg border bg-background px-2 text-xs focus:outline-none focus:ring-2 focus:ring-ring ${
+                              row.partnerId ? "border-primary/40 text-primary" : "border-input"
+                            }`}
+                          >
+                            <option value="">Sozinho (sem dupla)</option>
+                            {partnerOptions.map(s => (
+                              <option key={s.id} value={s.id}>Em dupla com {s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
                     </div>
                   )
                 })}

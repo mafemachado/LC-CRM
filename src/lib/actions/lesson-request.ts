@@ -660,13 +660,187 @@ export async function createGroupLessonAction(data: {
   revalidatePath("/professor/agenda")
 }
 
+// ─── Criar aula em dupla/grupo debitando o pacote de cada aluno ───────────────
+// Diferente de createGroupLessonAction (que cobra valor avulso), aqui cada aluno
+// tem 1 aula descontada do seu próprio pacote — como uma aula individual.
+
+export async function createDuoLessonAction(data: {
+  teacherId:      string
+  subjectId:      string
+  studentIds:     string[]      // 2–4 alunos
+  date:           string        // "YYYY-MM-DD"
+  time:           string        // "HH:mm"
+  modality:       "PRESENCIAL" | "ONLINE"
+  duration?:      number
+  teacherOnsite?: boolean
+}) {
+  await requireCollaboratorOrAdmin()
+
+  const uniqueIds = [...new Set(data.studentIds)]
+  if (uniqueIds.length !== data.studentIds.length) {
+    throw new Error("Há alunos duplicados na seleção")
+  }
+  if (uniqueIds.length < 2 || uniqueIds.length > 4) {
+    throw new Error("Uma aula em dupla deve ter entre 2 e 4 alunos")
+  }
+
+  const duration     = data.duration ?? 60
+  const cost         = lessonCost(duration)
+  const scheduledAt  = new Date(`${data.date}T${data.time}:00`)
+  const isHistorical = scheduledAt < new Date()
+
+  const [teacher, subject] = await Promise.all([
+    prisma.teacher.findUnique({ where: { id: data.teacherId }, include: { user: true } }),
+    prisma.subject.findUnique({ where: { id: data.subjectId } }),
+  ])
+  if (!teacher) throw new Error("Professor não encontrado")
+  if (!subject) throw new Error("Matéria não encontrada")
+
+  let teacherOnsite: boolean
+  if (data.modality === "PRESENCIAL") {
+    teacherOnsite = true
+  } else if (teacher.teachingMode === "ONLINE_ONLY") {
+    teacherOnsite = false
+  } else {
+    teacherOnsite = data.teacherOnsite ?? false
+  }
+
+  const dayStart = startOfDay(scheduledAt)
+  const dayEnd   = endOfDay(scheduledAt)
+
+  if (!isHistorical) {
+    const occupiesRoom = data.modality === "PRESENCIAL" || (data.modality === "ONLINE" && teacherOnsite)
+    if (occupiesRoom) {
+      const roomCount = await getRoomCount()
+      const reqStart  = scheduledAt.getTime()
+      const reqEnd    = reqStart + duration * 60_000
+
+      const roomLessons = await prisma.lesson.findMany({
+        where: {
+          OR: [
+            { modality: "PRESENCIAL" },
+            { modality: "ONLINE", teacherOnsite: true },
+          ],
+          status:      { in: ["CONFIRMED", "SCHEDULED"] },
+          scheduledAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { scheduledAt: true, duration: true },
+      })
+
+      const conflicts = roomLessons.filter((l) => {
+        const lStart = l.scheduledAt.getTime()
+        const lEnd   = lStart + (l.duration ?? 60) * 60_000
+        return lStart < reqEnd && lEnd > reqStart
+      })
+
+      if (conflicts.length >= roomCount) {
+        throw new Error(
+          `Todas as ${roomCount} sala${roomCount !== 1 ? "s" : ""} estão ocupadas neste horário. ` +
+          `Altere para ONLINE (em casa) para agendar mesmo assim.`
+        )
+      }
+    }
+
+    const teacherLessons = await prisma.lesson.findMany({
+      where: {
+        teacherId:   data.teacherId,
+        status:      { in: ["CONFIRMED", "SCHEDULED"] },
+        scheduledAt: { gte: dayStart, lte: dayEnd },
+      },
+      select: { scheduledAt: true, duration: true },
+    })
+    const reqStart    = scheduledAt.getTime()
+    const reqEnd      = reqStart + duration * 60_000
+    const hasConflict = teacherLessons.some((l) => {
+      const lStart = l.scheduledAt.getTime()
+      const lEnd   = lStart + (l.duration ?? 60) * 60_000
+      return lStart < reqEnd && lEnd > reqStart
+    })
+    if (hasConflict) throw new Error("Professor já tem uma aula neste horário")
+  }
+
+  // Buscar alunos com o pacote ativo mais recente que tenha saldo
+  const students = await prisma.student.findMany({
+    where:   { id: { in: uniqueIds } },
+    include: {
+      user:     true,
+      packages: {
+        where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+        orderBy: { purchaseDate: "desc" },
+        take:    1,
+      },
+    },
+  })
+  if (students.length !== uniqueIds.length) throw new Error("Um ou mais alunos não encontrados")
+
+  // Valida saldo de cada aluno antes de criar qualquer coisa
+  const withPkg = students.map((s) => {
+    const pkg = s.packages[0]
+    if (!pkg) throw new Error(`${s.name} está sem saldo de aulas disponível`)
+    const remaining = Number(pkg.remainingLessons)
+    if (remaining < cost) {
+      throw new Error(`${s.name} tem apenas ${remaining.toFixed(1).replace(".", ",")} aula(s) restante(s) e esta aula custa ${cost.toFixed(1).replace(".", ",")}.`)
+    }
+    return { student: s, pkg, remaining }
+  })
+
+  const scheduledAtFmt = format(scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+
+  await prisma.$transaction([
+    // Uma única aula com todos os participantes
+    prisma.lesson.create({
+      data: {
+        teacherId:     data.teacherId,
+        subjectId:     data.subjectId,
+        scheduledAt,
+        duration,
+        modality:      data.modality,
+        status:        isHistorical ? "COMPLETED" : "CONFIRMED",
+        lessonType:    "GROUP",
+        teacherOnsite,
+        participants:  { create: withPkg.map((w) => ({ studentId: w.student.id })) },
+      },
+    }),
+    // Debita 1 aula do pacote de cada aluno
+    ...withPkg.map((w) =>
+      prisma.lessonPackage.update({
+        where: { id: w.pkg.id },
+        data:  {
+          remainingLessons: { decrement: cost },
+          status: w.remaining <= cost ? "EXHAUSTED" : "ACTIVE",
+        },
+      })
+    ),
+  ])
+
+  if (!isHistorical) {
+    for (const { student } of withPkg) {
+      await notifyLessonConfirmed({
+        studentUserId: student.userId ?? "",
+        studentEmail:  student.user?.email ?? null,
+        studentPhone:  student.user?.phone ?? null,
+        teacherName:   teacher.user.name,
+        subject:       subject.name,
+        scheduledAt:   scheduledAtFmt,
+        modality:      data.modality === "PRESENCIAL" ? "Presencial" : "Online",
+      })
+    }
+  }
+
+  revalidatePath("/colaborador/agenda")
+  revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+}
+
 // ─── Registrar aulas passadas em lote (para pacotes retroativos) ─────────────
 
 export async function createBatchPastLessonsAction(data: {
   studentId: string
   packageId: string
   modality:  "PRESENCIAL" | "ONLINE"
-  lessons:   { date: string; time: string; status: "COMPLETED" | "MISSED"; teacherId: string; subjectId: string; duration: number }[]
+  // partnerId: 2º aluno (dupla) daquela aula específica — desconta também do pacote dele
+  lessons:   { date: string; time: string; status: "COMPLETED" | "MISSED"; teacherId: string; subjectId: string; duration: number; partnerId?: string }[]
 }) {
   await requireCollaboratorOrAdmin()
   if (!data.lessons.length) return
@@ -679,9 +853,32 @@ export async function createBatchPastLessonsAction(data: {
   const newRemaining = Math.max(0, pkgRemaining - totalCost)
   const newStatus    = newRemaining <= 0 ? "EXHAUSTED" : "ACTIVE"
 
+  // ── Parceiros de dupla: soma o custo por aluno parceiro ───────────────────
+  const partnerCost = new Map<string, number>()
+  for (const l of data.lessons) {
+    if (l.partnerId && l.partnerId !== data.studentId) {
+      partnerCost.set(l.partnerId, (partnerCost.get(l.partnerId) ?? 0) + lessonCost(l.duration))
+    }
+  }
+
+  // Pacote mais recente (ativo ou esgotado) de cada parceiro, para debitar
+  const partnerPkg = new Map<string, { id: string; remaining: number }>()
+  if (partnerCost.size > 0) {
+    const pkgs = await prisma.lessonPackage.findMany({
+      where:   { studentId: { in: [...partnerCost.keys()] }, status: { in: ["ACTIVE", "EXHAUSTED"] } },
+      orderBy: { purchaseDate: "desc" },
+    })
+    for (const p of pkgs) {
+      if (!partnerPkg.has(p.studentId)) {
+        partnerPkg.set(p.studentId, { id: p.id, remaining: Number(p.remainingLessons) })
+      }
+    }
+  }
+
   await prisma.$transaction([
-    ...data.lessons.map(({ date, time, status, teacherId, subjectId, duration }) => {
+    ...data.lessons.map(({ date, time, status, teacherId, subjectId, duration, partnerId }) => {
       const scheduledAt = new Date(`${date}T${time}:00`)
+      const isDuo = !!partnerId && partnerId !== data.studentId
       return prisma.lesson.create({
         data: {
           teacherId,
@@ -691,13 +888,28 @@ export async function createBatchPastLessonsAction(data: {
           modality:     data.modality,
           teacherOnsite: data.modality === "PRESENCIAL",
           status,
-          participants: { create: { studentId: data.studentId } },
+          lessonType:   isDuo ? "GROUP" : undefined,
+          participants: {
+            create: isDuo
+              ? [{ studentId: data.studentId }, { studentId: partnerId! }]
+              : { studentId: data.studentId },
+          },
         },
       })
     }),
     prisma.lessonPackage.update({
       where: { id: data.packageId },
       data:  { remainingLessons: newRemaining, status: newStatus },
+    }),
+    // Debita o pacote de cada parceiro (clampado em 0, como o do aluno principal)
+    ...[...partnerCost.entries()].flatMap(([sid, cost]) => {
+      const pp = partnerPkg.get(sid)
+      if (!pp) return []
+      const nr = Math.max(0, pp.remaining - cost)
+      return [prisma.lessonPackage.update({
+        where: { id: pp.id },
+        data:  { remainingLessons: nr, status: nr <= 0 ? "EXHAUSTED" : "ACTIVE" },
+      })]
     }),
   ])
 

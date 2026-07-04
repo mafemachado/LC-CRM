@@ -82,7 +82,7 @@ export function LoginForm({ error }: { error?: string }) {
 
         {/* Lembrar de mim */}
         <div className="flex items-center gap-2">
-          <Checkbox id="remember" name="remember" />
+          <Checkbox id="remember" name="remember" defaultChecked />
           <Label htmlFor="remember" className="text-sm font-normal text-muted-foreground cursor-pointer">
             Lembrar de mim
           </Label>

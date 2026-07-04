@@ -387,6 +387,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
               studentName={student.name}
               teachers={teachersForDialog}
               hasBalance={!!activePkg && Number(activePkg.remainingLessons) > 0}
+              otherStudents={allStudentsRaw}
             />
             {whatsappPhone && (
               <a
@@ -634,6 +635,7 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                         studentName={student.name}
                         totalLessons={Number(pkg.totalLessons)}
                         teachers={teachersForDialog}
+                        otherStudents={allStudentsRaw}
                       />
                       <EditPackageDialog
                         studentId={id}

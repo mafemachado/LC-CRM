@@ -21,6 +21,9 @@ export async function loginAction(formData: FormData) {
     password:     formData.get("password"),
   }
 
+  // Checkbox base-ui envia "on" quando marcado
+  const remember = formData.get("remember") != null
+
   const parsed = loginSchema.safeParse(raw)
   if (!parsed.success) {
     redirect("/login?error=invalid")
@@ -30,6 +33,7 @@ export async function loginAction(formData: FormData) {
     await signIn("credentials", {
       emailOrPhone: parsed.data.emailOrPhone,
       password:     parsed.data.password,
+      remember:     remember ? "true" : "false",
       redirectTo:   "/",
     })
   } catch (err) {

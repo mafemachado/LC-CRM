@@ -1,6 +1,7 @@
 import NextAuth      from "next-auth"
 import Credentials   from "next-auth/providers/credentials"
 import Google        from "next-auth/providers/google"
+import { encode as defaultEncode } from "next-auth/jwt"
 import bcrypt        from "bcryptjs"
 import { prisma }    from "@/lib/prisma"
 import { loginSchema } from "@/lib/validations/auth"
@@ -9,18 +10,24 @@ import type { Role } from "@prisma/client"
 
 export { ROLE_HOME }
 
-// Diagnóstico: identifica QUAL banco o app está usando (só o ref do projeto, sem expor a senha)
-function dbRef(): string {
-  try {
-    const m = (process.env.DATABASE_URL || "").match(/:\/\/([^:@/]+)/)
-    return m?.[1] ?? "unknown"
-  } catch {
-    return "unknown"
-  }
-}
+// Validade do token conforme "Lembrar de mim"
+const REMEMBER_MAX_AGE = 30 * 24 * 60 * 60  // 30 dias
+const SESSION_MAX_AGE  = 8 * 60 * 60         // 8 horas
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   ...authConfig,
+  // A validade real do token (exp) é decidida aqui, com base em token.remember.
+  // O cookie em si dura 30 dias (auth.config.ts); quando "não lembrar", o token
+  // interno expira em 8h e o usuário precisa logar de novo.
+  jwt: {
+    encode(params) {
+      const remember = (params.token as { remember?: boolean } | undefined)?.remember
+      return defaultEncode({
+        ...params,
+        maxAge: remember === false ? SESSION_MAX_AGE : REMEMBER_MAX_AGE,
+      })
+    },
+  },
   providers: [
     Google({
       clientId:     process.env.GOOGLE_CLIENT_ID!,
@@ -31,6 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       credentials: {
         emailOrPhone: { label: "E-mail ou Telefone", type: "text"     },
         password:     { label: "Senha",              type: "password" },
+        remember:     { label: "Lembrar de mim",     type: "text"     },
       },
       async authorize(credentials) {
         const parsed = loginSchema.safeParse(credentials)
@@ -53,24 +61,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             })
           }
         } catch (e) {
-          console.error("[authorize] ERRO ao consultar banco:", e instanceof Error ? `${e.name}: ${e.message}` : e)
+          // Loga o erro REAL do banco (conexão, schema, etc.) em vez de mascará-lo
+          // como credencial inválida — facilita diagnóstico de falhas de login.
+          console.error("[auth] Falha ao consultar usuário no login:", e instanceof Error ? `${e.name}: ${e.message}` : e)
           return null
         }
 
-        if (!user) {
-          console.error(`[authorize] usuario NAO encontrado para: ${input} | db=${dbRef()}`)
-          return null
-        }
+        if (!user) return null
 
         const valid = await bcrypt.compare(parsed.data.password, user.password)
-        if (!valid) {
-          console.error(`[authorize] senha NAO confere para: ${user.email ?? user.phone} | db=${dbRef()} | hashPrefix=${(user.password ?? "").slice(0, 7)}`)
-          return null
-        }
+        if (!valid) return null
 
         if (user.role === "STUDENT") throw new Error("student_login_disabled")
 
-        return { id: user.id, name: user.name, email: user.email ?? null, image: user.avatar, role: user.role, phone: user.phone }
+        const remember = credentials?.remember === "true"
+
+        return { id: user.id, name: user.name, email: user.email ?? null, image: user.avatar, role: user.role, phone: user.phone, remember }
       },
     }),
   ],
@@ -99,10 +105,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.role  = dbUser.role
           token.phone = dbUser.phone ?? null
         }
+        token.remember = true
       } else if (user) {
         token.id    = user.id ?? ""
         token.role  = (user as { id: string; role: Role }).role
         token.phone = (user as { phone?: string | null }).phone ?? null
+        token.remember = (user as { remember?: boolean }).remember ?? true
       }
       return token
     },

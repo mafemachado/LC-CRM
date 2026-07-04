@@ -63,9 +63,16 @@ export default async function ReciboPage({ params, searchParams }: Props) {
     <>
       <style>{`
         @media print {
-          .print-hide { display: none !important; }
-          body { background: white !important; margin: 0 !important; padding: 0 !important; }
-          .print-page {
+          body * { visibility: hidden !important; }
+          #print-root, #print-root * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          #print-root {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%;
             box-shadow: none !important;
             border: none !important;
             border-radius: 0 !important;
@@ -73,7 +80,6 @@ export default async function ReciboPage({ params, searchParams }: Props) {
             overflow: visible !important;
             margin: 0 !important;
           }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
         }
         @page { size: A4 portrait; margin: 12mm; }
       `}</style>
@@ -113,7 +119,7 @@ export default async function ReciboPage({ params, searchParams }: Props) {
       </div>
 
       {/* Recibo */}
-      <div className="print-page max-w-140 mx-auto bg-white rounded-xl shadow-md border border-border overflow-hidden">
+      <div id="print-root" className="print-page max-w-140 mx-auto bg-white rounded-xl shadow-md border border-border overflow-hidden">
 
         {/* Cabeçalho com logo + título */}
         <div className="bg-brand-orange flex flex-col items-center justify-center gap-3 px-8 py-5">
