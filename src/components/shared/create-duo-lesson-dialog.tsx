@@ -25,17 +25,19 @@ interface Props {
   students:  StudentOption[]
   teachers:  TeacherOption[]
   /** Data pré-selecionada no formato "yyyy-MM-dd" */
-  defaultDate?: string
+  defaultDate?:      string
+  defaultTeacherId?: string
+  defaultTime?:      string
 }
 
-export function CreateDuoLessonDialog({ open, onClose, students, teachers, defaultDate }: Props) {
+export function CreateDuoLessonDialog({ open, onClose, students, teachers, defaultDate, defaultTeacherId, defaultTime }: Props) {
   const today = defaultDate ?? format(new Date(), "yyyy-MM-dd")
 
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
-  const [teacherId,   setTeacherId]   = useState("")
+  const [teacherId,   setTeacherId]   = useState(defaultTeacherId ?? "")
   const [subjectId,   setSubjectId]   = useState("")
   const [date,        setDate]        = useState(today)
-  const [time,        setTime]        = useState("09:00")
+  const [time,        setTime]        = useState(defaultTime ?? "09:00")
   const [modality,    setModality]    = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
   const [teacherOnsite, setTeacherOnsite] = useState(false)
   const [pending, start] = useTransition()
@@ -62,10 +64,10 @@ export function CreateDuoLessonDialog({ open, onClose, students, teachers, defau
 
   function handleClose() {
     setSelectedStudentIds([])
-    setTeacherId("")
+    setTeacherId(defaultTeacherId ?? "")
     setSubjectId("")
     setDate(today)
-    setTime("09:00")
+    setTime(defaultTime ?? "09:00")
     setModality("PRESENCIAL")
     setTeacherOnsite(false)
     onClose()

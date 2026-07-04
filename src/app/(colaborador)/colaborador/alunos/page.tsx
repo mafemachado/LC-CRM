@@ -59,9 +59,24 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
     prisma.student.count({ where: { user: { active: false } } }),
   ])
 
+  // Data da última aula por aluno (para ordenação "aulas mais recentes")
+  const studentIds  = students.map(s => s.id)
+  const recentParts = studentIds.length
+    ? await prisma.lessonParticipant.findMany({
+        where:   { studentId: { in: studentIds } },
+        select:  { studentId: true, lesson: { select: { scheduledAt: true } } },
+        orderBy: { lesson: { scheduledAt: "desc" } },
+      })
+    : []
+  const lastLessonMap = new Map<string, string>()
+  for (const p of recentParts) {
+    if (!lastLessonMap.has(p.studentId)) lastLessonMap.set(p.studentId, p.lesson.scheduledAt.toISOString())
+  }
+
   // Serialize Prisma Decimal fields to plain numbers (required for Server→Client boundary)
   const serialized: StudentRow[] = students.map(s => ({
     ...s,
+    lastLessonAt:   lastLessonMap.get(s.id) ?? null,
     packages:       s.packages.map(p => ({ ...p, pricePerLesson: Number(p.pricePerLesson) })),
     payments:       s.payments.map(p => ({ ...p, amount: Number(p.amount) })),
     participations: s.participations.map(part => ({

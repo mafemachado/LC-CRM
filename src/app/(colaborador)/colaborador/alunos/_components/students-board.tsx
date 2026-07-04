@@ -7,6 +7,7 @@ import { ptBR }                        from "date-fns/locale"
 import {
   GraduationCap, Plus, Upload, LayoutGrid, List,
   Search, MessageCircle, CalendarDays, UserRound,
+  ArrowDownWideNarrow, School as SchoolIcon, Mail, Phone,
 } from "lucide-react"
 import { buttonVariants }              from "@/components/ui/button"
 import { Input }                       from "@/components/ui/input"
@@ -16,6 +17,15 @@ import {
 }                                      from "@/components/ui/select"
 import { StudentBoardCard }            from "./student-board-card"
 import type { StudentRow, BoardColumn } from "./student-board-card"
+
+type SortOption = "nome" | "mais-aulas" | "recentes" | "maior-pacote"
+
+const SORT_LABELS: Record<SortOption, string> = {
+  "nome":         "Nome (A–Z)",
+  "mais-aulas":   "Mais aulas",
+  "recentes":     "Aulas mais recentes",
+  "maior-pacote": "Maior pacote ativo",
+}
 
 // ── Column definitions ────────────────────────────────────────────────────────
 
@@ -83,6 +93,8 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
   const guardianUser = student.guardian?.user ?? null
   const guardianPhone = guardianUser?.phone?.replace(/\D/g, "") ?? null
   const studentPhone  = student.user?.phone?.replace(/\D/g, "") ?? null
+  const studentPhoneRaw = student.user?.phone ?? null
+  const studentEmail  = student.user?.email ?? null
   const waPhone       = guardianPhone ?? studentPhone
   const detailHref    = `${detailBasePath}/${student.id}`
 
@@ -110,21 +122,50 @@ function ListRow({ student, detailBasePath }: { student: StudentRow; detailBaseP
             <p className="font-medium text-sm">{displayName}</p>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badgeCls}`}>{badgeLabel}</span>
           </div>
-          {guardianUser && (
-            <div className="flex items-center gap-1.5">
-              <UserRound className="w-3 h-3 text-muted-foreground shrink-0" />
-              <p className="text-xs text-muted-foreground">
-                Resp.: <span className="font-medium text-foreground">{guardianUser.name}</span>
-                {guardianUser.phone && <span> · {guardianUser.phone}</span>}
-              </p>
+
+          {/* Identidade (série · escola) */}
+          {(student.grade || student.school) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+              {student.grade && (
+                <span className="flex items-center gap-1.5">
+                  <GraduationCap className="w-3 h-3 shrink-0" />
+                  {student.grade}
+                </span>
+              )}
+              {student.school && (
+                <span className="flex items-center gap-1.5">
+                  <SchoolIcon className="w-3 h-3 shrink-0" />
+                  {student.school}
+                </span>
+              )}
             </div>
           )}
-          {pkg && (
-            <p className="text-xs text-muted-foreground">
-              Pacote: {Number(pkg.totalLessons)} aulas
-              {pkg.expiresAt && ` · vence ${format(new Date(pkg.expiresAt), "dd/MM/yyyy", { locale: ptBR })}`}
-            </p>
+
+          {/* Contatos rápidos (aluno e responsável) */}
+          {(studentEmail || studentPhoneRaw || guardianUser) && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+              {studentPhoneRaw && (
+                <span className="flex items-center gap-1.5">
+                  <Phone className="w-3 h-3 shrink-0" />
+                  {studentPhoneRaw}
+                </span>
+              )}
+              {studentEmail && (
+                <span className="flex items-center gap-1.5 min-w-0">
+                  <Mail className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{studentEmail}</span>
+                </span>
+              )}
+              {guardianUser && (
+                <span className="flex items-center gap-1.5">
+                  <UserRound className="w-3 h-3 shrink-0" />
+                  Resp.: <span className="font-medium text-foreground">{guardianUser.name}</span>
+                  {guardianUser.phone && <span>· {guardianUser.phone}</span>}
+                </span>
+              )}
+            </div>
           )}
+
           {nextLesson && (
             <div className="flex items-center gap-1">
               <CalendarDays className="w-3 h-3 text-muted-foreground" />
@@ -184,6 +225,7 @@ export function StudentsBoard({
   const [search,        setSearch]        = useState("")
   const [gradeFilter,   setGradeFilter]   = useState("todos")
   const [subjectFilter, setSubjectFilter] = useState("todos")
+  const [sortBy,        setSortBy]        = useState<SortOption>("nome")
   const [visao,         setVisao]         = useState<"quadro" | "lista">("quadro")
 
   const filtered = useMemo(() => {
@@ -205,13 +247,30 @@ export function StudentsBoard({
     })
   }, [students, gradeFilter, subjectFilter, search])
 
+  const sorted = useMemo(() => {
+    const nameOf   = (s: StudentRow) => (s.name?.trim() || s.user?.name || "").toLowerCase()
+    const totalOf  = (s: StudentRow) => s._count.participations
+    const remainOf = (s: StudentRow) => Number(s.packages[0]?.remainingLessons ?? 0)
+    const lastOf   = (s: StudentRow) => (s.lastLessonAt ? new Date(s.lastLessonAt).getTime() : 0)
+    const byName   = (a: StudentRow, b: StudentRow) => nameOf(a).localeCompare(nameOf(b))
+
+    const arr = [...filtered]
+    switch (sortBy) {
+      case "mais-aulas":   arr.sort((a, b) => totalOf(b)  - totalOf(a)  || byName(a, b)); break
+      case "recentes":     arr.sort((a, b) => lastOf(b)   - lastOf(a)   || byName(a, b)); break
+      case "maior-pacote": arr.sort((a, b) => remainOf(b) - remainOf(a) || byName(a, b)); break
+      default:             arr.sort(byName)
+    }
+    return arr
+  }, [filtered, sortBy])
+
   const byColumn = useMemo(() => {
     const map: Record<BoardColumn, StudentRow[]> = {
       atencao: [], renovar: [], "em-dia": [], novos: [],
     }
-    for (const s of filtered) map[classify(s)].push(s)
+    for (const s of sorted) map[classify(s)].push(s)
     return map
-  }, [filtered])
+  }, [sorted])
 
   return (
     <div className="space-y-4">
@@ -270,6 +329,19 @@ export function StudentsBoard({
           <SelectContent>
             <SelectItem value="todos">Todas as matérias</SelectItem>
             {subjects.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+
+        {/* Sort */}
+        <Select value={sortBy} onValueChange={(v) => setSortBy((v as SortOption) ?? "nome")}>
+          <SelectTrigger className="w-48 h-9">
+            <ArrowDownWideNarrow className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <SelectValue placeholder="Ordenar por" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(SORT_LABELS) as SortOption[]).map(k => (
+              <SelectItem key={k} value={k}>{SORT_LABELS[k]}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -363,7 +435,7 @@ export function StudentsBoard({
               </Link>
             </div>
           ) : (
-            filtered.map(s => (
+            sorted.map(s => (
               <ListRow key={s.id} student={s} detailBasePath={detailBasePath} />
             ))
           )}

@@ -26,18 +26,20 @@ interface Props {
   onClose:     () => void
   students:    StudentOption[]
   teachers:    TeacherOption[]
-  defaultDate?: string
+  defaultDate?:      string
+  defaultTeacherId?: string
+  defaultTime?:      string
 }
 
-export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDate }: Props) {
+export function CreateAulaoDialog({ open, onClose, students, teachers, defaultDate, defaultTeacherId, defaultTime }: Props) {
   const today = defaultDate ?? format(new Date(), "yyyy-MM-dd")
 
   const [title,            setTitle]            = useState("")
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
-  const [teacherId,        setTeacherId]        = useState("")
+  const [teacherId,        setTeacherId]        = useState(defaultTeacherId ?? "")
   const [subjectId,        setSubjectId]        = useState("")
   const [date,             setDate]             = useState(today)
-  const [time,             setTime]             = useState("09:00")
+  const [time,             setTime]             = useState(defaultTime ?? "09:00")
   const [duration,         setDuration]         = useState(90)
   const [modality,         setModality]         = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
   const [teacherOnsite,    setTeacherOnsite]    = useState(false)

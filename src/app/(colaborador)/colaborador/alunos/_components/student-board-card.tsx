@@ -16,7 +16,10 @@ export type StudentRow = Prisma.StudentGetPayload<{
     payments: true
     _count: { select: { packages: true; participations: true } }
   }
-}>
+}> & {
+  /** ISO da última aula (qualquer status) — usado para ordenar por "mais recentes" */
+  lastLessonAt?: string | null
+}
 
 export type BoardColumn = "atencao" | "renovar" | "em-dia" | "novos"
 

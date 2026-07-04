@@ -639,6 +639,64 @@ function QuickScheduleModal({
   )
 }
 
+// ─── Seletor de tipo ao clicar num horário vazio ─────────────────────────────
+
+type SlotType = "individual" | "dupla" | "grupo" | "aulao"
+
+function SlotTypeChooser({
+  slot,
+  date,
+  onPick,
+  onClose,
+}: {
+  slot:    { teacherId: string; teacherName: string; time: string }
+  date:    string
+  onPick:  (type: SlotType) => void
+  onClose: () => void
+}) {
+  const options: { type: SlotType; label: string; desc: string; icon: LucideIcon; color: string }[] = [
+    { type: "individual", label: "Individual", desc: "1 aluno",              icon: User,          color: "text-primary" },
+    { type: "dupla",      label: "Dupla",      desc: "2–4 alunos · pacote",  icon: Users,         color: "text-primary" },
+    { type: "grupo",      label: "Grupo",      desc: "2–4 alunos · avulso",  icon: Users,         color: "text-violet-600" },
+    { type: "aulao",      label: "Aulão",      desc: "turma · aula extra",   icon: GraduationCap, color: "text-violet-600" },
+  ]
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="w-[calc(100%-2rem)] sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-primary" />
+            Agendar às {slot.time}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="rounded-lg bg-muted/50 px-3 py-2 text-sm">
+          <p className="font-semibold">{slot.teacherName}</p>
+          <p className="text-muted-foreground text-xs">
+            {slot.time} · {format(parseISO(date), "dd/MM/yyyy")}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {options.map(({ type, label, desc, icon: Icon, color }) => (
+            <button
+              key={type}
+              type="button"
+              onClick={() => onPick(type)}
+              className="flex flex-col items-start gap-1 rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/40"
+            >
+              <Icon className={`w-4 h-4 ${color}`} />
+              <span className="text-sm font-semibold leading-tight">{label}</span>
+              <span className="text-[11px] text-muted-foreground leading-tight">{desc}</span>
+            </button>
+          ))}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ─── Mini-pill de confirmação dentro do bloco de aula ────────────────────────
 
 type PillState = "ok" | "pend" | "atrasado"
@@ -1128,6 +1186,9 @@ export function AgendaGrid({
   const [showDuoDialog,    setShowDuoDialog]    = useState(false)
   const [showAulaoDialog,  setShowAulaoDialog]  = useState(false)
   const [showCommitmentDialog, setShowCommitmentDialog] = useState(false)
+  // Seletor de tipo ao clicar num horário vazio + pré-preenchimento (professor+horário)
+  const [slotChooser, setSlotChooser] = useState<{ teacherId: string; teacherName: string; time: string } | null>(null)
+  const [prefill,     setPrefill]     = useState<{ teacherId: string; time: string } | null>(null)
   const [hoveredCell, setHoveredCell] = useState<{
     teacherId: string
     timeMin:   number
@@ -1260,7 +1321,13 @@ export function AgendaGrid({
     const taken = byTeacher(t.id).some(
       l => snapped < l.startMin + l.duration && snapped + 60 > l.startMin
     )
-    setHoveredCell(avail && !taken ? { teacherId: t.id, timeMin: snapped } : null)
+    // Só atualiza o estado quando o slot (30min) muda de fato — evita re-render do
+    // grid inteiro a cada pixel, o que fazia o "ghost" arrastar atrás do cursor.
+    setHoveredCell(prev => {
+      const next = avail && !taken ? { teacherId: t.id, timeMin: snapped } : null
+      if (prev?.teacherId === next?.teacherId && prev?.timeMin === next?.timeMin) return prev
+      return next
+    })
   }
 
   const handleColumnClick = (t: TeacherCol, e: React.MouseEvent<HTMLDivElement>) => {
@@ -1280,7 +1347,7 @@ export function AgendaGrid({
     if (hasLesson) return
 
     const time = `${String(Math.floor(totalMin / 60)).padStart(2, "0")}:${String(totalMin % 60).padStart(2, "0")}`
-    setQuickSchedule({ teacherId: t.id, teacherName: t.name, time })
+    setSlotChooser({ teacherId: t.id, teacherName: t.name, time })
   }
 
   // ── Week view helpers ─────────────────────────────────────────────────────
@@ -1392,7 +1459,7 @@ export function AgendaGrid({
               size="sm"
               variant="outline"
               className="h-7 text-xs gap-1.5 border-violet-400/50 text-violet-700 hover:bg-violet-50"
-              onClick={() => setShowAulaoDialog(true)}
+              onClick={() => { setPrefill(null); setShowAulaoDialog(true) }}
             >
               <Plus className="w-3.5 h-3.5" />
               Aulão
@@ -1402,7 +1469,7 @@ export function AgendaGrid({
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/5"
-                onClick={() => setShowDuoDialog(true)}
+                onClick={() => { setPrefill(null); setShowDuoDialog(true) }}
               >
                 <Users className="w-3.5 h-3.5" />
                 Dupla
@@ -1413,7 +1480,7 @@ export function AgendaGrid({
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs gap-1.5 border-violet-400/50 text-violet-700 hover:bg-violet-50"
-                onClick={() => setShowGroupDialog(true)}
+                onClick={() => { setPrefill(null); setShowGroupDialog(true) }}
               >
                 <Users className="w-3.5 h-3.5" />
                 Grupo (avulso)
@@ -1905,6 +1972,25 @@ export function AgendaGrid({
           onClose={() => { setSelectedPending(null); fetchData(curDate, view) }}
         />
       )}
+      {slotChooser && (
+        <SlotTypeChooser
+          slot={slotChooser}
+          date={curDate}
+          onPick={(type) => {
+            const pf = { teacherId: slotChooser.teacherId, time: slotChooser.time }
+            if (type === "individual") {
+              setQuickSchedule(slotChooser)
+            } else {
+              setPrefill(pf)
+              if (type === "dupla")  setShowDuoDialog(true)
+              if (type === "grupo")  setShowGroupDialog(true)
+              if (type === "aulao")  setShowAulaoDialog(true)
+            }
+            setSlotChooser(null)
+          }}
+          onClose={() => setSlotChooser(null)}
+        />
+      )}
       {quickSchedule && students && (
         <QuickScheduleModal
           schedule={quickSchedule}
@@ -1917,7 +2003,7 @@ export function AgendaGrid({
       {showDuoDialog && allStudents && (
         <CreateDuoLessonDialog
           open={showDuoDialog}
-          onClose={() => { setShowDuoDialog(false); fetchData(curDate, view) }}
+          onClose={() => { setShowDuoDialog(false); setPrefill(null); fetchData(curDate, view) }}
           students={students ?? allStudents}
           teachers={effectiveTeachers.map(t => ({
             id:           t.id,
@@ -1926,12 +2012,14 @@ export function AgendaGrid({
             subjects:     t.subjects ?? [],
           }))}
           defaultDate={curDate}
+          defaultTeacherId={prefill?.teacherId}
+          defaultTime={prefill?.time}
         />
       )}
       {showGroupDialog && allStudents && (
         <CreateGroupLessonDialog
           open={showGroupDialog}
-          onClose={() => { setShowGroupDialog(false); fetchData(curDate, view) }}
+          onClose={() => { setShowGroupDialog(false); setPrefill(null); fetchData(curDate, view) }}
           students={allStudents}
           teachers={effectiveTeachers.map(t => ({
             id:           t.id,
@@ -1940,12 +2028,14 @@ export function AgendaGrid({
             subjects:     t.subjects ?? [],
           }))}
           defaultDate={curDate}
+          defaultTeacherId={prefill?.teacherId}
+          defaultTime={prefill?.time}
         />
       )}
       {showAulaoDialog && (
         <CreateAulaoDialog
           open={showAulaoDialog}
-          onClose={() => { setShowAulaoDialog(false); fetchData(curDate, view) }}
+          onClose={() => { setShowAulaoDialog(false); setPrefill(null); fetchData(curDate, view) }}
           students={allStudents ?? []}
           teachers={effectiveTeachers.map(t => ({
             id:           t.id,
@@ -1954,6 +2044,8 @@ export function AgendaGrid({
             subjects:     t.subjects ?? [],
           }))}
           defaultDate={curDate}
+          defaultTeacherId={prefill?.teacherId}
+          defaultTime={prefill?.time}
         />
       )}
       {showCommitmentDialog && (
