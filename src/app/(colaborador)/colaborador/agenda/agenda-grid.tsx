@@ -1218,11 +1218,13 @@ export function AgendaGrid({
     }
   }
 
-  // Fetch whenever curDate or view changes (skip the initial render)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Fetch whenever curDate or view changes (skip the initial render).
+  // fetchData é redefinido a cada render de propósito (lê estado atual);
+  // incluí-lo nas deps faria o efeito rodar em todo render — não é o desejado.
   useEffect(() => {
     if (!hasMounted.current) { hasMounted.current = true; return }
     fetchData(curDate, view)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curDate, view])
 
   // Sync state when browser back/forward buttons are used
