@@ -8,7 +8,7 @@ import { Button }   from "@/components/ui/button"
 import { Badge }    from "@/components/ui/badge"
 import { createGroupLessonAction } from "@/lib/actions/lesson-request"
 import { toast }    from "sonner"
-import { Users, Loader2, MapPin, Wifi, Building2, Home, X } from "lucide-react"
+import { Users, Loader2, MapPin, Wifi, Building2, Home, X, AlertCircle } from "lucide-react"
 import { format }   from "date-fns"
 
 interface StudentOption { id: string; name: string }
@@ -120,11 +120,20 @@ export function CreateGroupLessonDialog({ open, onClose, students, teachers, def
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="w-4 h-4 text-primary" />
-            Criar Aula em Grupo
+            Criar Aula em Grupo (avulso)
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Dica: grupo é cobrança avulsa, não usa o pacote */}
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-800">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            <span>
+              Esta opção <strong>não desconta do pacote</strong> dos alunos — gera uma cobrança
+              avulsa com o valor por aluno abaixo. Para descontar do pacote, use <strong>&ldquo;Dupla&rdquo;</strong>.
+            </span>
+          </div>
+
           {/* Alunos selecionados */}
           {selectedStudentNames.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
