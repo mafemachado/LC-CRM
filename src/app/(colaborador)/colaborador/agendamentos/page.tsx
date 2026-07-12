@@ -132,6 +132,8 @@ export default async function AgendamentosPage({ searchParams }: PageProps) {
       requestModality: r.modality as "PRESENCIAL" | "ONLINE",
       isGroupRequest:  r.isGroupRequest,
       groupNote:       r.groupNote,
+      seriesIndex:     r.seriesIndex,
+      seriesTotal:     r.seriesTotal,
       remainingLessons,
       packageExpired,
       hasConflict,

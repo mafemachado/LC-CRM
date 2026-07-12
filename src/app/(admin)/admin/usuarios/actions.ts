@@ -39,6 +39,17 @@ async function guardAdminAccount(targetId: string, sessionUserId: string) {
   }
 }
 
+// ─── Agendamento externo do professor ────────────────────────────────────────
+
+export async function setTeacherExternalBookingAction(teacherId: string, enabled: boolean) {
+  await requireAdmin()
+  await prisma.teacher.update({
+    where: { id: teacherId },
+    data:  { externalBooking: enabled },
+  })
+  revalidatePath("/admin/usuarios", "layout")
+}
+
 // ─── Criar usuário ────────────────────────────────────────────────────────────
 
 export type UserFormState = { error: string } | null

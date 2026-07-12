@@ -17,6 +17,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const teacher = await prisma.teacher.findUnique({ where: { id } })
   if (!teacher) return NextResponse.json({ error: "Professor não encontrado" }, { status: 404 })
 
+  // Professor não habilitado para agendamento externo não expõe horários.
+  if (!teacher.externalBooking) {
+    return NextResponse.json(dateStr ? { slots: [] } : { dates: [] })
+  }
+
   const availability = (teacher.availability ?? {}) as unknown as Availability
   const policy       = await getBookingPolicy()
   const now          = new Date()

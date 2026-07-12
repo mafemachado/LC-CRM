@@ -10,6 +10,7 @@ import { format }            from "date-fns"
 import { ptBR }              from "date-fns/locale"
 import bcrypt                from "bcryptjs"
 import { z }                 from "zod"
+import { randomUUID }        from "crypto"
 
 function generateRandomPassword(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789@#!"
@@ -427,6 +428,11 @@ export async function updateStudentAction(input: {
 
 // ─── Adicionar Pagamento Avulso ao Aluno ──────────────────────────────────────
 
+const installmentSchema = z.object({
+  dueDate: z.string().min(1, "Data da parcela é obrigatória"),
+  amount:  z.number().positive("Valor da parcela deve ser positivo"),
+})
+
 const addPaymentSchema = z.object({
   studentId:   z.string().min(1),
   amount:      z.number().positive("Valor deve ser positivo"),
@@ -435,6 +441,8 @@ const addPaymentSchema = z.object({
   status:      z.enum(["PAID", "PENDING", "OVERDUE"]),
   method:      z.string().optional(),
   description: z.string().optional(),
+  // Quando presente (boleto/cartão parcelado), cria uma cobrança por parcela.
+  installments: z.array(installmentSchema).min(2).optional(),
 })
 
 export async function addStudentPaymentAction(input: {
@@ -445,25 +453,46 @@ export async function addStudentPaymentAction(input: {
   status:      "PAID" | "PENDING" | "OVERDUE"
   method?:     string
   description?: string
+  installments?: { dueDate: string; amount: number }[]
 }) {
   await requireCollaboratorOrAdmin()
 
   const parsed = addPaymentSchema.safeParse(input)
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Dados inválidos")
 
-  const { studentId, amount, dueDate, paidAt, status, method, description } = parsed.data
+  const { studentId, dueDate, paidAt, status, method, description, installments } = parsed.data
 
-  await prisma.payment.create({
-    data: {
-      studentId,
-      amount,
-      dueDate:     new Date(dueDate),
-      paidAt:      paidAt ? new Date(paidAt) : (status === "PAID" ? new Date() : null),
-      status,
-      method:      method || null,
-      description: description || null,
-    },
-  })
+  if (installments && installments.length >= 2) {
+    // Parcelamento: uma cobrança (PENDING) por parcela, ligadas por grupo.
+    const groupId = randomUUID()
+    const total   = installments.length
+    await prisma.payment.createMany({
+      data: installments.map((inst, i) => ({
+        studentId,
+        amount:             inst.amount,
+        dueDate:            new Date(inst.dueDate),
+        paidAt:             null,
+        status:             "PENDING" as const,
+        method:             method || null,
+        description:        description || null,
+        installmentNumber:  i + 1,
+        installmentTotal:   total,
+        installmentGroupId: groupId,
+      })),
+    })
+  } else {
+    await prisma.payment.create({
+      data: {
+        studentId,
+        amount:      parsed.data.amount,
+        dueDate:     new Date(dueDate),
+        paidAt:      paidAt ? new Date(paidAt) : (status === "PAID" ? new Date() : null),
+        status,
+        method:      method || null,
+        description: description || null,
+      },
+    })
+  }
 
   revalidatePath(`/colaborador/alunos/${studentId}`)
   revalidatePath("/colaborador/financeiro")

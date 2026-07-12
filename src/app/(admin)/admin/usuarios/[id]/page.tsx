@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { UserForm }      from "../user-form"
 import { updateUserAction } from "../actions"
 import { TeacherSubjectsForm } from "@/components/shared/teacher-subjects-form"
+import { ExternalBookingToggle } from "./external-booking-toggle"
 import type { Role, TeacherMode, EducationLevel } from "@prisma/client"
 
 interface EditUserPageProps {
@@ -91,6 +92,23 @@ export default async function EditUserPage({ params, searchParams }: EditUserPag
           />
         </CardContent>
       </Card>
+
+      {user.role === "TEACHER" && user.teacher && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Agendamento Externo</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Controle se este professor fica disponível para o autoatendimento do responsável.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ExternalBookingToggle
+              teacherId={user.teacher.id}
+              enabled={user.teacher.externalBooking}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {user.role === "TEACHER" && user.teacher && (
         <Card>

@@ -108,8 +108,24 @@ model User {
   authoredNotes  StudentNote[]
   cancellationRequests LessonCancellationRequest[] @relation("CancellationRequests")
   cancellationReviews  LessonCancellationRequest[] @relation("CancellationReviews")
+  passwordResetTokens  PasswordResetToken[]
 
   @@map("users")
+}
+
+// Tokens de redefinição de senha — tabela criada via reconcile migration.
+// Modelada aqui para manter schema ↔ migrations ↔ banco em sincronia.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 // ─── Perfis ───────────────────────────────────────────────────────────────────
@@ -170,6 +186,9 @@ model Teacher {
   bio          String?
   availability Json?
   teachingMode TeacherMode  @default(HYBRID)
+  // Quando true, este professor aparece no agendamento externo (autoatendimento
+  // do responsável / API de slots). Controlado pelo admin, por professor.
+  externalBooking Boolean   @default(false)
 
   subjects  TeacherSubject[]
   lessons   Lesson[]
@@ -247,6 +266,9 @@ model LessonPackage {
   expiresAt        DateTime?
   status           PackageStatus @default(ACTIVE)
 
+  // Cobrança(s) geradas junto com o pacote — some(m) quando o pacote é excluído
+  payments         Payment[]
+
   @@map("lesson_packages")
 }
 
@@ -319,8 +341,14 @@ model LessonRequest {
   isGroupRequest Boolean        @default(false)
   groupNote      String?
 
+  // Série recorrente (agendamento semanal do responsável) — agrupa os pedidos
+  recurrenceSeriesId String?
+  seriesIndex        Int?     // posição na série (1..N)
+  seriesTotal        Int?     // total de pedidos da série
+
   @@index([teacherId, status])
   @@index([studentId, status])
+  @@index([recurrenceSeriesId])
   @@map("lesson_requests")
 }
 
@@ -405,9 +433,20 @@ model Payment {
   description   String?
   createdAt     DateTime      @default(now())
 
+  // Parcelamento (boleto / cartão de crédito) — cada parcela é uma cobrança
+  installmentNumber  Int?     // nº desta parcela (1..N)
+  installmentTotal   Int?     // total de parcelas do grupo
+  installmentGroupId String?  // agrupa as parcelas de um mesmo parcelamento
+
+  // Pacote de origem — ao excluir o pacote, esta cobrança é excluída junto
+  packageId     String?
+  package       LessonPackage? @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
   @@index([studentId])
   @@index([status])
   @@index([dueDate])
+  @@index([installmentGroupId])
+  @@index([packageId])
   @@map("payments")
 }
 

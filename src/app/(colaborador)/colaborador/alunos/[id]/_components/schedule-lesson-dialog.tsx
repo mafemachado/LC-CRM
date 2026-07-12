@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react"
 import { useRouter }               from "next/navigation"
 import { format }                  from "date-fns"
-import { Plus, Loader2, CalendarDays, Wifi, MapPin, Users, X } from "lucide-react"
+import { ptBR as ptBRLocale }       from "date-fns/locale"
+import { Plus, Loader2, CalendarDays, Wifi, MapPin, Users, X, Repeat } from "lucide-react"
 import { Button }                  from "@/components/ui/button"
 import { Badge }                   from "@/components/ui/badge"
 import {
@@ -12,7 +13,7 @@ import {
 import { Input }  from "@/components/ui/input"
 import { Label }  from "@/components/ui/label"
 import { toast }  from "sonner"
-import { createLessonDirectAction, createDuoLessonAction } from "@/lib/actions/lesson-request"
+import { createLessonDirectAction, createDuoLessonAction, createRecurringLessonsAction } from "@/lib/actions/lesson-request"
 
 interface Teacher {
   id:       string
@@ -38,6 +39,8 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
   const [modality, setModality] = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
   const [isDuo, setIsDuo]       = useState(false)
   const [duoIds, setDuoIds]     = useState<string[]>([])
+  const [isRecurring, setIsRecurring] = useState(false)
+  const [occurrences, setOccurrences] = useState(4)
   const [pending, start]        = useTransition()
 
   const selectedTeacher = teachers.find(t => t.id === teacherId)
@@ -65,6 +68,8 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
       setModality("PRESENCIAL")
       setIsDuo(false)
       setDuoIds([])
+      setIsRecurring(false)
+      setOccurrences(4)
     }
     setOpen(v)
   }
@@ -90,6 +95,15 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
             modality,
           })
           toast.success("Aula em grupo (pacote) agendada com sucesso")
+        } else if (isRecurring) {
+          const r = await createRecurringLessonsAction({
+            teacherId, studentId, subjectId, date, time, modality,
+            occurrences,
+          })
+          const parts = [`${r.created} aula${r.created !== 1 ? "s" : ""} criada${r.created !== 1 ? "s" : ""}`]
+          if (r.skippedConflict > 0)  parts.push(`${r.skippedConflict} com conflito`)
+          if (r.skippedNoBalance > 0) parts.push(`${r.skippedNoBalance} sem saldo`)
+          toast.success(`Série recorrente: ${parts.join(" · ")}`)
         } else {
           await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality })
           toast.success("Aula agendada com sucesso")
@@ -269,6 +283,44 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
                 </button>
               </div>
             </div>
+
+            {/* Recorrência semanal (indisponível no modo grupo) */}
+            {!isDuo && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRecurring(v => !v)}
+                  className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                    isRecurring
+                      ? "bg-primary/10 text-primary border-primary/40"
+                      : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                  }`}
+                >
+                  <Repeat className="w-4 h-4" />
+                  {isRecurring ? "Aula recorrente (ativada)" : "Repetir semanalmente"}
+                </button>
+
+                {isRecurring && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                    <p className="text-[11px] text-muted-foreground">
+                      Cria 1 aula por semana, sempre {date ? format(new Date(`${date}T00:00:00`), "EEEE", { locale: ptBRLocale }) : "no mesmo dia"} às {time}.
+                      Desconta 1 aula do pacote por ocorrência — cria só o que couber no saldo.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <Label className="text-xs whitespace-nowrap">Quantas aulas</Label>
+                      <Input
+                        type="number"
+                        min={2}
+                        max={52}
+                        value={occurrences}
+                        onChange={e => setOccurrences(Math.max(2, Math.min(52, parseInt(e.target.value, 10) || 2)))}
+                        className="h-8 w-20"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -277,7 +329,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
             </Button>
             <Button onClick={submit} disabled={pending || !teacherId || !subjectId}>
               {pending && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
-              Agendar
+              {isRecurring && !isDuo ? "Agendar série" : "Agendar"}
             </Button>
           </DialogFooter>
         </DialogContent>

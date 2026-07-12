@@ -72,7 +72,7 @@ export async function createStudentPackageAction(data: {
   const remainingLessons = data.isClosed ? 0 : data.totalLessons
 
   await prisma.$transaction(async (tx) => {
-    await tx.lessonPackage.create({
+    const pkg = await tx.lessonPackage.create({
       data: {
         studentId:        data.studentId,
         totalLessons:     data.totalLessons,
@@ -90,6 +90,7 @@ export async function createStudentPackageAction(data: {
       await tx.payment.create({
         data: {
           studentId:   data.studentId,
+          packageId:   pkg.id,   // vincula a cobrança ao pacote (some junto se excluído)
           amount,
           dueDate:     new Date(dueDate),
           paidAt:      paidAtDate ?? undefined,
@@ -106,6 +107,7 @@ export async function createStudentPackageAction(data: {
   revalidatePath(`/admin/alunos/${data.studentId}`)
   revalidatePath("/admin/financeiro/pacotes")
   revalidatePath("/admin/financeiro/pagamentos")
+  revalidatePath("/admin/dashboard")
 }
 
 // ─── Registrar Pagamento ──────────────────────────────────────────────────────
@@ -246,6 +248,7 @@ export async function updatePaymentAction(data: {
 
   revalidatePath("/colaborador/financeiro")
   revalidatePath("/admin/financeiro/pagamentos")
+  revalidatePath("/admin/dashboard")
 }
 
 // ─── Excluir Cobrança ─────────────────────────────────────────────────────────
@@ -260,6 +263,23 @@ export async function deletePaymentAction(id: string) {
 
   revalidatePath("/colaborador/financeiro")
   revalidatePath("/admin/financeiro/pagamentos")
+  revalidatePath("/admin/dashboard")
+}
+
+// ─── Excluir todas as parcelas de um parcelamento ─────────────────────────────
+
+export async function deletePaymentGroupAction(groupId: string) {
+  const session = await auth()
+  if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
+    throw new Error("Sem permissão")
+  }
+
+  const { count } = await prisma.payment.deleteMany({ where: { installmentGroupId: groupId } })
+
+  revalidatePath("/colaborador/financeiro")
+  revalidatePath("/admin/financeiro/pagamentos")
+  revalidatePath("/admin/dashboard")
+  return count
 }
 
 // ─── Excluir Pacote do Aluno ──────────────────────────────────────────────────
@@ -270,9 +290,14 @@ export async function deleteStudentPackageAction(packageId: string, studentId: s
     throw new Error("Sem permissão")
   }
 
+  // A cobrança vinculada (packageId) é excluída junto via ON DELETE CASCADE,
+  // removendo a receita do pacote do dashboard.
   await prisma.lessonPackage.delete({ where: { id: packageId } })
 
   revalidatePath(`/colaborador/alunos/${studentId}`)
   revalidatePath(`/admin/usuarios/${studentId}`)
   revalidatePath("/admin/financeiro/pacotes")
+  revalidatePath("/admin/financeiro/pagamentos")
+  revalidatePath("/colaborador/financeiro")
+  revalidatePath("/admin/dashboard")
 }

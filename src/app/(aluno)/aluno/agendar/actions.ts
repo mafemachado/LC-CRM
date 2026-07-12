@@ -9,8 +9,9 @@ import { notifyLessonRequest } from "@/lib/notifications"
 import { isWithinAvailability, hasConflict } from "@/lib/availability"
 import type { Availability }   from "@/lib/availability"
 import { getBookingPolicy }    from "@/lib/config"
-import { format }              from "date-fns"
+import { format, addWeeks }    from "date-fns"
 import { ptBR }                from "date-fns/locale"
+import { randomUUID }          from "crypto"
 
 export async function requestLessonAction(formData: FormData) {
   const session = await auth()
@@ -89,6 +90,9 @@ export async function requestLessonAction(formData: FormData) {
   })
 
   if (!teacher) redirect("/aluno/agendar?error=Professor+não+encontrado")
+  if (!teacher.externalBooking) {
+    redirect("/aluno/agendar?error=Professor+não+disponível+para+agendamento")
+  }
 
   // Valida disponibilidade e conflito de horário no backend
   const availability = (teacher.availability ?? {}) as unknown as Availability
@@ -100,6 +104,67 @@ export async function requestLessonAction(formData: FormData) {
   }
 
   const subject = await prisma.subject.findUnique({ where: { id: subjectId } })
+
+  // ── Agendamento recorrente (semanal, mesmo dia e horário) ───────────────────
+  const recurring   = String(raw.recurring ?? "") === "true"
+  const occurrences = Math.min(Math.max(2, parseInt(String(raw.occurrences ?? "1"), 10) || 1), 12)
+
+  if (recurring && occurrences > 1) {
+    // Aulas de 60min → custo 1 cada. Cria só o que couber no saldo total.
+    const totalRemaining = student.packages.reduce((sum, p) => sum + Number(p.remainingLessons), 0)
+    const maxByBalance   = Math.max(1, Math.floor(totalRemaining))
+    const target         = Math.min(occurrences, maxByBalance)
+
+    // Gera ocorrências semanais e pula as que conflitam com aulas já marcadas
+    const booked = teacher.lessons.map((l) => l.scheduledAt)
+    const toCreate: Date[] = []
+    for (let i = 0; i < target; i++) {
+      const d = addWeeks(requestDate, i)
+      if (!hasConflict(d, booked)) toCreate.push(d)
+    }
+
+    if (toCreate.length === 0) {
+      redirect("/aluno/agendar?error=Horários+da+série+indisponíveis")
+    }
+
+    const seriesId = randomUUID()
+    const total    = toCreate.length
+
+    await prisma.lessonRequest.createMany({
+      data: toCreate.map((d, i) => ({
+        studentId:          student.id,
+        teacherId,
+        subjectId,
+        preferredAt:        d,
+        modality,
+        status:             "PENDING" as const,
+        reason:             notes,
+        isGroupRequest:     false,
+        recurrenceSeriesId: seriesId,
+        seriesIndex:        i + 1,
+        seriesTotal:        total,
+      })),
+    })
+
+    // Notifica o professor por ocorrência (uma notificação por aula da série)
+    for (const d of toCreate) {
+      try {
+        await notifyLessonRequest({
+          teacherId:    teacher.user.id,
+          teacherEmail: teacher.user.email ?? "",
+          teacherPhone: teacher.user.phone,
+          studentName:  student.name ?? "Aluno",
+          subject:      subject?.name ?? "–",
+          preferredAt:  format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
+        })
+      } catch {
+        // Notificação falha silenciosamente — os pedidos já foram criados
+      }
+    }
+
+    revalidatePath("/aluno/aulas")
+    redirect("/aluno/agendar/sucesso")
+  }
 
   await prisma.lessonRequest.create({
     data: {

@@ -138,6 +138,8 @@ export default async function PagamentosPage({ searchParams }: PagamentosPagePro
                       <p className="text-xs text-muted-foreground">
                         {p.description ?? "Cobrança"} · Vence {format(p.dueDate, "dd/MM/yyyy", { locale: ptBR })}
                         {p.method && ` · ${p.method}`}
+                        {p.installmentTotal && p.installmentTotal > 1 &&
+                          ` · Parcela ${p.installmentNumber}/${p.installmentTotal}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">

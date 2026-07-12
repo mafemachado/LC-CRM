@@ -6,6 +6,7 @@ import { PageHeader }        from "@/components/shared/page-header"
 import { Card, CardContent } from "@/components/ui/card"
 import { BookOpen }          from "lucide-react"
 import { BookingForm }       from "./booking-form"
+import { getBookingPolicy }  from "@/lib/config"
 
 interface AgendarPageProps {
   searchParams: Promise<{ error?: string }>
@@ -43,9 +44,9 @@ export default async function AgendarPage({ searchParams }: AgendarPageProps) {
     )
   }
 
-  const [teachers, subjects] = await Promise.all([
+  const [teachers, subjects, bookingPolicy] = await Promise.all([
     prisma.teacher.findMany({
-      where:   { user: { active: true } },
+      where:   { user: { active: true }, externalBooking: true },
       include: {
         user:     true,
         subjects: { include: { subject: true } },
@@ -53,6 +54,7 @@ export default async function AgendarPage({ searchParams }: AgendarPageProps) {
       orderBy: { user: { name: "asc" } },
     }),
     prisma.subject.findMany({ orderBy: { name: "asc" } }),
+    getBookingPolicy(),
   ])
 
   return (
@@ -79,6 +81,7 @@ export default async function AgendarPage({ searchParams }: AgendarPageProps) {
             studentLevel={student?.educationLevel ?? null}
             studentId={activeStudent.id}
             error={error}
+            cancelMinHours={bookingPolicy.cancelMinHours}
           />
         </CardContent>
       </Card>

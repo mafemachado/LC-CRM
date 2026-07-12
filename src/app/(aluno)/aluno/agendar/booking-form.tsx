@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge }    from "@/components/ui/badge"
 import { requestLessonAction } from "./actions"
 import { DAY_SHORT } from "@/lib/availability"
-import { CalendarDays, Clock, Loader2, AlertCircle, ChevronLeft, ChevronRight, Wifi, MapPin, LayoutGrid } from "lucide-react"
+import { CalendarDays, Clock, Loader2, AlertCircle, ChevronLeft, ChevronRight, Wifi, MapPin, LayoutGrid, Repeat } from "lucide-react"
 import { format, addDays, startOfDay } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -55,18 +55,21 @@ function initials(name: string) {
 
 
 export function BookingForm({
-  teachers, subjects, studentLevel, studentId, error,
+  teachers, subjects, studentLevel, studentId, error, cancelMinHours = 0,
 }: {
-  teachers:     Teacher[]
-  subjects:     Subject[]
-  studentLevel: EducationLevel | null
-  studentId:    string
-  error?:       string
+  teachers:      Teacher[]
+  subjects:      Subject[]
+  studentLevel:  EducationLevel | null
+  studentId:     string
+  error?:        string
+  cancelMinHours?: number
 }) {
   const [subjectId,    setSubjectId]    = useState("")
   const [teacherId,    setTeacherId]    = useState("")
   const [modality,     setModality]     = useState("PRESENCIAL")
   const [notes,        setNotes]        = useState("")
+  const [recurring,    setRecurring]    = useState(false)
+  const [occurrences,  setOccurrences]  = useState(4)
 
   const [availDates,     setAvailDates]     = useState<string[]>([])
   const [selectedDate,   setSelectedDate]   = useState("")
@@ -151,6 +154,8 @@ export function BookingForm({
       <input type="hidden" name="preferredAt"    value={preferredAt} />
       <input type="hidden" name="modality"       value={modality} />
       <input type="hidden" name="notes"          value={notes} />
+      <input type="hidden" name="recurring"      value={recurring ? "true" : "false"} />
+      <input type="hidden" name="occurrences"    value={recurring ? String(occurrences) : "1"} />
 
       {/* 1. Matéria */}
       <div className="space-y-2">
@@ -330,6 +335,55 @@ export function BookingForm({
         </div>
       )}
 
+      {/* 5b. Recorrência semanal */}
+      {selectedDate && selectedSlot && (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setRecurring((v) => !v)}
+            className={`w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+              recurring
+                ? "bg-primary/10 text-primary border-primary/40"
+                : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+            }`}
+          >
+            <Repeat className="w-4 h-4" />
+            {recurring ? "Aula semanal recorrente (ativada)" : "Repetir toda semana"}
+          </button>
+
+          {recurring && (
+            <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Serão solicitadas aulas toda{" "}
+                <strong>
+                  {format(new Date(`${selectedDate}T00:00:00`), "EEEE", { locale: ptBR })} às {selectedSlot}
+                </strong>
+                . Cada aula desconta 1 do seu saldo — solicitamos só o que couber no pacote.
+              </p>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="occ" className="text-xs whitespace-nowrap">Quantas semanas</Label>
+                <select
+                  id="occ"
+                  value={occurrences}
+                  onChange={(e) => setOccurrences(parseInt(e.target.value, 10))}
+                  className="h-9 rounded-lg border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {Array.from({ length: 11 }, (_, i) => i + 2).map((n) => (
+                    <option key={n} value={n}>{n} aulas</option>
+                  ))}
+                </select>
+              </div>
+              {cancelMinHours > 0 && (
+                <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                  Cada aula da série pode ser cancelada individualmente até {cancelMinHours}h antes do horário.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* 6. Observações */}
       <div className="space-y-2">
         <Label>Observações (opcional)</Label>
@@ -340,7 +394,7 @@ export function BookingForm({
       <div className="flex items-center gap-3 flex-wrap">
         <SubmitButton disabled={!preferredAt || !subjectId || !teacherId} className="w-full sm:w-auto">
           <CalendarDays className="w-4 h-4" />
-          Enviar Solicitação
+          {recurring ? `Solicitar ${occurrences} aulas` : "Enviar Solicitação"}
         </SubmitButton>
         {preferredAt && (
           <Badge variant="outline" className="text-xs font-normal">

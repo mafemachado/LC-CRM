@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import { useRouter }  from "next/navigation"
 import { toast }      from "sonner"
-import { updatePaymentAction, deletePaymentAction } from "@/lib/actions/financeiro"
+import { updatePaymentAction, deletePaymentAction, deletePaymentGroupAction } from "@/lib/actions/financeiro"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog"
@@ -24,6 +24,9 @@ interface Props {
     description: string | null
     method:      string | null
     status:      "PENDING" | "PAID" | "OVERDUE"
+    installmentNumber?:  number | null
+    installmentTotal?:   number | null
+    installmentGroupId?: string | null
   }
   studentName: string
 }
@@ -42,6 +45,9 @@ export function EditPaymentDialog({ payment, studentName }: Props) {
   const [description, setDescription] = useState(payment.description ?? "")
   const [method,      setMethod]      = useState(payment.method ?? "")
   const [status,      setStatus]      = useState(payment.status)
+
+  const isInstallment = !!payment.installmentGroupId
+    && !!payment.installmentTotal && payment.installmentTotal > 1
 
   function handleOpen(v: boolean) {
     if (v) {
@@ -94,6 +100,20 @@ export function EditPaymentDialog({ payment, studentName }: Props) {
     })
   }
 
+  function submitDeleteGroup() {
+    if (!payment.installmentGroupId) return
+    start(async () => {
+      try {
+        const count = await deletePaymentGroupAction(payment.installmentGroupId!)
+        toast.success(`${count} parcelas excluídas`)
+        setOpen(false)
+        router.refresh()
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Erro ao excluir parcelas")
+      }
+    })
+  }
+
   return (
     <>
       <button
@@ -112,6 +132,12 @@ export function EditPaymentDialog({ payment, studentName }: Props) {
               <Pencil className="w-4 h-4 text-primary" />
               Editar Cobrança — {studentName}
             </DialogTitle>
+            {isInstallment && (
+              <p className="text-xs text-muted-foreground">
+                Parcela {payment.installmentNumber}/{payment.installmentTotal}
+                {payment.method ? ` · ${payment.method}` : ""} — alterações valem só para esta parcela.
+              </p>
+            )}
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -203,24 +229,40 @@ export function EditPaymentDialog({ payment, studentName }: Props) {
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 space-y-3">
                   <div className="flex items-start gap-2 text-red-700">
                     <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <p className="text-xs">Isso é irreversível. A cobrança será permanentemente excluída.</p>
+                    <p className="text-xs">
+                      {isInstallment
+                        ? `Isso é irreversível. Escolha excluir apenas esta parcela (${payment.installmentNumber}/${payment.installmentTotal}) ou todas as ${payment.installmentTotal} parcelas do parcelamento.`
+                        : "Isso é irreversível. A cobrança será permanentemente excluída."}
+                    </p>
                   </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDel(false)}
-                      className="flex-1 h-8 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-white transition-colors"
-                    >
-                      Cancelar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={submitDelete}
-                      disabled={pending}
-                      className="flex-1 h-8 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
-                    >
-                      {pending ? "Excluindo…" : "Confirmar exclusão"}
-                    </button>
+                  <div className="flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDel(false)}
+                        className="flex-1 h-8 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-white transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitDelete}
+                        disabled={pending}
+                        className="flex-1 h-8 rounded-lg bg-red-600 text-white text-xs font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
+                      >
+                        {pending ? "Excluindo…" : isInstallment ? "Só esta parcela" : "Confirmar exclusão"}
+                      </button>
+                    </div>
+                    {isInstallment && (
+                      <button
+                        type="button"
+                        onClick={submitDeleteGroup}
+                        disabled={pending}
+                        className="h-8 rounded-lg border border-red-300 bg-white text-red-700 text-xs font-medium hover:bg-red-100 disabled:opacity-50 transition-colors"
+                      >
+                        {pending ? "Excluindo…" : `Excluir todas as ${payment.installmentTotal} parcelas`}
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

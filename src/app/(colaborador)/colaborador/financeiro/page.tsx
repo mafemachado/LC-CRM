@@ -112,6 +112,8 @@ export default async function ColaboradorFinanceiroPage({ searchParams }: Financ
                         : `Vence ${format(p.dueDate, "dd/MM/yyyy", { locale: ptBR })}`
                       }
                       {p.method && ` · ${p.method}`}
+                      {p.installmentTotal && p.installmentTotal > 1 &&
+                        ` · Parcela ${p.installmentNumber}/${p.installmentTotal}`}
                     </p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -128,6 +130,9 @@ export default async function ColaboradorFinanceiroPage({ searchParams }: Financ
                         description: p.description ?? null,
                         method:      p.method      ?? null,
                         status:      p.status,
+                        installmentNumber:  p.installmentNumber,
+                        installmentTotal:   p.installmentTotal,
+                        installmentGroupId: p.installmentGroupId,
                       }}
                     />
                   </div>

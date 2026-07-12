@@ -20,6 +20,8 @@ export interface RequestData {
   requestModality: "PRESENCIAL" | "ONLINE"
   isGroupRequest:  boolean
   groupNote:       string | null
+  seriesIndex:     number | null
+  seriesTotal:     number | null
   remainingLessons: number | null
   packageExpired:  boolean
   hasConflict:     boolean
@@ -147,6 +149,8 @@ export function RequestsClient({ groups }: RequestsClientProps) {
               requestModality={r.requestModality}
               isGroupRequest={r.isGroupRequest}
               groupNote={r.groupNote}
+              seriesIndex={r.seriesIndex}
+              seriesTotal={r.seriesTotal}
               remainingLessons={r.remainingLessons}
               packageExpired={r.packageExpired}
               hasConflict={r.hasConflict}

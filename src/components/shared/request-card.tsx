@@ -9,7 +9,7 @@ import { approveRequestAction, rejectRequestAction } from "@/lib/actions/lesson-
 import { RescheduleDialog }          from "@/components/shared/reschedule-dialog"
 import {
   CalendarDays, Clock, CheckCircle2, XCircle, Loader2, AlertTriangle,
-  Wifi, MapPin, Building2, Home, Users, ExternalLink, PackageX, Calendar,
+  Wifi, MapPin, Building2, Home, Users, ExternalLink, PackageX, Calendar, Repeat,
 } from "lucide-react"
 import { format, isToday, isTomorrow } from "date-fns"
 import { ptBR }                      from "date-fns/locale"
@@ -31,6 +31,8 @@ interface RequestCardProps {
   requestModality:  "PRESENCIAL" | "ONLINE"
   isGroupRequest?:  boolean
   groupNote?:       string | null
+  seriesIndex?:     number | null
+  seriesTotal?:     number | null
   remainingLessons?: number | null
   packageExpired?:  boolean
   selectable?:      boolean
@@ -42,9 +44,11 @@ export function RequestCard({
   id, studentId, studentName, teacherName, subjectName,
   preferredAt, notes, hasConflict, outOfSchedule,
   teacherMode, requestModality, isGroupRequest, groupNote,
+  seriesIndex, seriesTotal,
   remainingLessons, packageExpired,
   selectable, selected, onSelect,
 }: RequestCardProps) {
+  const isSeries = seriesTotal != null && seriesTotal > 1
   const [pending, startTransition]     = useTransition()
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
   const [modality, setModality]        = useState<"PRESENCIAL" | "ONLINE">(
@@ -150,6 +154,11 @@ export function RequestCard({
                 {isGroupRequest && (
                   <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-semibold">
                     <Users className="w-2.5 h-2.5" /> Grupo
+                  </span>
+                )}
+                {isSeries && (
+                  <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary/15 text-secondary font-semibold">
+                    <Repeat className="w-2.5 h-2.5" /> Série {seriesIndex}/{seriesTotal}
                   </span>
                 )}
                 {isUrgentToday && (

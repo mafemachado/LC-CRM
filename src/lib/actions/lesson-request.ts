@@ -15,6 +15,13 @@ function lessonCost(durationMinutes: number): number {
   return durationMinutes / 60
 }
 
+/** Gera `count` ocorrências semanais a partir de uma data (mesmo dia da semana e hora). */
+function weeklyOccurrences(first: Date, count: number): Date[] {
+  const dates: Date[] = []
+  for (let i = 0; i < count; i++) dates.push(addWeeks(first, i))
+  return dates
+}
+
 async function requireCollaboratorOrAdmin() {
   const session = await auth()
   if (!session?.user) throw new Error("Sem permissão")
@@ -502,6 +509,193 @@ export async function createLessonDirectAction(data: {
   revalidatePath("/colaborador/agendamentos")
   revalidatePath("/admin/agenda")
   revalidatePath("/professor/agenda")
+}
+
+// ─── Criar aulas recorrentes (semanais) ───────────────────────────────────────
+// Uma única aula por semana, mesmo dia e horário. Serve tanto para AGENDAR
+// (futuras → CONFIRMED) quanto para REGISTRAR (passadas → COMPLETED).
+// Cria só o que couber no saldo do pacote e pula ocorrências com conflito.
+
+export async function createRecurringLessonsAction(data: {
+  teacherId:      string
+  studentId:      string
+  subjectId:      string
+  date:           string  // "YYYY-MM-DD" da 1ª ocorrência
+  time:           string  // "HH:mm"
+  occurrences:    number  // nº de aulas semanais
+  modality:       "PRESENCIAL" | "ONLINE"
+  duration?:      number
+  teacherOnsite?: boolean
+  packageId?:     string
+}): Promise<{ created: number; skippedConflict: number; skippedNoBalance: number }> {
+  await requireCollaboratorOrAdmin()
+
+  const occurrences = Math.min(Math.max(2, Math.floor(data.occurrences)), 52)
+  const duration    = data.duration ?? 60
+  const cost         = lessonCost(duration)
+  const first        = new Date(`${data.date}T${data.time}:00`)
+
+  const student = await prisma.student.findUnique({
+    where:   { id: data.studentId },
+    include: {
+      user:     true,
+      packages: data.packageId
+        ? { where: { id: data.packageId } }
+        : {
+            where:   { status: "ACTIVE", remainingLessons: { gt: 0 } },
+            orderBy: { purchaseDate: "desc" },
+            take:    1,
+          },
+    },
+  })
+  if (!student) throw new Error("Aluno não encontrado")
+
+  const pkg = student.packages[0]
+  if (!pkg) throw new Error(data.packageId ? "Pacote não encontrado" : "Aluno sem saldo de aulas disponível")
+
+  const [teacher, subject] = await Promise.all([
+    prisma.teacher.findUnique({ where: { id: data.teacherId }, include: { user: true } }),
+    prisma.subject.findUnique({ where: { id: data.subjectId } }),
+  ])
+  if (!teacher) throw new Error("Professor não encontrado")
+
+  let teacherOnsite: boolean
+  if (data.modality === "PRESENCIAL")               teacherOnsite = true
+  else if (teacher.teachingMode === "ONLINE_ONLY")  teacherOnsite = false
+  else                                              teacherOnsite = data.teacherOnsite ?? false
+
+  const occupiesRoom = data.modality === "PRESENCIAL" || (data.modality === "ONLINE" && teacherOnsite)
+  const roomCount    = occupiesRoom ? await getRoomCount() : 0
+
+  const now       = new Date()
+  const startBal  = Number(pkg.remainingLessons)
+  let   remaining = startBal
+
+  const toCreate: { date: Date; isPast: boolean }[] = []
+  let skippedConflict  = 0
+  let skippedNoBalance = 0
+
+  for (const date of weeklyOccurrences(first, occurrences)) {
+    if (remaining < cost) { skippedNoBalance++; continue }
+
+    const isPast = date < now
+
+    // Conflitos só valem para aulas futuras (passadas são registro histórico)
+    if (!isPast) {
+      const dayStart = startOfDay(date)
+      const dayEnd   = endOfDay(date)
+      const reqStart = date.getTime()
+      const reqEnd   = reqStart + duration * 60_000
+
+      if (occupiesRoom) {
+        const roomLessons = await prisma.lesson.findMany({
+          where: {
+            OR: [{ modality: "PRESENCIAL" }, { modality: "ONLINE", teacherOnsite: true }],
+            status:      { in: ["CONFIRMED", "SCHEDULED"] },
+            scheduledAt: { gte: dayStart, lte: dayEnd },
+          },
+          select: { scheduledAt: true, duration: true },
+        })
+        const roomConflicts = roomLessons.filter((l) => {
+          const s = l.scheduledAt.getTime(); const e = s + (l.duration ?? 60) * 60_000
+          return s < reqEnd && e > reqStart
+        })
+        if (roomConflicts.length >= roomCount) { skippedConflict++; continue }
+      }
+
+      const teacherLessons = await prisma.lesson.findMany({
+        where: {
+          teacherId:   data.teacherId,
+          status:      { in: ["CONFIRMED", "SCHEDULED"] },
+          scheduledAt: { gte: dayStart, lte: dayEnd },
+        },
+        select: { scheduledAt: true, duration: true },
+      })
+      const teacherConflict = teacherLessons.some((l) => {
+        const s = l.scheduledAt.getTime(); const e = s + (l.duration ?? 60) * 60_000
+        return s < reqEnd && e > reqStart
+      })
+      if (teacherConflict) { skippedConflict++; continue }
+    }
+
+    toCreate.push({ date, isPast })
+    remaining -= cost
+  }
+
+  if (toCreate.length === 0) {
+    throw new Error(
+      skippedConflict > 0
+        ? "Todos os horários da série têm conflito. Nenhuma aula foi criada."
+        : "Aluno sem saldo suficiente para agendar a série.",
+    )
+  }
+
+  const totalCost = toCreate.length * cost
+
+  await prisma.$transaction(async (tx) => {
+    let recurrenceGroupId: string | undefined
+    if (toCreate.length > 1) {
+      const group = await tx.recurrenceGroup.create({
+        data: {
+          rule:     "WEEKLY",
+          startsAt: toCreate[0].date,
+          endsAt:   toCreate[toCreate.length - 1].date,
+        },
+      })
+      recurrenceGroupId = group.id
+    }
+
+    for (const { date, isPast } of toCreate) {
+      await tx.lesson.create({
+        data: {
+          teacherId:         data.teacherId,
+          subjectId:         data.subjectId,
+          scheduledAt:       date,
+          duration,
+          modality:          data.modality,
+          status:            isPast ? "COMPLETED" : "CONFIRMED",
+          teacherOnsite,
+          recurrenceGroupId: recurrenceGroupId ?? null,
+          participants:      { create: { studentId: data.studentId } },
+        },
+      })
+    }
+
+    await tx.lessonPackage.update({
+      where: { id: pkg.id },
+      data:  {
+        remainingLessons: { decrement: totalCost },
+        status: startBal - totalCost <= 0 ? "EXHAUSTED" : "ACTIVE",
+      },
+    })
+  })
+
+  // Notifica o aluno de cada aula futura confirmada (uma por ocorrência).
+  // Aulas passadas (registro histórico) não geram notificação.
+  for (const { date, isPast } of toCreate) {
+    if (isPast) continue
+    try {
+      await notifyLessonConfirmed({
+        studentUserId: student.userId ?? "",
+        studentEmail:  student.user?.email ?? null,
+        studentPhone:  student.user?.phone ?? null,
+        teacherName:   teacher.user.name ?? "–",
+        subject:       subject?.name ?? "–",
+        scheduledAt:   format(date, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }),
+        modality:      data.modality === "PRESENCIAL" ? "Presencial" : "Online",
+      })
+    } catch {
+      // Notificação falha silenciosamente — as aulas já foram criadas
+    }
+  }
+
+  revalidatePath("/colaborador/agenda")
+  revalidatePath("/colaborador/agendamentos")
+  revalidatePath("/admin/agenda")
+  revalidatePath("/professor/agenda")
+  revalidatePath(`/colaborador/alunos/${data.studentId}`)
+
+  return { created: toCreate.length, skippedConflict, skippedNoBalance }
 }
 
 // ─── Criar aula em grupo ──────────────────────────────────────────────────────

@@ -862,6 +862,8 @@ export default async function StudentDetailPage({ params, searchParams }: Props)
                       <p className="font-medium">{brl(Number(pay.amount))}</p>
                       <p className="text-muted-foreground text-[11px]">
                         {format(pay.dueDate, "dd/MM/yyyy", { locale: ptBR })}
+                        {pay.installmentTotal && pay.installmentTotal > 1 &&
+                          ` · Parcela ${pay.installmentNumber}/${pay.installmentTotal}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
