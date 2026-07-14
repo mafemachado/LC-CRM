@@ -21,6 +21,13 @@ interface Teacher {
   subjects: { id: string; name: string }[]
 }
 
+// Converte minutos em "N aula(s)" (1 aula = 60 min)
+function fmtAulas(minutes: number): string {
+  const n = minutes / 60
+  const label = n % 1 === 0 ? String(n) : n.toFixed(1).replace(".", ",")
+  return `${label} aula${n === 1 ? "" : "s"}`
+}
+
 interface Props {
   studentId:     string
   studentName:   string
@@ -37,6 +44,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
   const [date, setDate]         = useState(format(new Date(), "yyyy-MM-dd"))
   const [time, setTime]         = useState("14:00")
   const [modality, setModality] = useState<"PRESENCIAL" | "ONLINE">("PRESENCIAL")
+  const [duration, setDuration] = useState(60)
   const [isDuo, setIsDuo]       = useState(false)
   const [duoIds, setDuoIds]     = useState<string[]>([])
   const [isRecurring, setIsRecurring] = useState(false)
@@ -67,6 +75,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
       setDate(format(new Date(), "yyyy-MM-dd"))
       setTime("14:00")
       setModality("PRESENCIAL")
+      setDuration(60)
       setIsDuo(false)
       setDuoIds([])
       setIsRecurring(false)
@@ -94,12 +103,13 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
             date,
             time,
             modality,
+            duration,
           })
           toast.success("Aula em grupo (pacote) agendada com sucesso")
         } else if (isRecurring) {
           const r = await createRecurringLessonsAction({
             teacherId, studentId, subjectId, date, time, modality,
-            occurrences,
+            occurrences, duration,
           })
           const parts = [`${r.created} aula${r.created !== 1 ? "s" : ""} criada${r.created !== 1 ? "s" : ""}`]
           if (r.skippedNoBalance > 0) parts.push(`${r.skippedNoBalance} sem saldo`)
@@ -113,7 +123,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
           }
           return
         } else {
-          await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality })
+          await createLessonDirectAction({ teacherId, studentId, subjectId, date, time, modality, duration })
           toast.success("Aula agendada com sucesso")
         }
         setOpen(false)
@@ -292,6 +302,38 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
               </div>
             </div>
 
+            {/* Duração (quantas aulas do pacote esta sessão consome) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs">Duração</Label>
+              <select
+                value={duration}
+                onChange={e => setDuration(parseInt(e.target.value, 10))}
+                className={`flex h-9 w-full rounded-lg border px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ring transition-colors ${
+                  duration === 30
+                    ? "bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-900"
+                    : duration > 60
+                    ? "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900"
+                    : "bg-background text-foreground border-input"
+                }`}
+              >
+                <option value="30"  className="bg-background text-foreground">0,5 aula (30 min)</option>
+                <option value="60"  className="bg-background text-foreground">1 aula (60 min)</option>
+                <option value="90"  className="bg-background text-foreground">1,5 aula (90 min)</option>
+                <option value="120" className="bg-background text-foreground">2 aulas (120 min)</option>
+                <option value="150" className="bg-background text-foreground">2,5 aulas (150 min)</option>
+                <option value="180" className="bg-background text-foreground">3 aulas (180 min)</option>
+                <option value="210" className="bg-background text-foreground">3,5 aulas (210 min)</option>
+                <option value="240" className="bg-background text-foreground">4 aulas (240 min)</option>
+              </select>
+              {duration !== 60 && (
+                <p className="text-[11px] text-muted-foreground">
+                  {isRecurring
+                    ? `Cada ocorrência desconta ${fmtAulas(duration)} do pacote.`
+                    : `Esta aula desconta ${fmtAulas(duration)} do pacote.`}
+                </p>
+              )}
+            </div>
+
             {/* Recorrência semanal (indisponível no modo grupo) */}
             {!isDuo && (
               <div className="space-y-2">
@@ -312,7 +354,7 @@ export function ScheduleLessonDialog({ studentId, studentName, teachers, hasBala
                   <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
                     <p className="text-[11px] text-muted-foreground">
                       Cria 1 aula por semana, sempre {date ? format(new Date(`${date}T00:00:00`), "EEEE", { locale: ptBRLocale }) : "no mesmo dia"} às {time}.
-                      Desconta 1 aula do pacote por ocorrência — cria só o que couber no saldo.
+                      Desconta {fmtAulas(duration)} do pacote por ocorrência — cria só o que couber no saldo.
                     </p>
                     <div className="flex items-center gap-2">
                       <Label className="text-xs whitespace-nowrap">Quantas semanas</Label>

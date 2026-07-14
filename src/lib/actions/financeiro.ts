@@ -5,6 +5,7 @@ import { auth }          from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { redirect }      from "next/navigation"
 import { z }             from "zod"
+import { randomUUID }    from "crypto"
 
 async function requireAdmin() {
   const session = await auth()
@@ -57,6 +58,8 @@ export async function createStudentPackageAction(data: {
     dueDate: string  // "YYYY-MM-DD"
     paidAt?: string  // "YYYY-MM-DD" — define status como PAID se preenchido
     method?: string
+    // Quando presente (boleto/cartão parcelado), cria uma cobrança por parcela.
+    installments?: { dueDate: string; amount: number }[]
   }
 }) {
   const session = await auth()
@@ -85,20 +88,46 @@ export async function createStudentPackageAction(data: {
     })
 
     if (data.payment) {
-      const { amount, dueDate, paidAt, method } = data.payment
-      const paidAtDate = paidAt ? new Date(paidAt) : undefined
-      await tx.payment.create({
-        data: {
-          studentId:   data.studentId,
-          packageId:   pkg.id,   // vincula a cobrança ao pacote (some junto se excluído)
-          amount,
-          dueDate:     new Date(dueDate),
-          paidAt:      paidAtDate ?? undefined,
-          method:      method || undefined,
-          status:      paidAtDate ? "PAID" : "PENDING",
-          description: `Pacote de ${Number(data.totalLessons) % 1 === 0 ? data.totalLessons : Number(data.totalLessons).toFixed(1).replace(".", ",")} aulas`,
-        },
-      })
+      const { amount, dueDate, paidAt, method, installments } = data.payment
+      const lessonsLabel = Number(data.totalLessons) % 1 === 0
+        ? data.totalLessons
+        : Number(data.totalLessons).toFixed(1).replace(".", ",")
+      const description = `Pacote de ${lessonsLabel} aulas`
+
+      if (installments && installments.length >= 2) {
+        // Parcelamento: uma cobrança (PENDING) por parcela, ligadas por grupo e ao pacote.
+        const groupId = randomUUID()
+        const total   = installments.length
+        await tx.payment.createMany({
+          data: installments.map((inst, i) => ({
+            studentId:          data.studentId,
+            packageId:          pkg.id,   // vincula a cobrança ao pacote (some junto se excluído)
+            amount:             inst.amount,
+            dueDate:            new Date(inst.dueDate),
+            paidAt:             null,
+            status:             "PENDING" as const,
+            method:             method || null,
+            description:        `${description} (${i + 1}/${total})`,
+            installmentNumber:  i + 1,
+            installmentTotal:   total,
+            installmentGroupId: groupId,
+          })),
+        })
+      } else {
+        const paidAtDate = paidAt ? new Date(paidAt) : undefined
+        await tx.payment.create({
+          data: {
+            studentId:   data.studentId,
+            packageId:   pkg.id,   // vincula a cobrança ao pacote (some junto se excluído)
+            amount,
+            dueDate:     new Date(dueDate),
+            paidAt:      paidAtDate ?? undefined,
+            method:      method || undefined,
+            status:      paidAtDate ? "PAID" : "PENDING",
+            description,
+          },
+        })
+      }
     }
   })
 

@@ -1,8 +1,8 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useEffect, useTransition } from "react"
 import { useRouter }               from "next/navigation"
-import { Plus, Loader2, BookOpen, RefreshCw } from "lucide-react"
+import { Plus, Loader2, BookOpen, RefreshCw, RotateCcw } from "lucide-react"
 import { Button }   from "@/components/ui/button"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
@@ -34,6 +34,25 @@ const PAYMENT_METHODS = [
   { value: "Outro",           label: "Outro" },
 ]
 
+// Métodos que permitem parcelamento (uma cobrança por parcela)
+const INSTALLMENT_METHODS = ["Cartão de crédito", "Boleto"]
+
+type Installment = { dueDate: string; amount: string }
+
+// Distribui o total em N parcelas mensais a partir da 1ª data.
+// A última parcela absorve o arredondamento para fechar o total exato.
+function buildInstallments(total: number, count: number, firstDate: string): Installment[] {
+  const base = Math.floor((total / count) * 100) / 100
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(`${firstDate}T00:00:00`)
+    d.setMonth(d.getMonth() + i)
+    const value = i === count - 1
+      ? Math.round((total - base * (count - 1)) * 100) / 100
+      : base
+    return { dueDate: d.toISOString().slice(0, 10), amount: value.toFixed(2) }
+  })
+}
+
 export function PackageDialog({ studentId, studentName, mode }: Props) {
   const router = useRouter()
   const [open, setOpen]             = useState(false)
@@ -50,7 +69,43 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
   const [paymentPaidAt, setPaymentPaidAt]   = useState("")
   const [paymentMethod, setPaymentMethod]   = useState("")
 
+  const [installmentCount, setInstallmentCount] = useState(1)
+  const [installments,     setInstallments]     = useState<Installment[]>([])
+
   const [pending, start] = useTransition()
+
+  const canInstall    = INSTALLMENT_METHODS.includes(paymentMethod)
+  const isInstallment = createPayment && canInstall && installmentCount > 1
+
+  // Ao trocar para um método sem parcelamento, zera as parcelas.
+  useEffect(() => {
+    if (!canInstall) { setInstallmentCount(1); setInstallments([]) }
+  }, [canInstall])
+
+  // (Re)gera as parcelas ao mudar a quantidade.
+  useEffect(() => {
+    if (!canInstall || installmentCount <= 1) { setInstallments([]); return }
+    const total = parseFloat(paymentAmount.replace(",", ".")) || 0
+    setInstallments(buildInstallments(total, installmentCount, paymentDueDate || todayISO()))
+    // Intencional: só regenera ao mudar a quantidade de parcelas.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [installmentCount, canInstall])
+
+  function recalcInstallments() {
+    const total = parseFloat(paymentAmount.replace(",", ".")) || 0
+    setInstallments(buildInstallments(total, installmentCount, paymentDueDate || todayISO()))
+  }
+
+  function updateInstallment(i: number, field: keyof Installment, value: string) {
+    setInstallments(prev => prev.map((row, idx) => idx === i ? { ...row, [field]: value } : row))
+  }
+
+  const installmentsTotal = installments.reduce(
+    (sum, r) => sum + (parseFloat(r.amount.replace(",", ".")) || 0), 0,
+  )
+
+  const brl = (n: number) =>
+    n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 
   function handleOpen(v: boolean) {
     if (v) {
@@ -64,6 +119,8 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
       setPaymentDueDate(todayISO())
       setPaymentPaidAt("")
       setPaymentMethod("")
+      setInstallmentCount(1)
+      setInstallments([])
     }
     setOpen(v)
   }
@@ -88,10 +145,24 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
     if (!total || total < 0.5 || !Number.isInteger(total * 2)) { toast.error("Número de aulas inválido (use múltiplos de 0,5)"); return }
     if (!price || price < 0) { toast.error("Valor por aula inválido");  return }
 
+    let parsedInstallments: { dueDate: string; amount: number }[] | undefined
     if (createPayment) {
       const amt = parseFloat(paymentAmount)
       if (!amt || amt < 0.01) { toast.error("Valor do pagamento inválido"); return }
       if (!paymentDueDate)    { toast.error("Data de vencimento obrigatória"); return }
+
+      if (isInstallment) {
+        parsedInstallments = installments.map(r => ({
+          dueDate: r.dueDate,
+          amount:  parseFloat(r.amount.replace(",", ".")),
+        }))
+        if (parsedInstallments.some(p => !p.dueDate)) {
+          toast.error("Informe a data de todas as parcelas"); return
+        }
+        if (parsedInstallments.some(p => isNaN(p.amount) || p.amount <= 0)) {
+          toast.error("Informe um valor válido para todas as parcelas"); return
+        }
+      }
     }
 
     start(async () => {
@@ -104,10 +175,11 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
           purchaseDate,
           isClosed,
           payment: createPayment ? {
-            amount:  parseFloat(paymentAmount),
-            dueDate: paymentDueDate,
-            paidAt:  paymentPaidAt || undefined,
-            method:  paymentMethod || undefined,
+            amount:       parseFloat(paymentAmount),
+            dueDate:      paymentDueDate,
+            paidAt:       parsedInstallments ? undefined : (paymentPaidAt || undefined),
+            method:       paymentMethod || undefined,
+            installments: parsedInstallments,
           } : undefined,
         })
         toast.success(mode === "renovar" ? "Pacote renovado com sucesso" : "Pacote criado com sucesso")
@@ -256,7 +328,7 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
                 <div className="pl-6 space-y-3">
                   {/* Valor */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs">Valor do pagamento (R$) *</Label>
+                    <Label className="text-xs">{isInstallment ? "Valor total (R$) *" : "Valor do pagamento (R$) *"}</Label>
                     <Input
                       type="number"
                       min={0.01}
@@ -279,18 +351,20 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
                     />
                   </div>
 
-                  {/* Data de pagamento */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">
-                      Data de pagamento <span className="text-muted-foreground">(deixe vazio se ainda pendente)</span>
-                    </Label>
-                    <Input
-                      type="date"
-                      value={paymentPaidAt}
-                      onChange={e => setPaymentPaidAt(e.target.value)}
-                      className="h-9"
-                    />
-                  </div>
+                  {/* Data de pagamento (oculta no modo parcelado — parcelas nascem pendentes) */}
+                  {!isInstallment && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">
+                        Data de pagamento <span className="text-muted-foreground">(deixe vazio se ainda pendente)</span>
+                      </Label>
+                      <Input
+                        type="date"
+                        value={paymentPaidAt}
+                        onChange={e => setPaymentPaidAt(e.target.value)}
+                        className="h-9"
+                      />
+                    </div>
+                  )}
 
                   {/* Método */}
                   <div className="space-y-1.5">
@@ -309,13 +383,87 @@ export function PackageDialog({ studentId, studentName, mode }: Props) {
                     </Select>
                   </div>
 
+                  {/* Nº de parcelas (só cartão de crédito / boleto) */}
+                  {canInstall && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">Parcelas</Label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setInstallmentCount(n)}
+                            className={`w-9 h-8 rounded-lg border text-xs font-medium transition-colors ${
+                              installmentCount === n
+                                ? "bg-secondary text-white border-secondary"
+                                : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                            }`}
+                          >
+                            {n}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Editor de parcelas */}
+                  {isInstallment && (
+                    <div className="space-y-2 rounded-lg border border-border p-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs">Datas e valores das parcelas</Label>
+                        <button
+                          type="button"
+                          onClick={recalcInstallments}
+                          className="flex items-center gap-1 text-[11px] text-secondary hover:underline"
+                          title="Redistribuir a partir do valor total e vencimento"
+                        >
+                          <RotateCcw className="w-3 h-3" /> Recalcular
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {installments.map((row, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-8 shrink-0 text-xs text-muted-foreground">{i + 1}/{installmentCount}</span>
+                            <Input
+                              type="date"
+                              value={row.dueDate}
+                              onChange={e => updateInstallment(i, "dueDate", e.target.value)}
+                              className="h-8 text-xs"
+                            />
+                            <Input
+                              type="text"
+                              inputMode="decimal"
+                              value={row.amount}
+                              onChange={e => updateInstallment(i, "amount", e.target.value)}
+                              className="h-8 w-24 text-xs"
+                              placeholder="0,00"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                      <p className="text-[11px] text-muted-foreground text-right">
+                        Soma das parcelas: <strong>{brl(installmentsTotal)}</strong>
+                      </p>
+                    </div>
+                  )}
+
                   {/* Status resumido */}
-                  <p className="text-xs text-muted-foreground">
-                    Status: <strong className={paymentPaidAt ? "text-green-600" : "text-amber-600"}>
-                      {paymentPaidAt ? "Pago" : "Pendente"}
-                    </strong>
-                    {paymentPaidAt && ` em ${new Date(paymentPaidAt + "T12:00:00").toLocaleDateString("pt-BR")}`}
-                  </p>
+                  {isInstallment ? (
+                    <p className="text-xs text-muted-foreground">
+                      Status: <strong className="text-amber-600">
+                        {installmentCount} parcelas pendentes
+                      </strong>
+                    </p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Status: <strong className={paymentPaidAt ? "text-green-600" : "text-amber-600"}>
+                        {paymentPaidAt ? "Pago" : "Pendente"}
+                      </strong>
+                      {paymentPaidAt && ` em ${new Date(paymentPaidAt + "T12:00:00").toLocaleDateString("pt-BR")}`}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
