@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge }      from "@/components/ui/badge"
 import { PaymentStatusSelector } from "@/app/(colaborador)/colaborador/alunos/[id]/_components/payment-status-selector"
-import { Package, Receipt, CalendarDays } from "lucide-react"
+import { LinkToPackage } from "./link-to-package"
+import { Package, Receipt, CalendarDays, Link2 } from "lucide-react"
 import { format }     from "date-fns"
 import { ptBR }       from "date-fns/locale"
 
@@ -30,7 +31,11 @@ export default async function AlunoFinanceiroPage({ params }: Props) {
         orderBy: { purchaseDate: "desc" },
         include: { payments: { orderBy: [{ installmentNumber: "asc" }, { dueDate: "asc" }] } },
       },
-      payments: { orderBy: { dueDate: "desc" } },
+      payments: { orderBy: { dueDate: "desc" }, select: {
+        id: true, amount: true, feeAmount: true, dueDate: true, paidAt: true,
+        status: true, method: true, description: true, packageId: true,
+        installmentNumber: true, installmentTotal: true, installmentGroupId: true,
+      }},
     },
   })
   if (!student) notFound()
@@ -115,10 +120,22 @@ export default async function AlunoFinanceiroPage({ params }: Props) {
           <CardHeader className="pb-3">
             <CardTitle className="font-sub text-base flex items-center gap-2">
               <Receipt className="w-4 h-4 text-primary" /> Cobranças avulsas
+              <span className="text-xs font-normal text-muted-foreground ml-1">
+                — clique em <Link2 className="w-3 h-3 inline" /> para vincular ao pacote
+              </span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <PaymentList payments={avulsos} />
+            <PaymentList
+              payments={avulsos}
+              packages={student.packages.map((p) => ({
+                id: p.id,
+                totalLessons: Number(p.totalLessons),
+                purchaseDate: p.purchaseDate,
+                status: p.status,
+              }))}
+              studentId={id}
+            />
           </CardContent>
         </Card>
       )}
@@ -130,9 +147,18 @@ type PaymentRow = {
   id: string; amount: unknown; feeAmount: unknown; dueDate: Date; paidAt: Date | null
   status: "PENDING" | "PAID" | "OVERDUE"; method: string | null; description: string | null
   installmentNumber: number | null; installmentTotal: number | null
+  installmentGroupId?: string | null
 }
 
-function PaymentList({ payments }: { payments: PaymentRow[] }) {
+interface PackageOption { id: string; totalLessons: number; purchaseDate: Date; status: string }
+
+function PaymentList({
+  payments, packages, studentId,
+}: {
+  payments: PaymentRow[]
+  packages?: PackageOption[]
+  studentId?: string
+}) {
   return (
     <div className="space-y-2">
       {payments.map((p) => {
@@ -155,6 +181,14 @@ function PaymentList({ payments }: { payments: PaymentRow[] }) {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <p className="text-sm font-semibold">{brl(Number(p.amount))}</p>
+              {packages && studentId && (
+                <LinkToPackage
+                  paymentId={p.id}
+                  studentId={studentId}
+                  packages={packages}
+                  hasGroup={!!p.installmentGroupId}
+                />
+              )}
               <PaymentStatusSelector paymentId={p.id} currentStatus={p.status} />
             </div>
           </div>

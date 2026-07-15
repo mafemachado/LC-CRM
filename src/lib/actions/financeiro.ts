@@ -459,6 +459,40 @@ export async function deletePaymentAction(id: string) {
   revalidatePath("/admin/dashboard")
 }
 
+// ─── Vincular/Desvincular Cobrança a um Pacote ───────────────────────────────
+
+export async function linkPaymentToPackageAction(
+  paymentId: string,
+  packageId: string | null,
+  studentId: string,
+) {
+  const session = await auth()
+  if (!session?.user || !["ADMIN", "COLLABORATOR"].includes(session.user.role)) {
+    throw new Error("Sem permissão")
+  }
+
+  // Se o pagamento faz parte de um parcelamento (installmentGroupId), vincula
+  // todas as parcelas do grupo ao mesmo pacote de uma vez.
+  const payment = await prisma.payment.findUnique({
+    where:  { id: paymentId },
+    select: { installmentGroupId: true },
+  })
+
+  if (payment?.installmentGroupId) {
+    await prisma.payment.updateMany({
+      where: { installmentGroupId: payment.installmentGroupId },
+      data:  { packageId },
+    })
+  } else {
+    await prisma.payment.update({
+      where: { id: paymentId },
+      data:  { packageId },
+    })
+  }
+
+  revalidatePath(`/admin/financeiro/alunos/${studentId}`)
+}
+
 // ─── Excluir todas as parcelas de um parcelamento ─────────────────────────────
 
 export async function deletePaymentGroupAction(groupId: string) {
