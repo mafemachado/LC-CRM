@@ -21,6 +21,7 @@ import { comResultado, type ActionResult } from "@/lib/action-result"
 import { normalizeGrade } from "@/lib/constants/grades"
 import { gerarRA }        from "@/lib/ra"
 import { temMetodo }      from "@/lib/payments"
+import { mapLimit, SEND_CONCURRENCY } from "@/lib/concurrency"
 
 /** Carrega as regras de taxa de cartão ativas (para snapshot em Payment.feeAmount). */
 async function loadFeeRates(): Promise<FeeRate[]> {
@@ -214,40 +215,41 @@ export async function createStudentWithGuardianAction(formData: FormData) {
     }
 
     // ── Aulas já realizadas ──────────────────────────────────────────────────
-    for (const row of parsedLessons) {
-      const scheduledAt = parseBrazilDateTime(row.date, row.time)
-      await tx.lesson.create({
-        data: {
+    // Em lote (antes: uma ida ao banco por aula e por pagamento).
+    if (parsedLessons.length > 0) {
+      const aulas = await tx.lesson.createManyAndReturn({
+        data: parsedLessons.map((row) => ({
           teacherId:     row.teacherId,
           subjectId:     row.subjectId,
-          scheduledAt,
+          scheduledAt:   parseBrazilDateTime(row.date, row.time),
           duration:      parseInt(row.duration) || 60,
           modality:      row.modality,
           status:        row.status,
           topicsCovered: row.topics || null,
-          participants:  { create: { studentId: student.id } },
-        },
+        })),
+        select: { id: true },
       })
-      lessonCount++
+      await tx.lessonParticipant.createMany({
+        data: aulas.map((a) => ({ lessonId: a.id, studentId: student.id })),
+      })
+      lessonCount = aulas.length
     }
 
     // ── Pagamentos anteriores ────────────────────────────────────────────────
-    for (const p of parsedPayments) {
-      const amount = parseFloat(p.amount.replace(",", ".")) || 0
-      if (amount <= 0) continue
-      await tx.payment.create({
-        data: {
-          studentId:   student.id,
-          amount,
-          dueDate:     new Date(p.dueDate),
-          paidAt:      p.paidAt ? new Date(p.paidAt) : (p.status === "PAID" ? new Date(p.dueDate) : null),
-          status:      p.status,
-          method:      p.method || null,
-          description: p.description || null,
-        },
-      })
-      paymentCount++
-    }
+    const pagamentos = parsedPayments
+      .map((p) => ({ p, amount: parseFloat(p.amount.replace(",", ".")) || 0 }))
+      .filter(({ amount }) => amount > 0)
+      .map(({ p, amount }) => ({
+        studentId:   student.id,
+        amount,
+        dueDate:     new Date(p.dueDate),
+        paidAt:      p.paidAt ? new Date(p.paidAt) : (p.status === "PAID" ? new Date(p.dueDate) : null),
+        status:      p.status,
+        method:      p.method || null,
+        description: p.description || null,
+      }))
+    if (pagamentos.length > 0) await tx.payment.createMany({ data: pagamentos })
+    paymentCount = pagamentos.length
   })
 
   revalidatePath("/colaborador/alunos")
@@ -579,38 +581,43 @@ export async function sendConfirmationsBatchAction(items: {
 }[]): Promise<{ sent: number; delivered: number; confirmed: number; problema: string | null }> {
   await requireCollaboratorOrAdmin()
 
-  const results: DeliveryResult[] = []
   const avisados = new Set<string>()   // lessonIds cujo responsável foi avisado
 
-  for (const item of items) {
-    // "pacote" (cobrança) também vai para o responsável — só não confirma a aula
-    const paraProfessor = item.tipo === "professor"
-    const lesson = await prisma.lesson.findUnique({
-      where:   { id: item.lessonId },
-      include: {
-        participants: {
-          include: {
-            student: {
-              include: {
-                user:     true,
-                guardian: { include: { user: true } },
-              },
+  // Todas as aulas do lote numa consulta só (antes: uma consulta por item).
+  const lessons = await prisma.lesson.findMany({
+    where:   { id: { in: [...new Set(items.map((i) => i.lessonId))] } },
+    include: {
+      participants: {
+        include: {
+          student: {
+            include: {
+              user:     true,
+              guardian: { include: { user: true } },
             },
           },
-          take: 1,
         },
-        teacher: { include: { user: true } },
-        subject: true,
+        take: 1,
       },
-    })
-    if (!lesson) continue
+      teacher: { include: { user: true } },
+      subject: true,
+    },
+  })
+  const lessonById = new Map(lessons.map((l) => [l.id, l]))
+
+  // Envios em paralelo, em grupos (antes: um de cada vez). A ordem dos
+  // resultados é a dos itens, como no laço original.
+  const enviados = await mapLimit(items, SEND_CONCURRENCY, async (item): Promise<DeliveryResult | null> => {
+    // "pacote" (cobrança) também vai para o responsável — só não confirma a aula
+    const paraProfessor = item.tipo === "professor"
+    const lesson = lessonById.get(item.lessonId)
+    if (!lesson) return null
 
     if (!paraProfessor) {
       const first    = lesson.participants[0]
       const student  = first?.student
       const guardian = student?.guardian
       const userId   = guardian?.userId ?? student?.userId
-      if (!userId) continue
+      if (!userId) return null
 
       const r = await notify({
         userId,
@@ -624,12 +631,12 @@ export async function sendConfirmationsBatchAction(items: {
           "Horário":  formatBR(lesson.scheduledAt, "HH:mm"),
         },
       })
-      results.push(r)
       // Só confirma a aula se a mensagem realmente saiu (itens de cobrança de
       // pacote não confirmam nada, mesmo indo para o responsável).
       if (item.tipo === "responsavel" && countsAsSent(r)) avisados.add(item.lessonId)
+      return r
     } else {
-      results.push(await notify({
+      return notify({
         userId:  lesson.teacher.userId,
         type:    "LESSON_CONFIRMATION_REQUEST",
         title:   "Confirmação de presença",
@@ -640,9 +647,10 @@ export async function sendConfirmationsBatchAction(items: {
           "Matéria":  lesson.subject?.name ?? "–",
           "Horário":  formatBR(lesson.scheduledAt, "HH:mm"),
         },
-      }))
+      })
     }
-  }
+  })
+  const results = enviados.filter((r): r is DeliveryResult => r !== null)
 
   // Fecha o ciclo: só aulas ainda agendadas cujo responsável/aluno foi avisado
   // de fato. O filtro de status evita ressuscitar aula cancelada/realizada.
@@ -728,15 +736,15 @@ function resumirEnvios(results: DeliveryResult[]): EnvioResultado {
 /** Notifica o responsável de cada participante — ou o próprio aluno, se ele tiver login. */
 async function notifyConfirmationToStudents(lesson: LessonForConfirmation): Promise<EnvioResultado> {
   const scheduledAt = formatBR(lesson.scheduledAt, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
-  const results: DeliveryResult[] = []
+  // Aluno com login próprio recebe direto; senão vai para o responsável
+  const destinos = lesson.participants.filter(({ student }) => student.userId ?? student.guardian?.userId)
 
-  for (const { student } of lesson.participants) {
-    // Aluno com login próprio recebe direto; senão vai para o responsável
-    const recipientId = student.userId ?? student.guardian?.userId
-    if (!recipientId) continue
+  // Em paralelo, em grupos (antes: um participante de cada vez).
+  const results = await mapLimit(destinos, SEND_CONCURRENCY, ({ student }) => {
+    const recipientId = (student.userId ?? student.guardian?.userId)!
     const contact = student.userId ? student.user : student.guardian?.user
 
-    results.push(await notify({
+    return notify({
       userId:  recipientId,
       type:    "LESSON_CONFIRMED",
       title:   "Confirmação de aula",
@@ -750,8 +758,8 @@ async function notifyConfirmationToStudents(lesson: LessonForConfirmation): Prom
         "Data/Hora":  scheduledAt,
         "Modalidade": lesson.modality === "ONLINE" ? "Online" : "Presencial",
       },
-    }))
-  }
+    })
+  })
 
   return resumirEnvios(results)
 }
@@ -802,8 +810,10 @@ async function confirmarAula(lessonId: string) {
 
   // Notificações depois da gravação: uma falha de e-mail/WhatsApp não desfaz a
   // confirmação, mas o resultado volta para a interface avisar o atendente.
-  const professor    = await notifyConfirmationToTeacher(lesson)
-  const responsaveis = await notifyConfirmationToStudents(lesson)
+  const [professor, responsaveis] = await Promise.all([
+    notifyConfirmationToTeacher(lesson),
+    notifyConfirmationToStudents(lesson),
+  ])
 
   revalidatePath("/colaborador/agenda")
   revalidatePath("/colaborador/dashboard")

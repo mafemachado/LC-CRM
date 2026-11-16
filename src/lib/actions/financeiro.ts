@@ -300,29 +300,51 @@ export async function markPaymentPaidAction(
  * como pago. Retorna também `hourlyRate` para exibição.
  */
 export async function computePayout(teacherId: string, month: number, year: number) {
+  const payouts = await computePayouts([teacherId], month, year)
+  return payouts.get(teacherId)!
+}
+
+/**
+ * `computePayout` de vários professores de uma vez: 3 consultas no total, seja
+ * qual for o número de professores. Antes eram 3 consultas POR professor (N+1),
+ * o que deixava a tela de repasses e o hub financeiro lentos.
+ */
+export async function computePayouts(teacherIds: string[], month: number, year: number) {
   const start = new Date(year, month - 1, 1)
   const end   = new Date(year, month, 0, 23, 59, 59)
 
-  const [teacher, lessons, history] = await Promise.all([
-    prisma.teacher.findUnique({ where: { id: teacherId }, select: { hourlyRate: true } }),
+  const [teachers, lessons, history] = await Promise.all([
+    prisma.teacher.findMany({ where: { id: { in: teacherIds } }, select: { id: true, hourlyRate: true } }),
     prisma.lesson.findMany({
-      where:  { teacherId, status: "COMPLETED", scheduledAt: { gte: start, lte: end } },
-      select: { duration: true, scheduledAt: true },
+      where:  { teacherId: { in: teacherIds }, status: "COMPLETED", scheduledAt: { gte: start, lte: end } },
+      select: { teacherId: true, duration: true, scheduledAt: true },
     }),
-    loadRateHistory([teacherId]),
+    loadRateHistory(teacherIds),
   ])
 
-  // Cada aula vale a taxa vigente NA DATA DELA. Antes tudo usava o valor atual,
-  // então um reajuste reescrevia o custo de meses já trabalhados.
-  const hourlyRate = Number(teacher?.hourlyRate ?? 0)
-  const faixas     = history.get(teacherId)
-  const totalUnits = lessons.reduce((sum, l) => sum + l.duration / 60, 0)
-  const totalAmount = lessons.reduce(
-    (sum, l) => sum + (l.duration / 60) * rateAt(faixas, l.scheduledAt, hourlyRate),
-    0,
-  )
+  const rateById    = new Map(teachers.map((t) => [t.id, Number(t.hourlyRate ?? 0)]))
+  const lessonsById = new Map<string, typeof lessons>()
+  for (const l of lessons) {
+    const list = lessonsById.get(l.teacherId) ?? []
+    list.push(l)
+    lessonsById.set(l.teacherId, list)
+  }
 
-  return { totalLessons: totalUnits, totalAmount, hourlyRate, lessonCount: lessons.length }
+  const result = new Map<string, { totalLessons: number; totalAmount: number; hourlyRate: number; lessonCount: number }>()
+  for (const teacherId of teacherIds) {
+    // Cada aula vale a taxa vigente NA DATA DELA. Antes tudo usava o valor atual,
+    // então um reajuste reescrevia o custo de meses já trabalhados.
+    const hourlyRate = rateById.get(teacherId) ?? 0
+    const faixas     = history.get(teacherId)
+    const doMes      = lessonsById.get(teacherId) ?? []
+    const totalUnits = doMes.reduce((sum, l) => sum + l.duration / 60, 0)
+    const totalAmount = doMes.reduce(
+      (sum, l) => sum + (l.duration / 60) * rateAt(faixas, l.scheduledAt, hourlyRate),
+      0,
+    )
+    result.set(teacherId, { totalLessons: totalUnits, totalAmount, hourlyRate, lessonCount: doMes.length })
+  }
+  return result
 }
 
 /**
@@ -373,12 +395,17 @@ export async function getPayoutAlerts() {
     payDayStart: number; payDayEnd: number; overdue: boolean
   }[] = []
 
-  for (const t of teachers) {
-    if (paidSet.has(t.id)) continue
+  const naJanela = teachers.filter(
+    (t) => !paidSet.has(t.id) && today >= t.payDayStart! - 3,   // fora disso: ainda longe da janela
+  )
+  const payouts = naJanela.length > 0
+    ? await computePayouts(naJanela.map((t) => t.id), month, year)
+    : new Map()
+
+  for (const t of naJanela) {
     const start = t.payDayStart!
     const end   = t.payDayEnd ?? t.payDayStart!
-    if (today < start - 3) continue                 // ainda longe da janela
-    const { totalAmount } = await computePayout(t.id, month, year)
+    const { totalAmount } = payouts.get(t.id)!
     if (totalAmount <= 0) continue
     alerts.push({
       teacherId:   t.id,

@@ -8,7 +8,8 @@ import { redirect }            from "next/navigation"
 import { notifyLessonRequest } from "@/lib/notifications"
 import { isWithinAvailability } from "@/lib/availability"
 import type { Availability }   from "@/lib/availability"
-import { findTeacherConflicts, DEFAULT_DURATION } from "@/lib/scheduling"
+import { findTeacherConflicts, loadTeacherAgendaFor, findConflictIn, DEFAULT_DURATION } from "@/lib/scheduling"
+import { mapLimit, SEND_CONCURRENCY } from "@/lib/concurrency"
 import { getBookingPolicy }    from "@/lib/config"
 import { format, addWeeks }    from "date-fns"
 import { ptBR }                from "date-fns/locale"
@@ -125,16 +126,11 @@ export async function requestLessonAction(formData: FormData) {
     const target         = Math.min(occurrences, maxByBalance)
 
     // Gera ocorrências semanais e pula as que conflitam com aulas já marcadas
-    const toCreate: Date[] = []
-    for (let i = 0; i < target; i++) {
-      const d = addWeeks(requestDate, i)
-      const clashes = await findTeacherConflicts({
-        teacherId,
-        scheduledAt: d,
-        duration:    DEFAULT_DURATION,
-      })
-      if (clashes.length === 0) toCreate.push(d)
-    }
+    // Agenda do professor para a série inteira numa consulta só (antes: uma por semana).
+    const candidatas = Array.from({ length: target }, (_, i) => addWeeks(requestDate, i))
+    const slots      = candidatas.map((d) => ({ scheduledAt: d, duration: DEFAULT_DURATION }))
+    const agenda     = await loadTeacherAgendaFor(teacherId, slots)
+    const toCreate   = candidatas.filter((_, i) => !findConflictIn(slots[i], agenda))
 
     if (toCreate.length === 0) {
       redirect("/aluno/agendar?error=Horários+da+série+indisponíveis")
@@ -159,8 +155,9 @@ export async function requestLessonAction(formData: FormData) {
       })),
     })
 
-    // Notifica o professor por ocorrência (uma notificação por aula da série)
-    for (const d of toCreate) {
+    // Notifica o professor por ocorrência (uma notificação por aula da série),
+    // em paralelo e em grupos — antes o responsável esperava um envio de cada vez.
+    await mapLimit(toCreate, SEND_CONCURRENCY, async (d) => {
       try {
         await notifyLessonRequest({
           teacherId:    teacher.user.id,
@@ -173,7 +170,7 @@ export async function requestLessonAction(formData: FormData) {
       } catch {
         // Notificação falha silenciosamente — os pedidos já foram criados
       }
-    }
+    })
 
     revalidatePath("/aluno/aulas")
     redirect("/aluno/agendar/sucesso")

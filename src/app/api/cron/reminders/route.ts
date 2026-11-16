@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server"
 import { prisma }           from "@/lib/prisma"
 import { notifyLessonReminder } from "@/lib/notifications"
+import { mapLimit, SEND_CONCURRENCY } from "@/lib/concurrency"
 import { format }           from "date-fns"
 import { ptBR }             from "date-fns/locale"
 
@@ -30,35 +31,35 @@ export async function GET(request: NextRequest) {
     }),
   ])
 
-  let sent = 0
-
-  for (const [lessons, type] of [
+  // Uma tarefa por (aula, participante), enviadas em paralelo em grupos —
+  // antes era uma de cada vez, e com muitas aulas o cron podia estourar o tempo
+  // limite da função na Vercel antes de avisar todo mundo.
+  const tarefas = ([
     [lessons24h, "LESSON_REMINDER_24H"],
     [lessons1h,  "LESSON_REMINDER_1H" ],
-  ] as const) {
-    for (const lesson of lessons) {
-      const scheduledAt = fmt(lesson.scheduledAt)
-      const teacherName = lesson.teacher.user.name
-      const subject     = lesson.subject?.name ?? "–"
+  ] as const).flatMap(([lessons, type]) =>
+    lessons.flatMap((lesson) => lesson.participants.map((p) => ({ lesson, p, type }))),
+  )
 
-      for (const p of lesson.participants) {
-        const studentName = p.student.name ?? "Aluno"
-        await Promise.allSettled([
-          notifyLessonReminder({
-            userId: p.student.userId ?? "", email: p.student.user?.email ?? null,
-            phone: p.student.user?.phone ?? null, role: "student",
-            teacherName, studentName, subject, scheduledAt, type,
-          }),
-          notifyLessonReminder({
-            userId: lesson.teacher.userId, email: lesson.teacher.user.email,
-            phone: lesson.teacher.user.phone, role: "teacher",
-            teacherName, studentName, subject, scheduledAt, type,
-          }),
-        ])
-        sent += 2
-      }
-    }
-  }
+  await mapLimit(tarefas, SEND_CONCURRENCY, async ({ lesson, p, type }) => {
+    const scheduledAt = fmt(lesson.scheduledAt)
+    const teacherName = lesson.teacher.user.name
+    const subject     = lesson.subject?.name ?? "–"
+    const studentName = p.student.name ?? "Aluno"
+    await Promise.allSettled([
+      notifyLessonReminder({
+        userId: p.student.userId ?? "", email: p.student.user?.email ?? null,
+        phone: p.student.user?.phone ?? null, role: "student",
+        teacherName, studentName, subject, scheduledAt, type,
+      }),
+      notifyLessonReminder({
+        userId: lesson.teacher.userId, email: lesson.teacher.user.email,
+        phone: lesson.teacher.user.phone, role: "teacher",
+        teacherName, studentName, subject, scheduledAt, type,
+      }),
+    ])
+  })
+  const sent = tarefas.length * 2
 
   return Response.json({ ok: true, sent, "24h": lessons24h.length, "1h": lessons1h.length })
 }

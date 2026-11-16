@@ -166,49 +166,51 @@ async function criarTurma(data: CreateCourseInput) {
 
     // ── Encontros da grade ───────────────────────────────────────────────────
     // priceOverride 0: a aula não gera cobrança avulsa, o contrato já cobre.
-    for (const date of datas) {
-      await tx.lesson.create({
-        data: {
+    // Tudo em lote (antes: uma ida ao banco por encontro e por parcela).
+    if (datas.length > 0) {
+      const aulas = await tx.lesson.createManyAndReturn({
+        data: datas.map((date) => ({
           courseId:      criada.id,
           teacherId:     data.teacherId,
           subjectId:     data.subjectId || null,
           scheduledAt:   date,
           duration,
           modality:      data.modality,
-          status:        date < new Date() ? "COMPLETED" : "SCHEDULED",
-          lessonType:    "GROUP",
+          status:        date < new Date() ? "COMPLETED" as const : "SCHEDULED" as const,
+          lessonType:    "GROUP" as const,
           title:         criada.name,
           capacity:      data.capacity ?? null,
           teacherOnsite,
           priceOverride: 0,
-          participants:  { create: data.studentIds.map(studentId => ({ studentId })) },
-        },
+        })),
+        select: { id: true },
       })
+      if (data.studentIds.length > 0) {
+        await tx.lessonParticipant.createMany({
+          data: aulas.flatMap((a) => data.studentIds.map((studentId) => ({ lessonId: a.id, studentId }))),
+        })
+      }
     }
 
     // ── Parcelas do contrato, por aluno ──────────────────────────────────────
-    for (const aluno of alunos) {
-      if (valores.length === 0) break
+    const novasCobrancas: Prisma.PaymentCreateManyInput[] = valores.length === 0 ? [] : alunos.flatMap((aluno) => {
       const groupId = randomUUID()
-      for (const [i, valor] of valores.entries()) {
-        await tx.payment.create({
-          data: {
-            studentId:   aluno.id,
-            courseId:    criada.id,
-            amount:      valor,
-            dueDate:     addMonths(primeiroVenc, i),
-            status:      "PENDING",
-            description: `${criada.name} — parcela ${i + 1}/${valores.length}`,
-            ...(valores.length > 1 ? {
-              installmentNumber:  i + 1,
-              installmentTotal:   valores.length,
-              installmentGroupId: groupId,
-            } : {}),
-          },
-        })
-        cobrancas++
-      }
-    }
+      return valores.map((valor, i) => ({
+        studentId:   aluno.id,
+        courseId:    criada.id,
+        amount:      valor,
+        dueDate:     addMonths(primeiroVenc, i),
+        status:      "PENDING" as const,
+        description: `${criada.name} — parcela ${i + 1}/${valores.length}`,
+        ...(valores.length > 1 ? {
+          installmentNumber:  i + 1,
+          installmentTotal:   valores.length,
+          installmentGroupId: groupId,
+        } : {}),
+      }))
+    })
+    if (novasCobrancas.length > 0) await tx.payment.createMany({ data: novasCobrancas })
+    cobrancas = novasCobrancas.length
 
     return criada
   })
@@ -315,24 +317,24 @@ export async function enrollStudentAction(
       }
 
       const groupId = randomUUID()
-      for (const parcela of restante) {
-        await tx.payment.create({
-          data: {
+      if (restante.length > 0) {
+        await tx.payment.createMany({
+          data: restante.map((parcela) => ({
             studentId,
             courseId,
             amount:      parcela.amount,
             dueDate:     parcela.dueDate,
-            status:      "PENDING",
+            status:      "PENDING" as const,
             description: `${course.name} — parcela ${parcela.numero ?? 1}/${parcela.total ?? 1}`,
             ...(restante.length > 1 ? {
               installmentNumber:  parcela.numero,
               installmentTotal:   parcela.total,
               installmentGroupId: groupId,
             } : {}),
-          },
+          })),
         })
-        cobrancas++
       }
+      cobrancas = restante.length
     })
 
     revalidateTurmas(courseId)

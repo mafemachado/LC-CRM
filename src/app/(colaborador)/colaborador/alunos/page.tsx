@@ -1,4 +1,5 @@
 import { prisma }        from "@/lib/prisma"
+import { loadLastLessonAt } from "@/lib/last-lesson"
 import { PageHeader }    from "@/components/shared/page-header"
 import { StudentsBoard } from "./_components/students-board"
 import type { StudentRow } from "./_components/student-board-card"
@@ -62,18 +63,7 @@ export default async function ColaboradorAlunosPage({ searchParams }: AlunosPage
   ])
 
   // Data da última aula por aluno (para ordenação "aulas mais recentes")
-  const studentIds  = students.map(s => s.id)
-  const recentParts = studentIds.length
-    ? await prisma.lessonParticipant.findMany({
-        where:   { studentId: { in: studentIds } },
-        select:  { studentId: true, lesson: { select: { scheduledAt: true } } },
-        orderBy: { lesson: { scheduledAt: "desc" } },
-      })
-    : []
-  const lastLessonMap = new Map<string, string>()
-  for (const p of recentParts) {
-    if (!lastLessonMap.has(p.studentId)) lastLessonMap.set(p.studentId, p.lesson.scheduledAt.toISOString())
-  }
+  const lastLessonMap = await loadLastLessonAt(students.map(s => s.id))
 
   // Serialize Prisma Decimal fields to plain numbers (required for Server→Client boundary)
   const serialized: StudentRow[] = students.map(s => ({
