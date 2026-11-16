@@ -4,6 +4,7 @@ import { prisma }         from "@/lib/prisma"
 import { auth }           from "@/lib/auth"
 import { revalidatePath } from "next/cache"
 import { notify }         from "@/lib/notifications"
+import { mapLimit, SEND_CONCURRENCY } from "@/lib/concurrency"
 
 async function requireTeacherOrAdmin() {
   const session = await auth()
@@ -52,18 +53,18 @@ export async function assignHomeworkAction(
     },
   })
 
-  for (const p of lesson.participants) {
-    if (p.student.user?.id) {
-      await notify({
-        userId:  p.student.user.id,
-        type:    "HOMEWORK_ASSIGNED",
-        title:   "Nova lição de casa!",
-        message: `Você recebeu uma nova lição de casa: "${title}".${dueDate ? ` Prazo: ${new Date(dueDate).toLocaleDateString("pt-BR")}.` : ""}`,
-        email:   p.student.user?.email ?? undefined,
-        phone:   p.student.user?.phone ?? undefined,
-      })
-    }
-  }
+  // Em paralelo, em grupos (antes: um aluno de cada vez).
+  const comLogin = lesson.participants.filter((p) => p.student.user?.id)
+  await mapLimit(comLogin, SEND_CONCURRENCY, (p) =>
+    notify({
+      userId:  p.student.user!.id,
+      type:    "HOMEWORK_ASSIGNED",
+      title:   "Nova lição de casa!",
+      message: `Você recebeu uma nova lição de casa: "${title}".${dueDate ? ` Prazo: ${new Date(dueDate).toLocaleDateString("pt-BR")}.` : ""}`,
+      email:   p.student.user?.email ?? undefined,
+      phone:   p.student.user?.phone ?? undefined,
+    }),
+  )
 
   revalidatePath("/aluno/licoes")
   revalidatePath(`/professor/agenda/${lessonId}`)

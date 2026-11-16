@@ -1,7 +1,7 @@
 import { prisma }      from "@/lib/prisma"
 import { PageHeader }  from "@/components/shared/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { computePayout, getPayoutAlerts } from "@/lib/actions/financeiro"
+import { computePayouts, getPayoutAlerts } from "@/lib/actions/financeiro"
 import { PayoutRow }   from "./payout-row"
 import { Wallet, AlertTriangle } from "lucide-react"
 
@@ -31,10 +31,11 @@ export default async function RepassesPage({ searchParams }: Props) {
 
   const payoutByTeacher = new Map(existingPayouts.map((p) => [p.teacherId, p]))
 
-  // Calcula o repasse de cada professor sob demanda (não persiste até "Marcar Pago").
+  // Calcula o repasse de todos os professores de uma vez (não persiste até "Marcar Pago").
+  const payouts = await computePayouts(teachers.map((t) => t.id), month, year)
   const rows = await Promise.all(
     teachers.map(async (t) => {
-      const computed = await computePayout(t.id, month, year)
+      const computed = payouts.get(t.id)!
       const persisted = payoutByTeacher.get(t.id)
       return {
         teacherId:   t.id,
